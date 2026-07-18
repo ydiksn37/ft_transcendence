@@ -40,24 +40,25 @@ export const usePlayer = () => {
     return rotatedTetro.reverse();
   };
 
-  const playerRotate = (stage: any[][], dir: number) => {
+const playerRotate = (stage: any[], dir: number) => {
     const clonedPlayer = JSON.parse(JSON.stringify(player));
     clonedPlayer.tetromino = rotate(clonedPlayer.tetromino, dir);
 
-    const pos = clonedPlayer.pos.x;
-    let offset = 1;
-    
-    while (checkCollision(clonedPlayer, stage, { x: 0, y: 0 })) {
-      clonedPlayer.pos.x += offset;
-      offset = -(offset + (offset > 0 ? 1 : -1));
-      
-      if (offset > clonedPlayer.tetromino[0].length) {
-        return;
-      }
-    }
+	const pos = clonedPlayer.pos.x;
+	let offset = 1;
 
-    setPlayer(clonedPlayer);
-  };
+	while (checkCollision(clonedPlayer, stage, { x: 0, y: 0 })) {
+		clonedPlayer.pos.x += offset;
 
-  return [player, updatePlayerPos, resetPlayer, playerRotate] as const;
+		offset = -(offset + (offset > 0 ? 1 : -1));
+
+		if (offset > clonedPlayer.tetromino[0].length) {
+			rotate(clonedPlayer.tetromino, -dir);
+			clonedPlayer.pos.x = pos;
+			return;
+		}
+	}    setPlayer(clonedPlayer);
+};
+
+return [player, updatePlayerPos, resetPlayer, playerRotate] as const;
 };
