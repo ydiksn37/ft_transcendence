@@ -2,9 +2,11 @@ import React, { useCallback } from 'react';
 import { Graphics } from '@pixi/react';
 import * as PIXI from 'pixi.js';
 import { type TetrominoKey, TETROMINOS } from '../utils/tetrominos';
+import type { CellStatus } from '../utils/gameHelpers';
 
 type CellProps = {
   type: TetrominoKey | string | 0;
+  status: CellStatus;
   x: number;
   y: number;
   size: number;
@@ -21,9 +23,10 @@ const colorMap: Record<string, number> = {
   transparent: 0x000000,
 };
 
-const Cell: React.FC<CellProps> = ({ type, x, y, size }) => {
+const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
   const colorName = TETROMINOS[type as TetrominoKey]?.color || 'transparent';
   const hexColor = colorMap[colorName] || 0x000000;
+  const isGhost = status === 'ghost';
   const isFilled = type !== 0;
 
   const draw = useCallback(
@@ -31,15 +34,23 @@ const Cell: React.FC<CellProps> = ({ type, x, y, size }) => {
       g.clear();
 
       if (isFilled) {
-        g.beginFill(hexColor);
-        g.drawRect(0, 0, size, size);
-        g.endFill();
+        if (isGhost) {
+          // Ghost piece: same color but semi-transparent (alpha 0.3)
+          g.beginFill(hexColor, 0.3);
+          g.drawRect(0, 0, size, size);
+          g.endFill();
+        } else {
+          // Normal / merged piece: solid
+          g.beginFill(hexColor);
+          g.drawRect(0, 0, size, size);
+          g.endFill();
+        }
       }
 
       g.lineStyle(1, 0x333333, 1);
       g.drawRect(0, 0, size, size);
     },
-    [hexColor, size, isFilled]
+    [hexColor, size, isFilled, isGhost]
   );
 
   return <Graphics draw={draw} x={x} y={y} />;

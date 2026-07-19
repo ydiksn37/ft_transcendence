@@ -2,7 +2,6 @@ export type TetrominoKey = 0 | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
 
 export const TETROMINOS = {
   0: { shape: [[0]], color: 'transparent' },
-  
   I: {
     shape: [
       [0, 0, 0, 0],
@@ -61,23 +60,43 @@ export const TETROMINOS = {
   },
 };
 
+const TETROMINO_KEYS = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+
 let tetrominoBag: string[] = [];
 
-export const resetTetrominoBag = () => {
+const generateBag = (): string[] => {
+  const bag = [...TETROMINO_KEYS];
+  // Fisher-Yates shuffle
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  return bag;
+};
+
+const ensureBag = (count: number): void => {
+  while (tetrominoBag.length < count) {
+    tetrominoBag.unshift(...generateBag());
+  }
+};
+
+export const resetTetrominoBag = (): void => {
   tetrominoBag = [];
 };
 
-export const randomTetromino = () => {
-  if (tetrominoBag.length === 0) {
-    const newBag = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-    
-    for (let i = newBag.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newBag[i], newBag[j]] = [newBag[j], newBag[i]];
-    }
-    tetrominoBag = newBag;
+/** Peek at the next N tetromino keys without consuming them. */
+export const peekNextTetrominoKeys = (count: number = 3): string[] => {
+  ensureBag(count);
+  const nextKeys: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    nextKeys.push(tetrominoBag[tetrominoBag.length - i]);
   }
-  
-  const randTetromino = tetrominoBag.pop() as keyof typeof TETROMINOS;
-  return TETROMINOS[randTetromino];
+  return nextKeys;
+};
+
+/** Consume and return a random tetromino from the 7-bag. */
+export const randomTetromino = () => {
+  ensureBag(1);
+  const key = tetrominoBag.pop() as keyof typeof TETROMINOS;
+  return TETROMINOS[key];
 };

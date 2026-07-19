@@ -17,6 +17,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage }) => {
           <Cell
             key={`${y}-${x}`}
             type={cell[0]}
+            status={cell[1]}
             x={x * CELL_SIZE}
             y={y * CELL_SIZE}
             size={CELL_SIZE}
