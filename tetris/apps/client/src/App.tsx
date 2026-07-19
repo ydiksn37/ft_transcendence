@@ -29,7 +29,8 @@ const App = () => {
        pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
        tetromino: nextPiece,
        collided: false,
-       rotationIndex: 0
+       rotationIndex: 0,
+       spawnCount: 0
      };
      if (checkCollision(dummyPlayer, newStage, { x: 0, y: 0 })) {
        setGameOver(true);
@@ -51,6 +52,25 @@ const App = () => {
   const tuningRef = useRef(tuning);
   useEffect(() => { tuningRef.current = tuning; }, [tuning]);
 
+  // ── Key Config ──────────────────────────────────────────────────────────
+  const [keyConfig, setKeyConfig] = useState({
+    left: 'KeyA',
+    right: 'KeyD',
+    softDrop: 'KeyS',
+    hardDrop: 'KeyW',
+    rotateCW: 'Slash',
+    rotateCCW: 'Comma',
+    rotate180: 'Period',
+    hold: 'ShiftLeft',
+    restart: 'KeyQ'
+  });
+  const keyConfigRef = useRef(keyConfig);
+  useEffect(() => { keyConfigRef.current = keyConfig; }, [keyConfig]);
+
+  const [listeningAction, setListeningAction] = useState<keyof typeof keyConfig | null>(null);
+  const listeningActionRef = useRef(listeningAction);
+  useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
+
   // ── Score / Level / Speed ───────────────────────────────────────────────
   useEffect(() => {
     if (rowsCleared <= 0) return;
@@ -70,6 +90,11 @@ const App = () => {
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerRef = useRef(player);
   useEffect(() => { playerRef.current = player; }, [player]);
+
+  const lowestYRef = useRef(0);
+  const lockResetCountRef = useRef(0);
+  const currentSpawnCountRef = useRef(0);
+  const lastIncrementedPlayerRef = useRef<typeof player | null>(null);
 
   const clearLockTimer = useCallback(() => {
     if (lockTimerRef.current) {
@@ -96,12 +121,43 @@ const App = () => {
       return;
     }
 
-    if (checkCollision(player, stage, { x: 0, y: 1 })) {
-      startLockTimer();
+    // 1. Check for spawn or new lowest Y
+    if (player.spawnCount !== currentSpawnCountRef.current) {
+      currentSpawnCountRef.current = player.spawnCount;
+      lowestYRef.current = player.pos.y;
+      lockResetCountRef.current = 0;
+    } else if (player.pos.y > lowestYRef.current) {
+      lowestYRef.current = player.pos.y;
+      lockResetCountRef.current = 0;
+    }
+
+    // 2. Check collision
+    const isTouchingFloor = checkCollision(player, stage, { x: 0, y: 1 });
+
+    if (isTouchingFloor) {
+      if (!lockTimerRef.current) {
+        // Just touched the floor
+        if (lockResetCountRef.current >= 15) {
+          lockPiece(); // Instant lock if out of resets
+        } else {
+          startLockTimer();
+        }
+      } else {
+        // Already on the floor, piece moved or rotated
+        if (lastIncrementedPlayerRef.current !== player) {
+          lastIncrementedPlayerRef.current = player;
+          if (lockResetCountRef.current < 15) {
+            lockResetCountRef.current++;
+            startLockTimer();
+          } else {
+            // Reached limit, do not reset timer (let existing timer run out)
+          }
+        }
+      }
     } else {
       clearLockTimer();
     }
-  }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer]);
+  }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
 
   // ── Movement ────────────────────────────────────────────────────────────
   const movePlayer = useCallback((dir: number) => {
@@ -144,13 +200,13 @@ const App = () => {
     }
   }, [stage, updatePlayerPos]);
 
-  // Automatically apply soft drop if 'KeyS' is held and the piece moves/rotates/spawns
+  // Automatically apply soft drop if softDrop key is held and the piece moves/rotates/spawns
   useEffect(() => {
     if (gameOver || !dropTime) return;
-    if (heldKeys.current.has('KeyS')) {
+    if (heldKeys.current.has(keyConfig.softDrop)) {
       softDrop();
     }
-  }, [player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop]);
+  }, [player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
 
   /** Hard drop: instantly land the piece at ghost position (+2 pts/row) */
   const hardDrop = useCallback(() => {
@@ -258,12 +314,21 @@ const App = () => {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const code = e.code;
+      const conf = keyConfigRef.current;
+      const listening = listeningActionRef.current;
 
-      if (['ShiftLeft', 'ShiftRight', 'Comma', 'Period', 'Slash', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'KeyQ'].includes(code)) {
+      if (listening) {
+        e.preventDefault();
+        setKeyConfig(prev => ({ ...prev, [listening]: code }));
+        setListeningAction(null);
+        return;
+      }
+
+      if (Object.values(conf).includes(code)) {
         e.preventDefault();
       }
 
-      if (code === 'KeyQ') {
+      if (code === conf.restart) {
         if (!e.repeat) startGame();
         return;
       }
@@ -271,9 +336,9 @@ const App = () => {
       if (gameOver || !dropTime) return;
 
       switch (code) {
-        case 'KeyA':
-        case 'KeyD': {
-          const dir = code === 'KeyA' ? -1 : 1;
+        case conf.left:
+        case conf.right: {
+          const dir = code === conf.left ? -1 : 1;
           // Only react to the first physical press; ignore browser key-repeat.
           // ARR interval handles subsequent repeats after DAS.
           if (!heldKeys.current.has(code)) {
@@ -284,27 +349,26 @@ const App = () => {
           }
           break;
         }
-        case 'KeyS':
-          if (!heldKeys.current.has('KeyS')) {
-            heldKeys.current.add('KeyS');
+        case conf.softDrop:
+          if (!heldKeys.current.has(conf.softDrop)) {
+            heldKeys.current.add(conf.softDrop);
           }
           // Soft drop
           softDrop();
           break;
-        case 'KeyW':
+        case conf.hardDrop:
           if (!e.repeat) hardDrop();
           break;
-        case 'Slash':
+        case conf.rotateCW:
           if (!e.repeat) playerRotate(stage, 1);
           break;
-        case 'Comma':
+        case conf.rotateCCW:
           if (!e.repeat) playerRotate(stage, -1);
           break;
-        case 'Period':
+        case conf.rotate180:
           if (!e.repeat) playerRotate(stage, 2);
           break;
-        case 'ShiftLeft':
-        case 'ShiftRight':
+        case conf.hold:
           if (!e.repeat) playerHold();
           break;
       }
@@ -315,7 +379,9 @@ const App = () => {
   const handleKeyUp = useCallback(
     (e: KeyboardEvent) => {
       const code = e.code;
-      if (code === 'KeyA' || code === 'KeyD') {
+      const conf = keyConfigRef.current;
+
+      if (code === conf.left || code === conf.right) {
         heldKeys.current.delete(code);
         
         const wasActive = horizKeys.current.length > 0 && horizKeys.current[horizKeys.current.length - 1] === code;
@@ -462,6 +528,35 @@ const App = () => {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
           <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+        <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
+        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {Object.entries(keyConfig).map(([action, code]) => (
+            <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
+              <button
+                onClick={() => {
+                  setListeningAction(action as keyof typeof keyConfig);
+                  // Focus the window to ensure it receives key events
+                  window.focus();
+                }}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: listeningAction === action ? '#ff4444' : '#555',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  minWidth: '60px'
+                }}
+              >
+                {listeningAction === action ? 'Press key...' : code.replace(/^Key|Left|Right$/, '')}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>

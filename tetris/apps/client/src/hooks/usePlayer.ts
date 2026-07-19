@@ -7,6 +7,7 @@ export type Player = {
   tetromino: (string | number)[][];
   collided: boolean;
   rotationIndex: number;
+  spawnCount: number;
 };
 
 // SRS wall-kick data (normal pieces)
@@ -47,7 +48,8 @@ export const usePlayer = () => {
     pos: { x: 0, y: 0 },
     tetromino: TETROMINOS[0].shape,
     collided: false,
-    rotationIndex: 0, // fix: was missing from initial state
+    rotationIndex: 0,
+    spawnCount: 0,
   });
 
   const [holdInfo, setHoldInfo] = useState<{ tetromino: string | null; hasHeld: boolean }>({
@@ -69,13 +71,15 @@ export const usePlayer = () => {
   );
 
   const resetPlayer = useCallback(() => {
-    setPlayer({
+    const nextTetromino = randomTetromino().shape;
+    setPlayer(prev => ({
       pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
-      tetromino: randomTetromino().shape, // consumes current "next" from bag
+      tetromino: nextTetromino,
       collided: false,
       rotationIndex: 0,
-    });
-    setNextPieceKeys(peekNextTetrominoKeys(3)); // peek at new next pieces
+      spawnCount: prev.spawnCount + 1,
+    }));
+    setNextPieceKeys(peekNextTetrominoKeys(5)); // peek at new next pieces
     setHoldInfo(prev => ({ ...prev, hasHeld: false }));
   }, []);
 
@@ -91,21 +95,24 @@ export const usePlayer = () => {
 
     if (holdInfo.tetromino) {
       // Swap with existing hold — does NOT consume next piece
-      setPlayer({
+      setPlayer(prev => ({
         pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
         tetromino: TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape,
         collided: false,
         rotationIndex: 0,
-      });
+        spawnCount: prev.spawnCount + 1,
+      }));
     } else {
       // No hold piece yet — consume next piece from bag
-      setPlayer({
+      const nextTetromino = randomTetromino().shape;
+      setPlayer(prev => ({
         pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
-        tetromino: randomTetromino().shape,
+        tetromino: nextTetromino,
         collided: false,
         rotationIndex: 0,
-      });
-      setNextPieceKeys(peekNextTetrominoKeys(3));
+        spawnCount: prev.spawnCount + 1,
+      }));
+      setNextPieceKeys(peekNextTetrominoKeys(5));
     }
 
     setHoldInfo({ tetromino: currentType, hasHeld: true });
