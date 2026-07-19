@@ -1,7 +1,7 @@
 import type { Player } from '../hooks/usePlayer';
 
 export const STAGE_WIDTH = 10;
-export const STAGE_HEIGHT = 20;
+export const STAGE_HEIGHT = 22;
 
 export type CellStatus = 'clear' | 'merged' | 'ghost';
 export type Cell = [string | 0, CellStatus];
@@ -11,7 +11,6 @@ export const createStage = (): Cell[][] =>
     new Array(STAGE_WIDTH).fill([0, 'clear']) as Cell[]
   );
 
-/** Collision check: only 'merged' cells block movement (ghost cells are passable). */
 export const checkCollision = (
   player: Player,
   stage: Cell[][],
@@ -20,12 +19,21 @@ export const checkCollision = (
   for (let y = 0; y < player.tetromino.length; y++) {
     for (let x = 0; x < player.tetromino[y].length; x++) {
       if (player.tetromino[y][x] !== 0) {
-        const nextRow = stage[y + player.pos.y + moveY];
-        if (
-          !nextRow ||
-          !nextRow[x + player.pos.x + moveX] ||
-          nextRow[x + player.pos.x + moveX][1] === 'merged'
-        ) {
+        const nextY = y + player.pos.y + moveY;
+        const nextX = x + player.pos.x + moveX;
+
+        // Ceiling collision
+        if (nextY < 0) return true;
+
+        // Floor collision
+        if (nextY >= STAGE_HEIGHT) return true;
+
+        // Wall collision
+        if (nextX < 0 || nextX >= STAGE_WIDTH) return true;
+
+        // Block collision
+        const nextRow = stage[nextY];
+        if (nextRow && nextRow[nextX][1] === 'merged') {
           return true;
         }
       }

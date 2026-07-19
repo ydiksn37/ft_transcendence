@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { createStage, calculateGhostY, type Cell } from '../utils/gameHelpers';
+import { createStage, type Cell } from '../utils/gameHelpers';
 import type { Player } from './usePlayer';
 
-export const useStage = (player: Player, resetPlayer: () => void) => {
+export const useStage = (
+  player: Player,
+  resetPlayer: () => void,
+  checkGameOver: (stage: Cell[][]) => boolean
+) => {
   const [stage, setStage] = useState<Cell[][]>(createStage());
   const [rowsCleared, setRowsCleared] = useState(0);
 
@@ -27,52 +31,31 @@ export const useStage = (player: Player, resetPlayer: () => void) => {
         row.map(cell => (cell[1] === 'merged' ? cell : ([0, 'clear'] as Cell)))
       ) as Cell[][];
 
-      // 2. Draw ghost piece (only when not colliding this frame, and tetromino has actual cells)
-      const hasCells = player.tetromino.some(row => row.some(cell => cell !== 0));
-      if (!player.collided && hasCells) {
-        const ghostY = calculateGhostY(player, newStage);
-        // Only draw ghost if it's below the actual piece position
-        if (ghostY !== player.pos.y) {
-          player.tetromino.forEach((row, y) => {
-            row.forEach((value, x) => {
-              if (value !== 0) {
-                const gY = ghostY + y;
-                const gX = player.pos.x + x;
-                if (newStage[gY]?.[gX]?.[1] === 'clear') {
-                  newStage[gY][gX] = [value, 'ghost'] as Cell;
-                }
-              }
-            });
-          });
-        }
-      }
-
-      // 3. Draw active tetromino on top (overwrites ghost where they overlap)
-      player.tetromino.forEach((row, y) => {
-        row.forEach((value, x) => {
-          if (value !== 0) {
-            const pY = y + player.pos.y;
-            const pX = x + player.pos.x;
-            if (newStage[pY]?.[pX] !== undefined) {
-              newStage[pY][pX] = [
-                value,
-                player.collided ? 'merged' : 'clear',
-              ] as Cell;
-            }
-          }
-        });
-      });
-
+      // 2. If collided, bake the active piece into the stage
       if (player.collided) {
-        resetPlayer();
-        return sweepRows(newStage);
+        player.tetromino.forEach((row, y) => {
+          row.forEach((value, x) => {
+            if (value !== 0) {
+              const pY = y + player.pos.y;
+              const pX = x + player.pos.x;
+              if (pY >= 0 && pY < newStage.length && pX >= 0 && pX < newStage[0].length) {
+                newStage[pY][pX] = [value, 'merged'] as Cell;
+              }
+            }
+          });
+        });
+        const sweptStage = sweepRows(newStage);
+        if (!checkGameOver(sweptStage)) {
+          resetPlayer();
+        }
+        return sweptStage;
       }
 
       return newStage;
     };
 
     setStage(prev => updateStage(prev));
-  }, [player, resetPlayer]);
+  }, [player, resetPlayer, checkGameOver]);
 
   return [stage, setStage, rowsCleared] as const;
 };

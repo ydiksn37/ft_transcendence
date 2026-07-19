@@ -4,7 +4,7 @@ import GameBoard from './components/GameBoard';
 import { usePlayer } from './hooks/usePlayer';
 import { useStage } from './hooks/useStage';
 import { useInterval } from './hooks/useInterval';
-import { createStage, checkCollision, calculateGhostY } from './utils/gameHelpers';
+import { createStage, checkCollision, calculateGhostY, STAGE_WIDTH, type Cell } from './utils/gameHelpers';
 import { resetTetrominoBag, TETROMINOS } from './utils/tetrominos';
 
 /** Standard Tetris line-clear points (×level) */
@@ -21,7 +21,25 @@ const App = () => {
   const [lines, setLines] = useState(0);
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys] = usePlayer();
-  const [stage, setStage, rowsCleared] = useStage(player, resetPlayer);
+
+  const checkGameOver = useCallback((newStage: Cell[][]) => {
+     if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
+     const nextPiece = TETROMINOS[nextPieceKeys[0] as keyof typeof TETROMINOS].shape;
+     const dummyPlayer = {
+       pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
+       tetromino: nextPiece,
+       collided: false,
+       rotationIndex: 0
+     };
+     if (checkCollision(dummyPlayer, newStage, { x: 0, y: 0 })) {
+       setGameOver(true);
+       setDropTime(null);
+       return true;
+     }
+     return false;
+  }, [nextPieceKeys]);
+
+  const [stage, setStage, rowsCleared] = useStage(player, resetPlayer, checkGameOver);
 
   // ── Tuning (ARR, DAS, DCD, SDF) ─────────────────────────────────────────
   const [tuning, setTuning] = useState({
@@ -61,15 +79,6 @@ const App = () => {
   }, []);
 
   const lockPiece = useCallback(() => {
-    const currentPlayer = playerRef.current;
-    const isTopOut = currentPlayer.tetromino.some((row, y) =>
-      row.some(cell => cell !== 0 && currentPlayer.pos.y + y <= 0)
-    );
-    if (isTopOut) {
-      setGameOver(true);
-      setDropTime(null);
-      return;
-    }
     updatePlayerPos({ x: 0, y: 0, collided: true });
   }, [updatePlayerPos]);
 
@@ -135,10 +144,10 @@ const App = () => {
     }
   }, [stage, updatePlayerPos]);
 
-  // Automatically apply soft drop if 's' is held and the piece moves/rotates/spawns
+  // Automatically apply soft drop if 'KeyS' is held and the piece moves/rotates/spawns
   useEffect(() => {
     if (gameOver || !dropTime) return;
-    if (heldKeys.current.has('s')) {
+    if (heldKeys.current.has('KeyS')) {
       softDrop();
     }
   }, [player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop]);
@@ -148,23 +157,13 @@ const App = () => {
     clearLockTimer();
     const ghostY = calculateGhostY(player, stage);
     const dist = ghostY - player.pos.y;
-    
-    // Check top out before locking
-    const isTopOut = player.tetromino.some((row, y) =>
-      row.some(cell => cell !== 0 && ghostY + y <= 0)
-    );
-    if (isTopOut) {
-      setGameOver(true);
-      setDropTime(null);
-      return;
-    }
 
     updatePlayerPos({ x: 0, y: dist > 0 ? dist : 0, collided: true });
     if (dist > 0) setScore(prev => prev + dist * 2);
   }, [player, stage, updatePlayerPos, clearLockTimer]);
 
   // ── Game control ────────────────────────────────────────────────────────
-  const startGame = () => {
+  const startGame = useCallback(() => {
     setStage(createStage());
     setDropTime(levelDropTime(1));
     resetTetrominoBag();
@@ -174,7 +173,7 @@ const App = () => {
     setScore(0);
     setLevel(1);
     setLines(0);
-  };
+  }, [setStage, resetPlayer, resetHold]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   // Ref-proxy so DAS/ARR timer callbacks always call the latest movePlayer
@@ -183,6 +182,7 @@ const App = () => {
   useEffect(() => { movePlayerRef.current = movePlayer; }, [movePlayer]);
 
   const heldKeys = useRef<Set<string>>(new Set());
+  const horizKeys = useRef<string[]>([]);
   const dasTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const arrTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -200,11 +200,9 @@ const App = () => {
 
   /** Return the active horizontal direction (-1 / 1) or null if both/neither held. */
   const getActiveDir = useCallback((): number | null => {
-    const a = heldKeys.current.has('a');
-    const d = heldKeys.current.has('d');
-    if (a && !d) return -1;
-    if (d && !a) return 1;
-    return null;
+    if (horizKeys.current.length === 0) return null;
+    const key = horizKeys.current[horizKeys.current.length - 1];
+    return key === 'KeyA' ? -1 : 1;
   }, []);
 
   const startARR = useCallback(() => {
@@ -229,6 +227,7 @@ const App = () => {
   // Apply DCD (DAS Cut Delay) when a new piece spawns (tetromino changes)
   useEffect(() => {
     if (gameOver || !dropTime) return;
+
     if (tuningRef.current.dcd > 0) {
       const dir = getActiveDir();
       if (dir !== null) {
@@ -249,6 +248,7 @@ const App = () => {
     if (gameOver || !dropTime) {
       clearDASARR();
       heldKeys.current.clear();
+      horizKeys.current = [];
     }
   }, [gameOver, dropTime, clearDASARR]);
 
@@ -257,65 +257,80 @@ const App = () => {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (gameOver || !dropTime) return;
+      const code = e.code;
 
-      const key = e.key.toLowerCase();
-
-      if (['shift', ',', '.', '/', 's', 'a', 'd', 'w'].includes(key)) {
+      if (['ShiftLeft', 'ShiftRight', 'Comma', 'Period', 'Slash', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'KeyQ'].includes(code)) {
         e.preventDefault();
       }
 
-      switch (key) {
-        case 'a':
-        case 'd': {
-          const dir = key === 'a' ? -1 : 1;
+      if (code === 'KeyQ') {
+        if (!e.repeat) startGame();
+        return;
+      }
+
+      if (gameOver || !dropTime) return;
+
+      switch (code) {
+        case 'KeyA':
+        case 'KeyD': {
+          const dir = code === 'KeyA' ? -1 : 1;
           // Only react to the first physical press; ignore browser key-repeat.
           // ARR interval handles subsequent repeats after DAS.
-          if (!heldKeys.current.has(key)) {
-            heldKeys.current.add(key);
+          if (!heldKeys.current.has(code)) {
+            heldKeys.current.add(code);
+            horizKeys.current.push(code);
             movePlayer(dir);   // immediate single move
             startDASARR();     // start DAS → ARR chain
           }
           break;
         }
-        case 's':
+        case 'KeyS':
+          if (!heldKeys.current.has('KeyS')) {
+            heldKeys.current.add('KeyS');
+          }
           // Soft drop
           softDrop();
           break;
-        case 'w':
+        case 'KeyW':
           if (!e.repeat) hardDrop();
           break;
-        case '/':
+        case 'Slash':
           if (!e.repeat) playerRotate(stage, 1);
           break;
-        case ',':
+        case 'Comma':
           if (!e.repeat) playerRotate(stage, -1);
           break;
-        case '.':
+        case 'Period':
           if (!e.repeat) playerRotate(stage, 2);
           break;
-        case 'shift':
+        case 'ShiftLeft':
+        case 'ShiftRight':
           if (!e.repeat) playerHold();
           break;
       }
     },
-    [gameOver, dropTime, movePlayer, softDrop, hardDrop, playerRotate, stage, playerHold, startDASARR]
+    [gameOver, dropTime, movePlayer, softDrop, hardDrop, playerRotate, stage, playerHold, startDASARR, startGame]
   );
 
   const handleKeyUp = useCallback(
     (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      if (key === 'a' || key === 'd') {
-        heldKeys.current.delete(key);
-        clearDASARR();
-        // If the opposite direction is still held, restart DAS for it
-        const dir = getActiveDir();
-        if (dir !== null) {
-          movePlayerRef.current(dir); // immediate move in remaining direction
-          startDASARR();
+      const code = e.code;
+      if (code === 'KeyA' || code === 'KeyD') {
+        heldKeys.current.delete(code);
+        
+        const wasActive = horizKeys.current.length > 0 && horizKeys.current[horizKeys.current.length - 1] === code;
+        horizKeys.current = horizKeys.current.filter(k => k !== code);
+        
+        if (wasActive) {
+          clearDASARR();
+          const dir = getActiveDir();
+          if (dir !== null) {
+            movePlayerRef.current(dir); // immediate move in remaining direction
+            startDASARR();
+          }
         }
       } else {
-        heldKeys.current.delete(key);
+        heldKeys.current.delete(code);
       }
     },
     [clearDASARR, getActiveDir, startDASARR]
@@ -388,8 +403,8 @@ const App = () => {
           {holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
         </div>
 
-        <Stage width={300} height={600} options={{ backgroundColor: 0x222222 }}>
-          <GameBoard stage={stage} />
+        <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
+          <GameBoard stage={stage} player={player} ghostY={calculateGhostY(player, stage)} />
         </Stage>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
