@@ -5,26 +5,26 @@ export const TETROMINOS = {
   
   I: {
     shape: [
-      [0, 'I', 0, 0],
-      [0, 'I', 0, 0],
-      [0, 'I', 0, 0],
-      [0, 'I', 0, 0],
+      [0, 0, 0, 0],
+      ['I', 'I', 'I', 'I'],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
     ],
     color: 'cyan',
   },
   J: {
     shape: [
-      [0, 'J', 0],
-      [0, 'J', 0],
-      ['J', 'J', 0],
+      ['J', 0, 0],
+      ['J', 'J', 'J'],
+      [0, 0, 0],
     ],
     color: 'blue',
   },
   L: {
     shape: [
-      [0, 'L', 0],
-      [0, 'L', 0],
-      [0, 'L', 'L'],
+      [0, 0, 'L'],
+      ['L', 'L', 'L'],
+      [0, 0, 0],
     ],
     color: 'orange',
   },
@@ -45,9 +45,9 @@ export const TETROMINOS = {
   },
   T: {
     shape: [
-      [0, 0, 0],
-      ['T', 'T', 'T'],
       [0, 'T', 0],
+      ['T', 'T', 'T'],
+      [0, 0, 0],
     ],
     color: 'purple',
   },
@@ -61,10 +61,23 @@ export const TETROMINOS = {
   },
 };
 
+let tetrominoBag: string[] = [];
+
+export const resetTetrominoBag = () => {
+  tetrominoBag = [];
+};
+
 export const randomTetromino = () => {
-  const tetrominos = 'IJLOSTZ'; 
-  const randTetromino =
-    tetrominos[Math.floor(Math.random() * tetrominos.length)];
+  if (tetrominoBag.length === 0) {
+    const newBag = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+    
+    for (let i = newBag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newBag[i], newBag[j]] = [newBag[j], newBag[i]];
+    }
+    tetrominoBag = newBag;
+  }
   
-  return TETROMINOS[randTetromino as TetrominoKey];
+  const randTetromino = tetrominoBag.pop() as keyof typeof TETROMINOS;
+  return TETROMINOS[randTetromino];
 };
