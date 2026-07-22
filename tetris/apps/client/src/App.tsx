@@ -7,9 +7,6 @@ import { useInterval } from './hooks/useInterval';
 import { createStage, checkCollision, calculateGhostY, STAGE_WIDTH, type Cell } from './utils/gameHelpers';
 import { resetTetrominoBag, TETROMINOS } from './utils/tetrominos';
 
-/** Standard Tetris line-clear points (×level) */
-const LINE_POINTS = [0, 100, 300, 500, 800];
-
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
 
@@ -40,7 +37,7 @@ const App = () => {
      return false;
   }, [nextPieceKeys]);
 
-  const [stage, setStage, rowsCleared, stageRef] = useStage(player, resetPlayer, checkGameOver);
+  const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
   // ── Tuning (ARR, DAS, DCD, SDF) ─────────────────────────────────────────
   const [tuning, setTuning] = useState({
@@ -72,19 +69,102 @@ const App = () => {
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
+  const b2bRef = useRef(false);
+  const comboRef = useRef(-1);
+  const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [actionText, setActionText] = useState<string | null>(null);
+
   useEffect(() => {
-    if (rowsCleared <= 0) return;
-    setLines(prevLines => {
-      const currentLevel = Math.floor(prevLines / 10) + 1;
-      const pts = (LINE_POINTS[rowsCleared] ?? 800) * currentLevel;
-      const newLines = prevLines + rowsCleared;
-      const newLevel = Math.floor(newLines / 10) + 1;
-      setScore(prev => prev + pts);
-      setLevel(newLevel);
-      setDropTime(levelDropTime(newLevel));
-      return newLines;
-    });
-  }, [rowsCleared]);
+    if (!lockEvent) return;
+    const { lines, tSpinType, perfectClear } = lockEvent;
+    
+    if (lines > 0) {
+      comboRef.current += 1;
+    } else {
+      comboRef.current = -1;
+    }
+    
+    const isDifficult = lines === 4 || tSpinType !== 'none';
+    
+    let isB2B = false;
+    if (lines > 0) {
+      if (isDifficult) {
+        if (b2bRef.current) isB2B = true;
+        b2bRef.current = true;
+      } else {
+        b2bRef.current = false;
+      }
+    }
+    
+    let actionName = '';
+    let baseScore = 0;
+    
+    if (tSpinType === 't-spin') {
+      if (lines === 0) { actionName = 'T-Spin'; baseScore = 400; }
+      else if (lines === 1) { actionName = 'T-Spin Single'; baseScore = 800; }
+      else if (lines === 2) { actionName = 'T-Spin Double'; baseScore = 1200; }
+      else if (lines === 3) { actionName = 'T-Spin Triple'; baseScore = 1600; }
+    } else if (tSpinType === 'mini-t-spin') {
+      if (lines === 0) { actionName = 'T-Spin Mini'; baseScore = 100; }
+      else if (lines === 1) { actionName = 'T-Spin Mini Single'; baseScore = 200; }
+      else if (lines === 2) { actionName = 'T-Spin Mini Double'; baseScore = 400; }
+    } else {
+      if (lines === 1) { actionName = 'Single'; baseScore = 100; }
+      else if (lines === 2) { actionName = 'Double'; baseScore = 300; }
+      else if (lines === 3) { actionName = 'Triple'; baseScore = 500; }
+      else if (lines === 4) { actionName = 'Tetris'; baseScore = 800; }
+    }
+    
+    if (isB2B && lines > 0) {
+      actionName = 'B2B ' + actionName;
+      baseScore = Math.floor(baseScore * 1.5);
+    }
+    
+    if (perfectClear) {
+      actionName = 'Perfect Clear!' + (actionName ? '\n' + actionName : '');
+      if (lines === 1) baseScore += 800;
+      else if (lines === 2) baseScore += 1200;
+      else if (lines === 3) baseScore += 1800;
+      else if (lines === 4) baseScore += 2000;
+    }
+    
+    let comboScore = 0;
+    if (comboRef.current > 0) {
+      actionName += (actionName ? '\n' : '') + `${comboRef.current} Combo`;
+      comboScore = 50 * comboRef.current * level;
+    }
+    
+    const totalScore = (baseScore * level) + comboScore;
+    
+    if (totalScore > 0) {
+       setScore(prev => prev + totalScore);
+    }
+    
+    if (lines > 0) {
+       setLines(prev => {
+          const newLines = prev + lines;
+          const newLevel = Math.floor(newLines / 10) + 1;
+          setLevel(newLevel);
+          setDropTime(levelDropTime(newLevel));
+          return newLines;
+       });
+    }
+
+    if (actionName && (isDifficult || comboRef.current > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
+       // Clear old text immediately to restart the animation if the same text is set again
+       setActionText(null);
+       
+       if (actionTimeoutRef.current) {
+         clearTimeout(actionTimeoutRef.current);
+       }
+       
+       // Use a tiny timeout to ensure React flushes the null state and restarts the CSS animation
+       setTimeout(() => {
+         setActionText(actionName);
+         actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
+       }, 0);
+    }
+  }, [lockEvent, level]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,6 +251,7 @@ const App = () => {
           ...prev,
           pos: { x: prev.pos.x, y: prev.pos.y + 1 },
           collided: false,
+          lastAction: 'drop',
         };
       }
       return prev;
@@ -191,6 +272,7 @@ const App = () => {
             ...prev,
             pos: { x: prev.pos.x, y: ghostY },
             collided: false,
+            lastAction: 'drop',
           };
         }
       } else {
@@ -208,6 +290,7 @@ const App = () => {
             ...prev,
             pos: { x: prev.pos.x, y: prev.pos.y + dropped },
             collided: false,
+            lastAction: 'drop',
           };
         }
       }
@@ -238,6 +321,7 @@ const App = () => {
         ...prev,
         pos: { x: prev.pos.x, y: ghostY },
         collided: true,
+        lastAction: dist > 0 ? 'drop' : prev.lastAction,
       };
     });
   }, [stageRef, setPlayer, clearLockTimer]);
@@ -255,6 +339,9 @@ const App = () => {
     setScore(0);
     setLevel(1);
     setLines(0);
+    comboRef.current = -1;
+    b2bRef.current = false;
+    setActionText(null);
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
@@ -486,6 +573,13 @@ const App = () => {
   // ── Render (original UI + score/level/lines added) ──────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
+      <style>{`
+        @keyframes pop {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+          70% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+      `}</style>
       <h1>PixiJS Tetris</h1>
       <button
         onClick={startGame}
@@ -507,6 +601,27 @@ const App = () => {
         <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
           <GameBoard stage={stage} player={player} ghostY={calculateGhostY(player, stage)} />
         </Stage>
+
+        {/* Action Text Overlay (e.g. T-Spin, Tetris) */}
+        {actionText && (
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            top: '30%',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            color: '#fff',
+            textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            whiteSpace: 'pre-line',
+            animation: 'pop 0.3s ease-out',
+            zIndex: 10
+          }}>
+            {actionText}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>

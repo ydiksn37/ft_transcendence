@@ -8,6 +8,8 @@ export type Player = {
   collided: boolean;
   rotationIndex: number;
   spawnCount: number;
+  lastAction?: 'move' | 'rotate' | 'drop' | 'spawn';
+  kickIndex?: number;
 };
 
 // SRS wall-kick data (normal pieces)
@@ -50,6 +52,7 @@ export const usePlayer = () => {
     collided: false,
     rotationIndex: 0,
     spawnCount: 0,
+    lastAction: 'spawn',
   });
 
   const [holdInfo, setHoldInfo] = useState<{ tetromino: string | null; hasHeld: boolean }>({
@@ -84,6 +87,7 @@ export const usePlayer = () => {
           ...prev,
           pos: { x: currentX, y: prev.pos.y },
           collided: false,
+          lastAction: 'move',
         };
       } else {
         if (!checkCollision(prev, stage, { x: dir, y: 0 })) {
@@ -91,6 +95,7 @@ export const usePlayer = () => {
             ...prev,
             pos: { x: prev.pos.x + dir, y: prev.pos.y },
             collided: false,
+            lastAction: 'move',
           };
         }
         return prev;
@@ -106,6 +111,8 @@ export const usePlayer = () => {
       collided: false,
       rotationIndex: 0,
       spawnCount: prev.spawnCount + 1,
+      lastAction: 'spawn',
+      kickIndex: 0,
     }));
     setNextPieceKeys(peekNextTetrominoKeys(5)); // peek at new next pieces
     setHoldInfo(prev => ({ ...prev, hasHeld: false }));
@@ -129,6 +136,8 @@ export const usePlayer = () => {
         collided: false,
         rotationIndex: 0,
         spawnCount: prev.spawnCount + 1,
+        lastAction: 'spawn',
+        kickIndex: 0,
       }));
     } else {
       // No hold piece yet — consume next piece from bag
@@ -139,6 +148,8 @@ export const usePlayer = () => {
         collided: false,
         rotationIndex: 0,
         spawnCount: prev.spawnCount + 1,
+        lastAction: 'spawn',
+        kickIndex: 0,
       }));
       setNextPieceKeys(peekNextTetrominoKeys(5));
     }
@@ -167,12 +178,16 @@ export const usePlayer = () => {
       // If 180 rotation or undefined transition, fallback to just no kick [[0, 0]]
       const actualKicks = kicks || [[0, 0]];
 
+      let kickIdx = 0;
       for (const [offsetX, offsetY] of actualKicks) {
         clonedPlayer.pos.x = prev.pos.x + offsetX;
         clonedPlayer.pos.y = prev.pos.y + offsetY;
         if (!checkCollision(clonedPlayer, stage, { x: 0, y: 0 })) {
+          clonedPlayer.lastAction = 'rotate';
+          clonedPlayer.kickIndex = kickIdx;
           return clonedPlayer;
         }
+        kickIdx++;
       }
       return prev;
     });

@@ -2,29 +2,37 @@ import { useState, useEffect, useRef } from 'react';
 import { createStage, type Cell } from '../utils/gameHelpers';
 import type { Player } from './usePlayer';
 
+export type LockEvent = {
+  id: number;
+  lines: number;
+  tSpinType: 'none' | 't-spin' | 'mini-t-spin';
+  perfectClear: boolean;
+};
+
 export const useStage = (
   player: Player,
   resetPlayer: () => void,
   checkGameOver: (stage: Cell[][]) => boolean
 ) => {
   const [stage, setStage] = useState<Cell[][]>(createStage());
-  const [rowsCleared, setRowsCleared] = useState(0);
+  const [lockEvent, setLockEvent] = useState<LockEvent | null>(null);
+  const lockEventIdRef = useRef(0);
   const stageRef = useRef<Cell[][]>(stage);
 
   useEffect(() => {
-    setRowsCleared(0);
-
-    const sweepRows = (newStage: Cell[][]): Cell[][] =>
-      newStage.reduce((acc, row) => {
+    const sweepRows = (newStage: Cell[][]): { swept: Cell[][]; cleared: number } => {
+      let cleared = 0;
+      const swept = newStage.reduce((acc, row) => {
         if (row.findIndex(cell => cell[0] === 0) === -1) {
-          // Full row — remove it and add a blank row at the top
-          setRowsCleared(prev => prev + 1);
+          cleared++;
           acc.unshift(new Array(newStage[0].length).fill([0, 'clear']) as Cell[]);
           return acc;
         }
         acc.push(row);
         return acc;
       }, [] as Cell[][]);
+      return { swept, cleared };
+    };
 
     const prevStage = stageRef.current;
     
@@ -46,10 +54,67 @@ export const useStage = (
           }
         });
       });
-      const sweptStage = sweepRows(newStage);
-      stageRef.current = sweptStage;
-      setStage(sweptStage);
-      if (!checkGameOver(sweptStage)) {
+      const { swept, cleared } = sweepRows(newStage);
+
+      let tSpinType: 'none' | 't-spin' | 'mini-t-spin' = 'none';
+      if (
+        player.tetromino.length === 3 &&
+        player.tetromino[1][1] === 'T' &&
+        player.lastAction === 'rotate'
+      ) {
+        const cx = player.pos.x + 1;
+        const cy = player.pos.y + 1;
+        const corners = [
+          { x: cx - 1, y: cy - 1 }, // A
+          { x: cx + 1, y: cy - 1 }, // B
+          { x: cx - 1, y: cy + 1 }, // C
+          { x: cx + 1, y: cy + 1 }, // D
+        ];
+        
+        const isOccupied = (x: number, y: number) => {
+          if (x < 0 || x >= newStage[0].length || y >= newStage.length || y < 0) return true;
+          return prevStage[y][x][1] === 'merged';
+        };
+        
+        const occupiedCorners = corners.filter(c => isOccupied(c.x, c.y)).length;
+        
+        if (occupiedCorners >= 3) {
+          const rot = player.rotationIndex;
+          let flatCorners = 0;
+          if (rot === 0) {
+             flatCorners = (isOccupied(corners[2].x, corners[2].y) ? 1 : 0) + (isOccupied(corners[3].x, corners[3].y) ? 1 : 0);
+          } else if (rot === 1) {
+             flatCorners = (isOccupied(corners[0].x, corners[0].y) ? 1 : 0) + (isOccupied(corners[2].x, corners[2].y) ? 1 : 0);
+          } else if (rot === 2) {
+             flatCorners = (isOccupied(corners[0].x, corners[0].y) ? 1 : 0) + (isOccupied(corners[1].x, corners[1].y) ? 1 : 0);
+          } else if (rot === 3) {
+             flatCorners = (isOccupied(corners[1].x, corners[1].y) ? 1 : 0) + (isOccupied(corners[3].x, corners[3].y) ? 1 : 0);
+          }
+          
+          if (flatCorners === 2 || player.kickIndex === 4 || cleared >= 2) {
+            tSpinType = 't-spin';
+          } else {
+            tSpinType = 'mini-t-spin';
+          }
+        }
+      }
+      let perfectClear = false;
+      if (cleared > 0) {
+        perfectClear = swept.every(row => row.every(cell => cell[0] === 0));
+      }
+
+      stageRef.current = swept;
+      setStage(swept);
+      
+      lockEventIdRef.current++;
+      setLockEvent({
+        id: lockEventIdRef.current,
+        lines: cleared,
+        tSpinType,
+        perfectClear
+      });
+      
+      if (!checkGameOver(swept)) {
         resetPlayer();
       }
     } else {
@@ -58,5 +123,5 @@ export const useStage = (
     }
   }, [player, resetPlayer, checkGameOver]);
 
-  return [stage, setStage, rowsCleared, stageRef] as const;
+  return [stage, setStage, lockEvent, stageRef] as const;
 };
