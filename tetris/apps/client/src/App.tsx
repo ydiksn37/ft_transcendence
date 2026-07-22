@@ -20,7 +20,7 @@ const App = () => {
   const [level, setLevel] = useState(1);
   const [lines, setLines] = useState(0);
 
-  const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys] = usePlayer();
+  const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
   const checkGameOver = useCallback((newStage: Cell[][]) => {
      if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
@@ -40,7 +40,7 @@ const App = () => {
      return false;
   }, [nextPieceKeys]);
 
-  const [stage, setStage, rowsCleared] = useStage(player, resetPlayer, checkGameOver);
+  const [stage, setStage, rowsCleared, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
   // ── Tuning (ARR, DAS, DCD, SDF) ─────────────────────────────────────────
   const [tuning, setTuning] = useState({
@@ -160,45 +160,60 @@ const App = () => {
   }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
 
   // ── Movement ────────────────────────────────────────────────────────────
-  const movePlayer = useCallback((dir: number) => {
-    if (!checkCollision(player, stage, { x: dir, y: 0 })) {
-      updatePlayerPos({ x: dir, y: 0, collided: false });
-    }
-  }, [player, stage, updatePlayerPos]);
+  const movePlayer = useCallback((dir: number, forceSnap: boolean = false) => {
+    movePlayerHorizontal(dir, stageRef.current, forceSnap);
+  }, [stageRef, movePlayerHorizontal]);
 
   const drop = useCallback(() => {
-    if (!checkCollision(player, stage, { x: 0, y: 1 })) {
-      updatePlayerPos({ x: 0, y: 1, collided: false });
-    }
+    setPlayer(prev => {
+      if (!checkCollision(prev, stageRef.current, { x: 0, y: 1 })) {
+        return {
+          ...prev,
+          pos: { x: prev.pos.x, y: prev.pos.y + 1 },
+          collided: false,
+        };
+      }
+      return prev;
+    });
     // Lock delay is handled by the useEffect watching player position.
-  }, [player, stage, updatePlayerPos]);
+  }, [stageRef, setPlayer]);
 
   const softDrop = useCallback(() => {
     const sdf = tuningRef.current.sdf;
-    const currentPlayer = playerRef.current;
     
-    if (sdf === 0) {
-      const ghostY = calculateGhostY(currentPlayer, stage);
-      const dist = ghostY - currentPlayer.pos.y;
-      if (dist > 0) {
-        updatePlayerPos({ x: 0, y: dist, collided: false });
-        setScore(prev => prev + dist);
-      }
-    } else {
-      let dropped = 0;
-      for (let i = 0; i < sdf; i++) {
-        if (!checkCollision(currentPlayer, stage, { x: 0, y: dropped + 1 })) {
-          dropped++;
-        } else {
-          break;
+    setPlayer(prev => {
+      if (sdf === 0) {
+        const ghostY = calculateGhostY(prev, stageRef.current);
+        const dist = ghostY - prev.pos.y;
+        if (dist > 0) {
+          setScore(s => s + dist);
+          return {
+            ...prev,
+            pos: { x: prev.pos.x, y: ghostY },
+            collided: false,
+          };
+        }
+      } else {
+        let dropped = 0;
+        for (let i = 0; i < sdf; i++) {
+          if (!checkCollision(prev, stageRef.current, { x: 0, y: dropped + 1 })) {
+            dropped++;
+          } else {
+            break;
+          }
+        }
+        if (dropped > 0) {
+          setScore(s => s + dropped);
+          return {
+            ...prev,
+            pos: { x: prev.pos.x, y: prev.pos.y + dropped },
+            collided: false,
+          };
         }
       }
-      if (dropped > 0) {
-        updatePlayerPos({ x: 0, y: dropped, collided: false });
-        setScore(prev => prev + dropped);
-      }
-    }
-  }, [stage, updatePlayerPos]);
+      return prev;
+    });
+  }, [stageRef, setPlayer]);
 
   // Automatically apply soft drop if softDrop key is held and the piece moves/rotates/spawns
   useEffect(() => {
@@ -211,16 +226,27 @@ const App = () => {
   /** Hard drop: instantly land the piece at ghost position (+2 pts/row) */
   const hardDrop = useCallback(() => {
     clearLockTimer();
-    const ghostY = calculateGhostY(player, stage);
-    const dist = ghostY - player.pos.y;
+    setPlayer(prev => {
+      const ghostY = calculateGhostY(prev, stageRef.current);
+      const dist = ghostY - prev.pos.y;
 
-    updatePlayerPos({ x: 0, y: dist > 0 ? dist : 0, collided: true });
-    if (dist > 0) setScore(prev => prev + dist * 2);
-  }, [player, stage, updatePlayerPos, clearLockTimer]);
+      if (dist > 0) {
+        setScore(s => s + dist * 2);
+      }
+
+      return {
+        ...prev,
+        pos: { x: prev.pos.x, y: ghostY },
+        collided: true,
+      };
+    });
+  }, [stageRef, setPlayer, clearLockTimer]);
 
   // ── Game control ────────────────────────────────────────────────────────
   const startGame = useCallback(() => {
-    setStage(createStage());
+    const newStage = createStage();
+    setStage(newStage);
+    stageRef.current = newStage;
     setDropTime(levelDropTime(1));
     resetTetrominoBag();
     resetPlayer();
@@ -229,12 +255,12 @@ const App = () => {
     setScore(0);
     setLevel(1);
     setLines(0);
-  }, [setStage, resetPlayer, resetHold]);
+  }, [setStage, resetPlayer, resetHold, stageRef]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   // Ref-proxy so DAS/ARR timer callbacks always call the latest movePlayer
   // (movePlayer changes every render because it captures player/stage state)
-  const movePlayerRef = useRef<(dir: number) => void>(() => {});
+  const movePlayerRef = useRef<(dir: number, forceSnap?: boolean) => void>(() => {});
   useEffect(() => { movePlayerRef.current = movePlayer; }, [movePlayer]);
 
   const heldKeys = useRef<Set<string>>(new Set());
@@ -263,12 +289,21 @@ const App = () => {
 
   const startARR = useCallback(() => {
     if (arrTimerRef.current !== null) clearInterval(arrTimerRef.current);
-    // 0 ARR -> interval of 1ms as fallback to instant
-    const interval = tuningRef.current.arr <= 0 ? 1 : tuningRef.current.arr;
-    arrTimerRef.current = setInterval(() => {
+    
+    if (tuningRef.current.arr <= 0) {
       const dir = getActiveDir();
-      if (dir !== null) movePlayerRef.current(dir);
-    }, interval);
+      if (dir !== null) movePlayerRef.current(dir, true);
+      
+      arrTimerRef.current = setInterval(() => {
+        const currentDir = getActiveDir();
+        if (currentDir !== null) movePlayerRef.current(currentDir, true);
+      }, 10);
+    } else {
+      arrTimerRef.current = setInterval(() => {
+        const dir = getActiveDir();
+        if (dir !== null) movePlayerRef.current(dir, false);
+      }, tuningRef.current.arr);
+    }
   }, [getActiveDir]);
 
   /** Start DAS timer; after it fires, start ARR interval. */
@@ -291,7 +326,7 @@ const App = () => {
         setTimeout(() => {
           const currentDir = getActiveDir();
           if (currentDir !== null) {
-            movePlayerRef.current(currentDir);
+            movePlayerRef.current(currentDir, false);
             startARR();
           }
         }, tuningRef.current.dcd);
@@ -344,7 +379,7 @@ const App = () => {
           if (!heldKeys.current.has(code)) {
             heldKeys.current.add(code);
             horizKeys.current.push(code);
-            movePlayer(dir);   // immediate single move
+            movePlayer(dir, false);   // immediate single move
             startDASARR();     // start DAS → ARR chain
           }
           break;
@@ -360,20 +395,20 @@ const App = () => {
           if (!e.repeat) hardDrop();
           break;
         case conf.rotateCW:
-          if (!e.repeat) playerRotate(stage, 1);
+          if (!e.repeat) playerRotate(stageRef.current, 1);
           break;
         case conf.rotateCCW:
-          if (!e.repeat) playerRotate(stage, -1);
+          if (!e.repeat) playerRotate(stageRef.current, -1);
           break;
         case conf.rotate180:
-          if (!e.repeat) playerRotate(stage, 2);
+          if (!e.repeat) playerRotate(stageRef.current, 2);
           break;
         case conf.hold:
           if (!e.repeat) playerHold();
           break;
       }
     },
-    [gameOver, dropTime, movePlayer, softDrop, hardDrop, playerRotate, stage, playerHold, startDASARR, startGame]
+    [gameOver, dropTime, movePlayer, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame]
   );
 
   const handleKeyUp = useCallback(
@@ -391,7 +426,7 @@ const App = () => {
           clearDASARR();
           const dir = getActiveDir();
           if (dir !== null) {
-            movePlayerRef.current(dir); // immediate move in remaining direction
+            movePlayerRef.current(dir, false); // immediate move in remaining direction
             startDASARR();
           }
         }

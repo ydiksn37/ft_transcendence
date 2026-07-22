@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createStage, type Cell } from '../utils/gameHelpers';
 import type { Player } from './usePlayer';
 
@@ -9,6 +9,7 @@ export const useStage = (
 ) => {
   const [stage, setStage] = useState<Cell[][]>(createStage());
   const [rowsCleared, setRowsCleared] = useState(0);
+  const stageRef = useRef<Cell[][]>(stage);
 
   useEffect(() => {
     setRowsCleared(0);
@@ -25,37 +26,37 @@ export const useStage = (
         return acc;
       }, [] as Cell[][]);
 
-    const updateStage = (prevStage: Cell[][]): Cell[][] => {
-      // 1. Keep only 'merged' cells; clear everything else (including ghost)
-      const newStage = prevStage.map(row =>
-        row.map(cell => (cell[1] === 'merged' ? cell : ([0, 'clear'] as Cell)))
-      ) as Cell[][];
+    const prevStage = stageRef.current;
+    
+    // 1. Keep only 'merged' cells; clear everything else (including ghost)
+    const newStage = prevStage.map(row =>
+      row.map(cell => (cell[1] === 'merged' ? cell : ([0, 'clear'] as Cell)))
+    ) as Cell[][];
 
-      // 2. If collided, bake the active piece into the stage
-      if (player.collided) {
-        player.tetromino.forEach((row, y) => {
-          row.forEach((value, x) => {
-            if (value !== 0) {
-              const pY = y + player.pos.y;
-              const pX = x + player.pos.x;
-              if (pY >= 0 && pY < newStage.length && pX >= 0 && pX < newStage[0].length) {
-                newStage[pY][pX] = [value, 'merged'] as Cell;
-              }
+    // 2. If collided, bake the active piece into the stage
+    if (player.collided) {
+      player.tetromino.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value !== 0) {
+            const pY = y + player.pos.y;
+            const pX = x + player.pos.x;
+            if (pY >= 0 && pY < newStage.length && pX >= 0 && pX < newStage[0].length) {
+              newStage[pY][pX] = [value, 'merged'] as Cell;
             }
-          });
+          }
         });
-        const sweptStage = sweepRows(newStage);
-        if (!checkGameOver(sweptStage)) {
-          resetPlayer();
-        }
-        return sweptStage;
+      });
+      const sweptStage = sweepRows(newStage);
+      stageRef.current = sweptStage;
+      setStage(sweptStage);
+      if (!checkGameOver(sweptStage)) {
+        resetPlayer();
       }
-
-      return newStage;
-    };
-
-    setStage(prev => updateStage(prev));
+    } else {
+      stageRef.current = newStage;
+      setStage(newStage);
+    }
   }, [player, resetPlayer, checkGameOver]);
 
-  return [stage, setStage, rowsCleared] as const;
+  return [stage, setStage, rowsCleared, stageRef] as const;
 };

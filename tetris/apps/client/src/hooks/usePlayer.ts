@@ -70,6 +70,34 @@ export const usePlayer = () => {
     []
   );
 
+  const movePlayerHorizontal = useCallback((dir: number, stage: Cell[][], isArrZero: boolean) => {
+    setPlayer(prev => {
+      if (isArrZero) {
+        let currentX = prev.pos.x;
+        let distance = 0;
+        while (!checkCollision({ ...prev, pos: { ...prev.pos, x: currentX } }, stage, { x: dir, y: 0 })) {
+          currentX += dir;
+          distance += dir;
+        }
+        if (distance === 0) return prev;
+        return {
+          ...prev,
+          pos: { x: currentX, y: prev.pos.y },
+          collided: false,
+        };
+      } else {
+        if (!checkCollision(prev, stage, { x: dir, y: 0 })) {
+          return {
+            ...prev,
+            pos: { x: prev.pos.x + dir, y: prev.pos.y },
+            collided: false,
+          };
+        }
+        return prev;
+      }
+    });
+  }, []);
+
   const resetPlayer = useCallback(() => {
     const nextTetromino = randomTetromino().shape;
     setPlayer(prev => ({
@@ -118,12 +146,12 @@ export const usePlayer = () => {
     setHoldInfo({ tetromino: currentType, hasHeld: true });
   }, [player.tetromino, holdInfo]);
 
-  const playerRotate = useCallback(
-    (stage: Cell[][], dir: number) => {
-      const clonedPlayer: Player = JSON.parse(JSON.stringify(player));
+  const playerRotate = useCallback((stage: Cell[][], dir: number) => {
+    setPlayer(prev => {
+      const clonedPlayer: Player = JSON.parse(JSON.stringify(prev));
 
       // O-piece (2×2): no rotation
-      if (clonedPlayer.tetromino.length === 2) return;
+      if (clonedPlayer.tetromino.length === 2) return prev;
 
       const currentIdx = clonedPlayer.rotationIndex;
       const nextIdx = (currentIdx + dir + 4) % 4;
@@ -140,16 +168,15 @@ export const usePlayer = () => {
       const actualKicks = kicks || [[0, 0]];
 
       for (const [offsetX, offsetY] of actualKicks) {
-        clonedPlayer.pos.x = player.pos.x + offsetX;
-        clonedPlayer.pos.y = player.pos.y + offsetY;
+        clonedPlayer.pos.x = prev.pos.x + offsetX;
+        clonedPlayer.pos.y = prev.pos.y + offsetY;
         if (!checkCollision(clonedPlayer, stage, { x: 0, y: 0 })) {
-          setPlayer(clonedPlayer);
-          return;
+          return clonedPlayer;
         }
       }
-    },
-    [player]
-  );
+      return prev;
+    });
+  }, []);
 
   return [
     player,
@@ -160,5 +187,7 @@ export const usePlayer = () => {
     holdInfo,
     resetHold,
     nextPieceKeys,
+    movePlayerHorizontal,
+    setPlayer,
   ] as const;
 };
