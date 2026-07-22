@@ -25,8 +25,8 @@ const colorMap: Record<string, number> = {
 };
 
 const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
-  const colorName = TETROMINOS[type as TetrominoKey]?.color || 'transparent';
-  const hexColor = colorMap[colorName] || 0x000000;
+  const colorName = type === 'X' ? 'gray' : (TETROMINOS[type as TetrominoKey]?.color || 'transparent');
+  const hexColor = colorMap[colorName] || 0x888888;
   const isGhost = status === 'ghost';
   const isFilled = type !== 0;
 

@@ -5,7 +5,8 @@ import { usePlayer } from './hooks/usePlayer';
 import { useStage } from './hooks/useStage';
 import { useInterval } from './hooks/useInterval';
 import { createStage, checkCollision, calculateGhostY, STAGE_WIDTH, type Cell } from './utils/gameHelpers';
-import { resetTetrominoBag, TETROMINOS } from './utils/tetrominos';
+import { resetTetrominoBag, TETROMINOS, setRandomSeed } from './utils/tetrominos';
+import { io, Socket } from 'socket.io-client';
 
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
@@ -18,11 +19,23 @@ const formatTime = (ms: number) => {
 };
 
 const App = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS'>('MENU');
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1'>('MENU');
   const appStateRef = useRef(appState);
   useEffect(() => { appStateRef.current = appState; }, [appState]);
 
-  const [gameMode, setGameMode] = useState<'MARATHON' | '40_LINES' | '4_WIDE'>('MARATHON');
+  // Online Multiplayer States
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const socketRef = useRef(socket);
+  useEffect(() => { socketRef.current = socket; }, [socket]);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [opponentStage, setOpponentStage] = useState<Cell[][] | null>(null);
+  const [opponentScore, setOpponentScore] = useState(0);
+  const [opponentGameOver, setOpponentGameOver] = useState(false);
+  const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
+  const [pendingGarbage, setPendingGarbage] = useState<number[]>([]);
+  const pendingGarbageRef = useRef<number[]>([]);
+
+  const [gameMode, setGameMode] = useState<'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1'>('MARATHON');
   const gameModeRef = useRef(gameMode);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
@@ -70,6 +83,9 @@ const App = () => {
      if (checkCollision(dummyPlayer, newStage, { x: 0, y: 0 })) {
        setGameOver(true);
        setDropTime(null);
+       if (gameModeRef.current === 'ONLINE_1V1') {
+         setMatchResult('LOSE');
+       }
        return true;
      }
      return false;
@@ -83,7 +99,7 @@ const App = () => {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
-    return { das: 133, arr: 50, dcd: 0, sdf: 0 };
+    return { das: 133, arr: 33, dcd: 1, sdf: 6 };
   });
   const tuningRef = useRef(tuning);
   useEffect(() => {
@@ -93,15 +109,16 @@ const App = () => {
 
   // ── Key Config ──────────────────────────────────────────────────────────
   const [keyConfig, setKeyConfig] = useState(() => {
-    const saved = localStorage.getItem('tetrisKeyConfig');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return {
+    const defaultConf = {
       left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
       rotateCW: 'Slash', rotateCCW: 'Comma', rotate180: 'Period',
-      hold: 'ShiftLeft', restart: 'KeyQ'
+      hold: 'ShiftLeft', restart: 'KeyQ', quitToMenu: 'Escape'
     };
+    const saved = localStorage.getItem('tetrisKeyConfig');
+    if (saved) {
+      try { return { ...defaultConf, ...JSON.parse(saved) }; } catch (e) {}
+    }
+    return defaultConf;
   });
   const keyConfigRef = useRef(keyConfig);
   useEffect(() => {
@@ -213,6 +230,94 @@ const App = () => {
           return newLines;
        });
     }
+     
+     // Garbage Lines Logic
+     if (gameModeRef.current === 'ONLINE_1V1') {
+        let generatedGarbage = 0;
+        if (tSpinType === 't-spin') {
+          if (lines === 1) generatedGarbage = 2;
+          else if (lines === 2) generatedGarbage = 4;
+          else if (lines === 3) generatedGarbage = 6;
+        } else if (tSpinType === 'mini-t-spin') {
+          if (lines === 1) generatedGarbage = 1;
+          else if (lines === 2) generatedGarbage = 1;
+        } else {
+          if (lines === 2) generatedGarbage = 1;
+          else if (lines === 3) generatedGarbage = 2;
+          else if (lines === 4) generatedGarbage = 4;
+        }
+
+        if (isB2B && lines > 0) generatedGarbage += 1;
+        if (perfectClear) generatedGarbage += 10;
+        
+        if (comboRef.current > 0) {
+           generatedGarbage += Math.floor((comboRef.current + 1) / 2);
+        }
+
+        let remainingAttacks = [...pendingGarbageRef.current];
+        
+        if (generatedGarbage > 0) {
+           while (remainingAttacks.length > 0 && generatedGarbage > 0) {
+              if (generatedGarbage >= remainingAttacks[0]) {
+                 generatedGarbage -= remainingAttacks[0];
+                 remainingAttacks.shift();
+              } else {
+                 remainingAttacks[0] -= generatedGarbage;
+                 generatedGarbage = 0;
+              }
+           }
+           if (generatedGarbage > 0 && socketRef.current) {
+              socketRef.current.emit('send_garbage', { lines: generatedGarbage });
+           }
+        }
+
+        if (lines === 0 && remainingAttacks.length > 0) {
+           const linesToAdd = remainingAttacks.reduce((a, b) => a + b, 0);
+           const newStage = [...stageRef.current];
+           const width = newStage[0].length;
+           
+           let isPushedOut = false;
+           for (let i = 0; i < linesToAdd; i++) {
+               if (newStage[i] && newStage[i].some(cell => cell[1] === 'merged')) {
+                   isPushedOut = true;
+                   break;
+               }
+           }
+           
+           newStage.splice(0, linesToAdd);
+           
+           for (const attackLines of remainingAttacks) {
+              const hole = Math.floor(Math.random() * width);
+              for (let i = 0; i < attackLines; i++) {
+                 const newRow = Array.from({ length: width }, (_, colIndex) => 
+                   colIndex === hole ? [0, 'clear'] : ['X', 'merged']
+                 ) as Cell[];
+                 newStage.push(newRow);
+              }
+           }
+           
+           stageRef.current = newStage;
+           setStage(newStage);
+           
+           setPlayer(p => {
+             const newY = Math.max(0, p.pos.y - linesToAdd);
+             return { ...p, pos: { ...p.pos, y: newY } };
+           });
+           
+           remainingAttacks = [];
+           
+           if (isPushedOut || newStage[0].some(cell => cell[1] === 'merged')) {
+             setGameOver(true);
+             if (gameModeRef.current === 'ONLINE_1V1') {
+               setMatchResult('LOSE');
+             }
+             setDropTime(null);
+           }
+        }
+        
+        pendingGarbageRef.current = remainingAttacks;
+        setPendingGarbage(remainingAttacks);
+     }
 
     if (actionName && (isDifficult || comboRef.current > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
        // Clear old text immediately to restart the animation if the same text is set again
@@ -390,8 +495,91 @@ const App = () => {
     });
   }, [stageRef, setPlayer, clearLockTimer]);
 
+  // ── Online Matchmaking ──────────────────────────────────────────────────
+  const joinOnline = () => {
+    setAppState('ONLINE_1V1');
+    setGameMode('ONLINE_1V1');
+    setIsWaiting(true);
+    setOpponentStage(createStage(10));
+    setOpponentScore(0);
+    setOpponentGameOver(false);
+    setPendingGarbage([]);
+    pendingGarbageRef.current = [];
+
+    const newStage = createStage(10);
+    setStage(newStage);
+    stageRef.current = newStage;
+    resetPlayer(10);
+    resetHold();
+    setScore(0);
+    setLevel(1);
+    setLines(0);
+    setGameOver(false);
+    setMatchResult(null);
+
+    const newSocket = io('http://localhost:3000');
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      newSocket.emit('join_matchmaking');
+    });
+
+    newSocket.on('match_found', (data: { playerNum: number; seed: number }) => {
+      setRandomSeed(data.seed);
+      // Need a small timeout to let state settle before starting
+      setTimeout(() => startGame('ONLINE_1V1'), 100);
+    });
+
+    newSocket.on('waiting_for_match', () => {
+      setIsWaiting(true);
+    });
+
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+      setOpponentStage(data.stage);
+      setOpponentScore(data.score);
+    });
+
+    newSocket.on('receive_garbage', (data: { lines: number }) => {
+      pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
+      setPendingGarbage(pendingGarbageRef.current);
+    });
+
+    newSocket.on('opponent_game_over', () => {
+      setOpponentGameOver(true);
+      setMatchResult('WIN');
+      setGameOver(true);
+      setDropTime(null);
+    });
+
+    newSocket.on('opponent_disconnected', () => {
+      setOpponentGameOver(true);
+      setMatchResult('WIN');
+      setGameOver(true);
+      setDropTime(null);
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (socket && appState === 'ONLINE_1V1' && !isWaiting) {
+      // Basic rate limiting could be applied, but this is simple enough
+      socket.emit('board_update', { stage, score });
+    }
+  }, [stage, score, socket, appState, isWaiting]);
+
+  useEffect(() => {
+    if (socket && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {
+      socket.emit('game_over');
+    }
+  }, [gameOver, socket, appState, matchResult]);
+
   // ── Game control ────────────────────────────────────────────────────────
-  const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE') => {
+  const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => {
     countdownTimeoutsRef.current.forEach(clearTimeout);
     countdownTimeoutsRef.current = [];
     setCountdown('READY');
@@ -413,17 +601,27 @@ const App = () => {
     stageRef.current = newStage;
     
     setDropTime(null);
+    if (nextMode !== 'ONLINE_1V1') {
+      setRandomSeed(null);
+    }
     resetTetrominoBag();
     resetPlayer(nextMode === '4_WIDE' ? 4 : 10);
     resetHold();
     setGameOver(false);
+    setMatchResult(null);
+    setPendingGarbage([]);
+    pendingGarbageRef.current = [];
     setScore(0);
     setLevel(1);
     setLines(0);
     comboRef.current = -1;
     b2bRef.current = false;
     setActionText(null);
-    setAppState('PLAYING');
+    if (nextMode !== 'ONLINE_1V1') {
+      setAppState('PLAYING');
+    } else {
+      setIsWaiting(false);
+    }
 
     const t1 = setTimeout(() => {
       setCountdown('GO!');
@@ -542,14 +740,27 @@ const App = () => {
         return;
       }
 
-      if (appStateRef.current !== 'PLAYING') return;
+      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1') return;
 
       if (Object.values(conf).includes(code)) {
         e.preventDefault();
       }
 
       if (code === conf.restart) {
-        if (!e.repeat) startGame();
+        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1') startGame();
+        return;
+      }
+
+      if (code === conf.quitToMenu) {
+        if (!e.repeat) {
+          if (socketRef.current) {
+            socketRef.current.disconnect();
+            setSocket(null);
+          }
+          setIsWaiting(false);
+          setDropTime(null);
+          setAppState('MENU');
+        }
         return;
       }
 
@@ -695,6 +906,12 @@ const App = () => {
             4-Wide Mode
           </button>
           <button
+            onClick={joinOnline}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            Online 1v1
+          </button>
+          <button
             onClick={() => setAppState('RECORDS')}
             style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#9b59b6', color: '#fff', border: 'none', borderRadius: '8px' }}
           >
@@ -812,6 +1029,11 @@ const App = () => {
         <h1 style={{ margin: 0 }}>PixiJS Tetris</h1>
         <button
           onClick={() => {
+            if (socketRef.current) {
+              socketRef.current.disconnect();
+              setSocket(null);
+            }
+            setIsWaiting(false);
             setDropTime(null);
             setAppState('MENU');
           }}
@@ -823,8 +1045,11 @@ const App = () => {
 
       {gameOver && (
         <div style={{ textAlign: 'center', marginBottom: '20px', backgroundColor: '#222', padding: '15px', borderRadius: '8px', border: '2px solid red' }}>
-          <h2 style={{ color: 'red', margin: '0 0 10px 0' }}>
-            {lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER'}
+          <h2 style={{ color: matchResult === 'WIN' ? 'gold' : 'red', margin: '0 0 10px 0' }}>
+            {gameMode === 'ONLINE_1V1' && matchResult
+              ? matchResult === 'WIN' ? 'YOU WIN!' : 'YOU LOSE'
+              : (lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER')
+            }
           </h2>
           {gameMode === '40_LINES' && finalTime && (
             <div>
@@ -836,6 +1061,20 @@ const App = () => {
               )}
             </div>
           )}
+          {gameMode === 'ONLINE_1V1' && (
+             <button
+               onClick={() => {
+                 if (socketRef.current) {
+                   socketRef.current.disconnect();
+                   setSocket(null);
+                 }
+                 joinOnline();
+               }}
+               style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
+             >
+               Find New Match
+             </button>
+          )}
         </div>
       )}
 
@@ -843,16 +1082,18 @@ const App = () => {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-          {renderHoldBox()}
-          {holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
+          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={{ width: '80px', height: '80px', backgroundColor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '2px solid #555' }} /> : renderHoldBox()}
+          {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
         </div>
 
-        <div style={{ position: 'relative' }}>
-          <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
+          <div style={{ position: 'relative' }}>
+            <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
             <GameBoard 
               stage={stage} 
-              player={player} 
-              ghostY={calculateGhostY(player, stage)} 
+              player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } : player} 
+              ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
               targetLine={
                 gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
                   ? 22 - (40 - lines) 
@@ -860,6 +1101,24 @@ const App = () => {
               }
             />
           </Stage>
+
+          {gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: '-20px',
+              width: '10px',
+              height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
+              backgroundColor: 'red',
+              borderRadius: '5px',
+              transition: 'height 0.2s',
+              boxShadow: '0 0 10px red'
+            }}>
+              <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
+                {pendingGarbage.reduce((a,b)=>a+b,0)}
+              </span>
+            </div>
+          )}
 
           {countdown && (
             <div style={{
@@ -877,6 +1136,7 @@ const App = () => {
               {countdown}
             </div>
           )}
+        </div>
         </div>
 
         {/* Action Text Overlay (e.g. T-Spin, Tetris) */}
@@ -912,38 +1172,77 @@ const App = () => {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: '0 0 10px 0' }}>NEXT</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {nextPieceKeys?.map((key, idx) => {
-                const shape = TETROMINOS[key as keyof typeof TETROMINOS].shape;
-                const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
-                const boxStyle = {
-                  width: '80px', height: '80px', backgroundColor: '#333',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '8px', border: '2px solid #555'
-                };
-                return (
-                  <div key={idx} style={boxStyle}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, 
-                      gap: '1px' 
-                    }}>
-                      {shape.map((row, y) => row.map((cell, x) => (
-                        <div key={`${y}-${x}`} style={{
-                          width: 15, height: 15, 
-                          backgroundColor: cell === 0 ? 'transparent' : `${color}`,
-                          borderRadius: '2px'
-                        }} />
-                      )))}
+              {(gameMode === 'ONLINE_1V1' && isWaiting) ? (
+                [1,2,3,4,5].map(i => (
+                  <div key={i} style={{ width: '80px', height: '80px', backgroundColor: '#333', borderRadius: '8px', border: '2px solid #555' }} />
+                ))
+              ) : (
+                nextPieceKeys?.map((key, idx) => {
+                  const shape = TETROMINOS[key as keyof typeof TETROMINOS].shape;
+                  const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
+                  const boxStyle = {
+                    width: '80px', height: '80px', backgroundColor: '#333',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: '8px', border: '2px solid #555'
+                  };
+                  return (
+                    <div key={idx} style={boxStyle}>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, 
+                        gap: '1px' 
+                      }}>
+                        {shape.map((row, y) => row.map((cell, x) => (
+                          <div key={`${y}-${x}`} style={{
+                            width: 15, height: 15, 
+                            backgroundColor: cell === 0 ? 'transparent' : `${color}`,
+                            borderRadius: '2px'
+                          }} />
+                        )))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
           <div><strong>SCORE</strong><br />{score}</div>
           <div><strong>LEVEL</strong><br />{level}</div>
           <div><strong>LINES</strong><br />{lines}</div>
         </div>
+
+        {/* Add Opponent board if ONLINE_1V1 */}
+        {gameMode === 'ONLINE_1V1' && (
+          <div style={{ position: 'relative', marginLeft: '40px' }}>
+            <h3 style={{ textAlign: 'center', color: '#ff4444', margin: '0 0 10px 0' }}>OPPONENT</h3>
+            
+            <div style={{ position: 'relative' }}>
+              <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
+                <GameBoard 
+                  stage={opponentStage || createStage(10)} 
+                  player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 }} 
+                  ghostY={0} 
+                />
+              </Stage>
+              
+              {isWaiting && (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>
+                  Waiting for match...
+                </div>
+              )}
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+              <strong>SCORE: {opponentScore}</strong>
+            </div>
+            
+            {!isWaiting && matchResult && (
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: matchResult === 'LOSE' ? 'gold' : 'red', fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 20 }}>
+                {matchResult === 'LOSE' ? 'WIN' : 'LOSE'}
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

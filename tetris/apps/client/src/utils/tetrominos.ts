@@ -64,12 +64,27 @@ export const TETROMINOS = {
 const TETROMINO_KEYS = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
 
 let tetrominoBag: string[] = [];
+let prngSeed: number | null = null;
+let prngState = 0;
+
+export const setRandomSeed = (seed: number | null): void => {
+  prngSeed = seed;
+  if (seed !== null) prngState = seed;
+};
+
+const nextRandom = (): number => {
+  if (prngSeed === null) return Math.random();
+  let t = prngState += 0x6D2B79F5;
+  t = Math.imul(t ^ t >>> 15, t | 1);
+  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
 
 const generateBag = (): string[] => {
   const bag = [...TETROMINO_KEYS];
   // Fisher-Yates shuffle
   for (let i = bag.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(nextRandom() * (i + 1));
     [bag[i], bag[j]] = [bag[j], bag[i]];
   }
   return bag;
