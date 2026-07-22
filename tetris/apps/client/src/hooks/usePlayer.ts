@@ -103,10 +103,10 @@ export const usePlayer = () => {
     });
   }, []);
 
-  const resetPlayer = useCallback(() => {
+  const resetPlayer = useCallback((width: number = STAGE_WIDTH) => {
     const nextTetromino = randomTetromino().shape;
     setPlayer(prev => ({
-      pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
+      pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
       tetromino: nextTetromino,
       collided: false,
       rotationIndex: 0,
@@ -122,7 +122,7 @@ export const usePlayer = () => {
     setHoldInfo({ tetromino: null, hasHeld: false });
   }, []);
 
-  const playerHold = useCallback(() => {
+  const playerHold = useCallback((width: number = STAGE_WIDTH) => {
     if (holdInfo.hasHeld) return;
 
     const currentType = player.tetromino.flat().find(cell => cell !== 0) as string;
@@ -130,9 +130,10 @@ export const usePlayer = () => {
 
     if (holdInfo.tetromino) {
       // Swap with existing hold — does NOT consume next piece
+      const heldTetromino = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
       setPlayer(prev => ({
-        pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
-        tetromino: TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape,
+        pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 0 },
+        tetromino: heldTetromino,
         collided: false,
         rotationIndex: 0,
         spawnCount: prev.spawnCount + 1,
@@ -143,7 +144,7 @@ export const usePlayer = () => {
       // No hold piece yet — consume next piece from bag
       const nextTetromino = randomTetromino().shape;
       setPlayer(prev => ({
-        pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
+        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
         tetromino: nextTetromino,
         collided: false,
         rotationIndex: 0,

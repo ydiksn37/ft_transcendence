@@ -10,12 +10,50 @@ import { resetTetrominoBag, TETROMINOS } from './utils/tetrominos';
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
 
+const formatTime = (ms: number) => {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  const milliseconds = ms % 1000;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+};
+
 const App = () => {
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS'>('MENU');
+  const appStateRef = useRef(appState);
+  useEffect(() => { appStateRef.current = appState; }, [appState]);
+
+  const [gameMode, setGameMode] = useState<'MARATHON' | '40_LINES' | '4_WIDE'>('MARATHON');
+  const gameModeRef = useRef(gameMode);
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
+
+  const [records, setRecords] = useState<number[]>(() => {
+    const saved = localStorage.getItem('tetris40LinesRecords');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [finalTime, setFinalTime] = useState<number | null>(null);
+
+  const [countdown, setCountdown] = useState<string | null>(null);
+  const countdownRef = useRef(countdown);
+  useEffect(() => { countdownRef.current = countdown; }, [countdown]);
+  const countdownTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const [dropTime, setDropTime] = useState<number | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [lines, setLines] = useState(0);
+
+  useEffect(() => {
+    if (appState !== 'PLAYING' || gameMode !== '40_LINES' || !startTime || gameOver) return;
+    const interval = setInterval(() => {
+      setElapsedTime(Date.now() - startTime);
+    }, 20);
+    return () => clearInterval(interval);
+  }, [appState, gameMode, startTime, gameOver]);
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
@@ -23,7 +61,7 @@ const App = () => {
      if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
      const nextPiece = TETROMINOS[nextPieceKeys[0] as keyof typeof TETROMINOS].shape;
      const dummyPlayer = {
-       pos: { x: STAGE_WIDTH / 2 - 2, y: 0 },
+       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 0 },
        tetromino: nextPiece,
        collided: false,
        rotationIndex: 0,
@@ -40,29 +78,36 @@ const App = () => {
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
   // ── Tuning (ARR, DAS, DCD, SDF) ─────────────────────────────────────────
-  const [tuning, setTuning] = useState({
-    das: 133,
-    arr: 50,
-    dcd: 0,
-    sdf: 0 // 0 means infinity (instant soft drop)
+  const [tuning, setTuning] = useState(() => {
+    const saved = localStorage.getItem('tetrisTuning');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { das: 133, arr: 50, dcd: 0, sdf: 0 };
   });
   const tuningRef = useRef(tuning);
-  useEffect(() => { tuningRef.current = tuning; }, [tuning]);
+  useEffect(() => {
+    localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
+    tuningRef.current = tuning;
+  }, [tuning]);
 
   // ── Key Config ──────────────────────────────────────────────────────────
-  const [keyConfig, setKeyConfig] = useState({
-    left: 'KeyA',
-    right: 'KeyD',
-    softDrop: 'KeyS',
-    hardDrop: 'KeyW',
-    rotateCW: 'Slash',
-    rotateCCW: 'Comma',
-    rotate180: 'Period',
-    hold: 'ShiftLeft',
-    restart: 'KeyQ'
+  const [keyConfig, setKeyConfig] = useState(() => {
+    const saved = localStorage.getItem('tetrisKeyConfig');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
+      rotateCW: 'Slash', rotateCCW: 'Comma', rotate180: 'Period',
+      hold: 'ShiftLeft', restart: 'KeyQ'
+    };
   });
   const keyConfigRef = useRef(keyConfig);
-  useEffect(() => { keyConfigRef.current = keyConfig; }, [keyConfig]);
+  useEffect(() => {
+    localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
+    keyConfigRef.current = keyConfig;
+  }, [keyConfig]);
 
   const [listeningAction, setListeningAction] = useState<keyof typeof keyConfig | null>(null);
   const listeningActionRef = useRef(listeningAction);
@@ -74,8 +119,12 @@ const App = () => {
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionText, setActionText] = useState<string | null>(null);
 
+  const lastProcessedEventIdRef = useRef(-1);
+
   useEffect(() => {
-    if (!lockEvent) return;
+    if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current) return;
+    lastProcessedEventIdRef.current = lockEvent.id;
+
     const { lines, tSpinType, perfectClear } = lockEvent;
     
     if (lines > 0) {
@@ -143,6 +192,21 @@ const App = () => {
     if (lines > 0) {
        setLines(prev => {
           const newLines = prev + lines;
+          
+          if (gameModeRef.current === '40_LINES' && newLines >= 40) {
+             const timeTaken = Date.now() - startTimeRef.current!;
+             setFinalTime(timeTaken);
+             setGameOver(true);
+             setDropTime(null);
+             
+             setRecords(prevRecs => {
+               const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
+               localStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
+               return newRecs;
+             });
+             return newLines;
+          }
+
           const newLevel = Math.floor(newLines / 10) + 1;
           setLevel(newLevel);
           setDropTime(levelDropTime(newLevel));
@@ -327,13 +391,30 @@ const App = () => {
   }, [stageRef, setPlayer, clearLockTimer]);
 
   // ── Game control ────────────────────────────────────────────────────────
-  const startGame = useCallback(() => {
-    const newStage = createStage();
+  const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE') => {
+    countdownTimeoutsRef.current.forEach(clearTimeout);
+    countdownTimeoutsRef.current = [];
+    setCountdown('READY');
+
+    const nextMode = mode || gameModeRef.current;
+    setGameMode(nextMode);
+    
+    setStartTime(null);
+    startTimeRef.current = null;
+    setElapsedTime(0);
+    setFinalTime(null);
+    
+    const newStage = createStage(nextMode === '4_WIDE' ? 4 : 10);
+    if (nextMode === '4_WIDE') {
+      // Board width is 4. Place 3 blocks on the bottom row (row 21).
+      for (let x = 0; x < 3; x++) newStage[21][x] = ['X', 'merged'];
+    }
     setStage(newStage);
     stageRef.current = newStage;
-    setDropTime(levelDropTime(1));
+    
+    setDropTime(null);
     resetTetrominoBag();
-    resetPlayer();
+    resetPlayer(nextMode === '4_WIDE' ? 4 : 10);
     resetHold();
     setGameOver(false);
     setScore(0);
@@ -342,6 +423,21 @@ const App = () => {
     comboRef.current = -1;
     b2bRef.current = false;
     setActionText(null);
+    setAppState('PLAYING');
+
+    const t1 = setTimeout(() => {
+      setCountdown('GO!');
+      const now = Date.now();
+      setStartTime(now);
+      startTimeRef.current = now;
+      setDropTime(levelDropTime(1));
+    }, 1000);
+
+    const t2 = setTimeout(() => {
+      setCountdown(null);
+    }, 2000);
+
+    countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
@@ -371,7 +467,7 @@ const App = () => {
   const getActiveDir = useCallback((): number | null => {
     if (horizKeys.current.length === 0) return null;
     const key = horizKeys.current[horizKeys.current.length - 1];
-    return key === 'KeyA' ? -1 : 1;
+    return key === keyConfigRef.current.left ? -1 : 1;
   }, []);
 
   const startARR = useCallback(() => {
@@ -446,6 +542,8 @@ const App = () => {
         return;
       }
 
+      if (appStateRef.current !== 'PLAYING') return;
+
       if (Object.values(conf).includes(code)) {
         e.preventDefault();
       }
@@ -454,6 +552,8 @@ const App = () => {
         if (!e.repeat) startGame();
         return;
       }
+
+      if (countdownRef.current === 'READY') return;
 
       if (gameOver || !dropTime) return;
 
@@ -491,7 +591,7 @@ const App = () => {
           if (!e.repeat) playerRotate(stageRef.current, 2);
           break;
         case conf.hold:
-          if (!e.repeat) playerHold();
+          if (!e.repeat) playerHold(stageRef.current[0].length);
           break;
       }
     },
@@ -571,6 +671,133 @@ const App = () => {
   };
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
+  if (appState === 'MENU') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px' }}>
+        <h1>PixiJS Tetris</h1>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '40px' }}>
+          <button
+            onClick={() => startGame('MARATHON')}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            Marathon Mode
+          </button>
+          <button
+            onClick={() => startGame('40_LINES')}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            40 Lines Mode
+          </button>
+          <button
+            onClick={() => startGame('4_WIDE')}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            4-Wide Mode
+          </button>
+          <button
+            onClick={() => setAppState('RECORDS')}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#9b59b6', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            Records
+          </button>
+          <button
+            onClick={() => setAppState('CONFIG')}
+            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
+          >
+            Config
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (appState === 'RECORDS') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
+        <h1>40 Lines Top 10</h1>
+        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '20px', minWidth: '300px', backgroundColor: '#222', padding: '20px', borderRadius: '8px' }}>
+          {records.length === 0 ? <p style={{ textAlign: 'center' }}>No records yet.</p> : records.map((time, idx) => (
+            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? '#cd7f32' : 'white' }}>
+              <span>{idx + 1}.</span>
+              <span>{formatTime(time)}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setAppState('MENU')}
+          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
+        >
+          Back to Menu
+        </button>
+      </div>
+    );
+  }
+
+  if (appState === 'CONFIG') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
+        <h1>Configuration</h1>
+        
+        <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '600px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
+            <input type="number" min="0" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <label style={{ fontSize: '12px', color: 'gray' }}>DAS (ms)</label>
+            <input type="number" min="0" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <label style={{ fontSize: '12px', color: 'gray' }}>DCD (ms)</label>
+            <input type="number" min="0" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
+            <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          </div>
+        </div>
+
+        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', maxWidth: '600px' }}>
+          <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {Object.entries(keyConfig).map(([action, code]) => (
+              <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
+                <button
+                  onClick={() => {
+                    setListeningAction(action as keyof typeof keyConfig);
+                    window.focus();
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: listeningAction === action ? '#ff4444' : '#555',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    minWidth: '60px'
+                  }}
+                >
+                  {listeningAction === action ? 'Press key...' : code.replace(/^Key/, '').replace(/(Left|Right|Up|Down)$/, (match, p1) => {
+                    if (code.startsWith('Arrow')) return p1; // e.g. ArrowLeft -> Left
+                    return match;
+                  }).replace(/^Arrow/, '')}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={() => setAppState('MENU')}
+          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
+        >
+          Back to Menu
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
       <style>{`
@@ -580,15 +807,37 @@ const App = () => {
           100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         }
       `}</style>
-      <h1>PixiJS Tetris</h1>
-      <button
-        onClick={startGame}
-        style={{ marginBottom: '20px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
-      >
-        Start Game
-      </button>
+      
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
+        <h1 style={{ margin: 0 }}>PixiJS Tetris</h1>
+        <button
+          onClick={() => {
+            setDropTime(null);
+            setAppState('MENU');
+          }}
+          style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#e53935', color: '#fff', border: 'none', borderRadius: '4px' }}
+        >
+          Quit to Menu
+        </button>
+      </div>
 
-      {gameOver && <h2 style={{ color: 'red', margin: '0 0 10px 0' }}>GAME OVER</h2>}
+      {gameOver && (
+        <div style={{ textAlign: 'center', marginBottom: '20px', backgroundColor: '#222', padding: '15px', borderRadius: '8px', border: '2px solid red' }}>
+          <h2 style={{ color: 'red', margin: '0 0 10px 0' }}>
+            {lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER'}
+          </h2>
+          {gameMode === '40_LINES' && finalTime && (
+            <div>
+              <h3>Time: {formatTime(finalTime)}</h3>
+              {records.indexOf(finalTime) !== -1 && records.indexOf(finalTime) < 10 && (
+                <h3 style={{ color: 'gold', animation: 'pop 0.5s ease-out' }}>
+                  New Record! Rank: {records.indexOf(finalTime) + 1}
+                </h3>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
 
@@ -598,9 +847,37 @@ const App = () => {
           {holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
         </div>
 
-        <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
-          <GameBoard stage={stage} player={player} ghostY={calculateGhostY(player, stage)} />
-        </Stage>
+        <div style={{ position: 'relative' }}>
+          <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
+            <GameBoard 
+              stage={stage} 
+              player={player} 
+              ghostY={calculateGhostY(player, stage)} 
+              targetLine={
+                gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                  ? 22 - (40 - lines) 
+                  : undefined
+              }
+            />
+          </Stage>
+
+          {countdown && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              color: 'white',
+              fontSize: '48px',
+              fontWeight: 'bold',
+              textShadow: '2px 2px 4px black',
+              zIndex: 20,
+              pointerEvents: 'none'
+            }}>
+              {countdown}
+            </div>
+          )}
+        </div>
 
         {/* Action Text Overlay (e.g. T-Spin, Tetris) */}
         {actionText && (
@@ -624,6 +901,14 @@ const App = () => {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
+          {gameMode === '40_LINES' && (
+            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
+              <strong>TIME</strong><br />
+              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white' }}>
+                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: '0 0 10px 0' }}>NEXT</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -660,54 +945,6 @@ const App = () => {
           <div><strong>LINES</strong><br />{lines}</div>
         </div>
 
-      </div>
-
-      <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
-          <input type="number" min="0" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>DAS (ms)</label>
-          <input type="number" min="0" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>DCD (ms)</label>
-          <input type="number" min="0" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
-          <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-        </div>
-      </div>
-
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-        <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
-        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Object.entries(keyConfig).map(([action, code]) => (
-            <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
-              <button
-                onClick={() => {
-                  setListeningAction(action as keyof typeof keyConfig);
-                  // Focus the window to ensure it receives key events
-                  window.focus();
-                }}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: listeningAction === action ? '#ff4444' : '#555',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  minWidth: '60px'
-                }}
-              >
-                {listeningAction === action ? 'Press key...' : code.replace(/^Key|Left|Right$/, '')}
-              </button>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

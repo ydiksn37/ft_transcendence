@@ -6,9 +6,9 @@ export const STAGE_HEIGHT = 22;
 export type CellStatus = 'clear' | 'merged' | 'ghost';
 export type Cell = [string | 0, CellStatus];
 
-export const createStage = (): Cell[][] =>
+export const createStage = (width = 10): Cell[][] =>
   Array.from(Array(STAGE_HEIGHT), () =>
-    new Array(STAGE_WIDTH).fill([0, 'clear']) as Cell[]
+    new Array(width).fill([0, 'clear']) as Cell[]
   );
 
 export const checkCollision = (
@@ -29,7 +29,7 @@ export const checkCollision = (
         if (nextY >= STAGE_HEIGHT) return true;
 
         // Wall collision
-        if (nextX < 0 || nextX >= STAGE_WIDTH) return true;
+        if (nextX < 0 || nextX >= stage[0].length) return true;
 
         // Block collision
         const nextRow = stage[nextY];

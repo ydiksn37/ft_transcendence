@@ -21,6 +21,7 @@ const colorMap: Record<string, number> = {
   purple: 0x800080,
   red: 0xFF0000,
   transparent: 0x000000,
+  gray: 0x888888,
 };
 
 const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {

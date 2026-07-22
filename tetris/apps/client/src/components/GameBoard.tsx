@@ -9,17 +9,34 @@ type GameBoardProps = {
   stage: CellType[][];
   player: Player;
   ghostY: number;
+  targetLine?: number;
 };
 
 const CELL_SIZE = 30; 
 
-const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine }) => {
+  const width = stage.length > 0 ? stage[0].length * CELL_SIZE : 300;
+
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
     g.beginFill(0x222222);
-    g.drawRect(0, 60, 300, 600);
+    g.drawRect(0, 60, width, 600);
     g.endFill();
-  }, []);
+  }, [width]);
+
+  const drawTargetLine = useCallback((g: PIXI.Graphics) => {
+    g.clear();
+    if (targetLine === undefined) return;
+    
+    const yPos = targetLine * CELL_SIZE;
+    
+    // Draw a dashed red line
+    g.lineStyle(2, 0xff3333, 0.8);
+    for (let x = 0; x < width; x += 10) {
+      g.moveTo(x, yPos);
+      g.lineTo(Math.min(x + 5, width), yPos);
+    }
+  }, [targetLine, width]);
 
   return (
     <Container y={0}>
@@ -74,6 +91,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY }) => {
           );
         })
       )}
+      <Graphics draw={drawTargetLine} />
     </Container>
   );
 };

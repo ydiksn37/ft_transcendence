@@ -1,7 +1,8 @@
-export type TetrominoKey = 0 | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
+export type TetrominoKey = 0 | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z' | 'X';
 
 export const TETROMINOS = {
   0: { shape: [[0]], color: 'transparent' },
+  X: { shape: [['X']], color: 'gray' },
   I: {
     shape: [
       [0, 0, 0, 0],
