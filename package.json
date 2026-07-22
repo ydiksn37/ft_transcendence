@@ -1,0 +1,25 @@
+{
+  "name": "ft-transcendence",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "db:migrate": "turbo db:migrate",
+    "db:generate": "turbo db:generate"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=11.0.0"
+  },
+  "packageManager": "npm@11.11.0"
+}
