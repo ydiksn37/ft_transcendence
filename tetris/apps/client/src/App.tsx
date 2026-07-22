@@ -7,6 +7,10 @@ import { useInterval } from './hooks/useInterval';
 import { createStage, checkCollision, calculateGhostY, STAGE_WIDTH, type Cell } from './utils/gameHelpers';
 import { resetTetrominoBag, TETROMINOS, setRandomSeed } from './utils/tetrominos';
 import { io, Socket } from 'socket.io-client';
+import { Menu } from './components/UI/Menu';
+import { Records } from './components/UI/Records';
+import { Config } from './components/UI/Config';
+import { TetrisUI } from './components/UI/TetrisUI';
 
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
@@ -883,369 +887,56 @@ const App = () => {
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
   if (appState === 'MENU') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px' }}>
-        <h1>PixiJS Tetris</h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '40px' }}>
-          <button
-            onClick={() => startGame('MARATHON')}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            Marathon Mode
-          </button>
-          <button
-            onClick={() => startGame('40_LINES')}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            40 Lines Mode
-          </button>
-          <button
-            onClick={() => startGame('4_WIDE')}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            4-Wide Mode
-          </button>
-          <button
-            onClick={joinOnline}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            Online 1v1
-          </button>
-          <button
-            onClick={() => setAppState('RECORDS')}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#9b59b6', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            Records
-          </button>
-          <button
-            onClick={() => setAppState('CONFIG')}
-            style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-          >
-            Config
-          </button>
-        </div>
-      </div>
-    );
+    return <Menu startGame={startGame} joinOnline={joinOnline} setAppState={setAppState} />;
   }
 
   if (appState === 'RECORDS') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-        <h1>40 Lines Top 10</h1>
-        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '20px', minWidth: '300px', backgroundColor: '#222', padding: '20px', borderRadius: '8px' }}>
-          {records.length === 0 ? <p style={{ textAlign: 'center' }}>No records yet.</p> : records.map((time, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? '#cd7f32' : 'white' }}>
-              <span>{idx + 1}.</span>
-              <span>{formatTime(time)}</span>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={() => setAppState('MENU')}
-          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-        >
-          Back to Menu
-        </button>
-      </div>
-    );
+    return <Records records={records} setAppState={setAppState} />;
   }
 
   if (appState === 'CONFIG') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-        <h1>Configuration</h1>
-        
-        <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '600px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
-            <input type="number" min="0" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <label style={{ fontSize: '12px', color: 'gray' }}>DAS (ms)</label>
-            <input type="number" min="0" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <label style={{ fontSize: '12px', color: 'gray' }}>DCD (ms)</label>
-            <input type="number" min="0" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
-            <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-          </div>
-        </div>
-
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', maxWidth: '600px' }}>
-          <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {Object.entries(keyConfig).map(([action, code]) => (
-              <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
-                <button
-                  onClick={() => {
-                    setListeningAction(action as keyof typeof keyConfig);
-                    window.focus();
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: listeningAction === action ? '#ff4444' : '#555',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    minWidth: '60px'
-                  }}
-                >
-                  {listeningAction === action ? 'Press key...' : code.replace(/^Key/, '').replace(/(Left|Right|Up|Down)$/, (match, p1) => {
-                    if (code.startsWith('Arrow')) return p1; // e.g. ArrowLeft -> Left
-                    return match;
-                  }).replace(/^Arrow/, '')}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button
-          onClick={() => setAppState('MENU')}
-          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-        >
-          Back to Menu
-        </button>
-      </div>
+      <Config
+        tuning={tuning}
+        setTuning={setTuning}
+        keyConfig={keyConfig}
+        listeningAction={listeningAction}
+        setListeningAction={setListeningAction as any}
+        setAppState={setAppState}
+      />
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
-      <style>{`
-        @keyframes pop {
-          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-          70% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-      `}</style>
-      
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>PixiJS Tetris</h1>
-        <button
-          onClick={() => {
-            if (socketRef.current) {
-              socketRef.current.disconnect();
-              setSocket(null);
-            }
-            setIsWaiting(false);
-            setDropTime(null);
-            setAppState('MENU');
-          }}
-          style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#e53935', color: '#fff', border: 'none', borderRadius: '4px' }}
-        >
-          Quit to Menu
-        </button>
-      </div>
-
-      {gameOver && (
-        <div style={{ textAlign: 'center', marginBottom: '20px', backgroundColor: '#222', padding: '15px', borderRadius: '8px', border: '2px solid red' }}>
-          <h2 style={{ color: matchResult === 'WIN' ? 'gold' : 'red', margin: '0 0 10px 0' }}>
-            {gameMode === 'ONLINE_1V1' && matchResult
-              ? matchResult === 'WIN' ? 'YOU WIN!' : 'YOU LOSE'
-              : (lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER')
-            }
-          </h2>
-          {gameMode === '40_LINES' && finalTime && (
-            <div>
-              <h3>Time: {formatTime(finalTime)}</h3>
-              {records.indexOf(finalTime) !== -1 && records.indexOf(finalTime) < 10 && (
-                <h3 style={{ color: 'gold', animation: 'pop 0.5s ease-out' }}>
-                  New Record! Rank: {records.indexOf(finalTime) + 1}
-                </h3>
-              )}
-            </div>
-          )}
-          {gameMode === 'ONLINE_1V1' && (
-             <button
-               onClick={() => {
-                 if (socketRef.current) {
-                   socketRef.current.disconnect();
-                   setSocket(null);
-                 }
-                 joinOnline();
-               }}
-               style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
-             >
-               Find New Match
-             </button>
-          )}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={{ width: '80px', height: '80px', backgroundColor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '2px solid #555' }} /> : renderHoldBox()}
-          {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
-          <div style={{ position: 'relative' }}>
-            <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
-            <GameBoard 
-              stage={stage} 
-              player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } : player} 
-              ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
-              targetLine={
-                gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                  ? 22 - (40 - lines) 
-                  : undefined
-              }
-            />
-          </Stage>
-
-          {gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
-            <div style={{
-              position: 'absolute',
-              bottom: 0,
-              left: '-20px',
-              width: '10px',
-              height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
-              backgroundColor: 'red',
-              borderRadius: '5px',
-              transition: 'height 0.2s',
-              boxShadow: '0 0 10px red'
-            }}>
-              <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
-                {pendingGarbage.reduce((a,b)=>a+b,0)}
-              </span>
-            </div>
-          )}
-
-          {countdown && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: 'white',
-              fontSize: '48px',
-              fontWeight: 'bold',
-              textShadow: '2px 2px 4px black',
-              zIndex: 20,
-              pointerEvents: 'none'
-            }}>
-              {countdown}
-            </div>
-          )}
-        </div>
-        </div>
-
-        {/* Action Text Overlay (e.g. T-Spin, Tetris) */}
-        {actionText && (
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '30%',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-            color: '#fff',
-            textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            textAlign: 'center',
-            whiteSpace: 'pre-line',
-            animation: 'pop 0.3s ease-out',
-            zIndex: 10
-          }}>
-            {actionText}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
-          {gameMode === '40_LINES' && (
-            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
-              <strong>TIME</strong><br />
-              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white' }}>
-                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
-              </span>
-            </div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: '0 0 10px 0' }}>NEXT</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(gameMode === 'ONLINE_1V1' && isWaiting) ? (
-                [1,2,3,4,5].map(i => (
-                  <div key={i} style={{ width: '80px', height: '80px', backgroundColor: '#333', borderRadius: '8px', border: '2px solid #555' }} />
-                ))
-              ) : (
-                nextPieceKeys?.map((key, idx) => {
-                  const shape = TETROMINOS[key as keyof typeof TETROMINOS].shape;
-                  const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
-                  const boxStyle = {
-                    width: '80px', height: '80px', backgroundColor: '#333',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '8px', border: '2px solid #555'
-                  };
-                  return (
-                    <div key={idx} style={boxStyle}>
-                      <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, 
-                        gap: '1px' 
-                      }}>
-                        {shape.map((row, y) => row.map((cell, x) => (
-                          <div key={`${y}-${x}`} style={{
-                            width: 15, height: 15, 
-                            backgroundColor: cell === 0 ? 'transparent' : `${color}`,
-                            borderRadius: '2px'
-                          }} />
-                        )))}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          <div><strong>SCORE</strong><br />{score}</div>
-          <div><strong>LEVEL</strong><br />{level}</div>
-          <div><strong>LINES</strong><br />{lines}</div>
-        </div>
-
-        {/* Add Opponent board if ONLINE_1V1 */}
-        {gameMode === 'ONLINE_1V1' && (
-          <div style={{ position: 'relative', marginLeft: '40px' }}>
-            <h3 style={{ textAlign: 'center', color: '#ff4444', margin: '0 0 10px 0' }}>OPPONENT</h3>
-            
-            <div style={{ position: 'relative' }}>
-              <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={opponentStage || createStage(10)} 
-                  player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 }} 
-                  ghostY={0} 
-                />
-              </Stage>
-              
-              {isWaiting && (
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>
-                  Waiting for match...
-                </div>
-              )}
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: '10px' }}>
-              <strong>SCORE: {opponentScore}</strong>
-            </div>
-            
-            {!isWaiting && matchResult && (
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: matchResult === 'LOSE' ? 'gold' : 'red', fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 20 }}>
-                {matchResult === 'LOSE' ? 'WIN' : 'LOSE'}
-              </div>
-            )}
-          </div>
-        )}
-
-      </div>
-    </div>
+    <TetrisUI
+      stage={stage}
+      player={player}
+      gameOver={gameOver}
+      gameMode={gameMode}
+      score={score}
+      level={level}
+      lines={lines}
+      nextPieceKeys={nextPieceKeys}
+      holdInfo={holdInfo}
+      isWaiting={isWaiting}
+      matchResult={matchResult}
+      opponentStage={opponentStage}
+      opponentScore={opponentScore}
+      pendingGarbage={pendingGarbage}
+      actionText={actionText}
+      countdown={countdown}
+      finalTime={finalTime}
+      elapsedTime={elapsedTime}
+      socketRef={socketRef}
+      setSocket={setSocket}
+      setIsWaiting={setIsWaiting}
+      setDropTime={setDropTime}
+      setAppState={setAppState}
+      joinOnline={joinOnline}
+      formatTime={formatTime}
+      records={records}
+      createStage={createStage}
+    />
   );
 };
 
