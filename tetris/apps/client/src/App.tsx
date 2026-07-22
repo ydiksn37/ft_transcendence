@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Stage } from '@pixi/react';
-import GameBoard from './components/GameBoard';
 import { usePlayer } from './hooks/usePlayer';
 import { useStage } from './hooks/useStage';
 import { useInterval } from './hooks/useInterval';
-import { createStage, checkCollision, calculateGhostY, STAGE_WIDTH, type Cell } from './utils/gameHelpers';
+import { createStage, checkCollision, calculateGhostY, type Cell } from './utils/gameHelpers';
 import { resetTetrominoBag, TETROMINOS, setRandomSeed } from './utils/tetrominos';
-import { io, Socket } from 'socket.io-client';
 import { Menu } from './components/UI/Menu';
 import { Records } from './components/UI/Records';
 import { Config } from './components/UI/Config';
 import { TetrisUI } from './components/UI/TetrisUI';
+import { useConfig } from './hooks/useConfig';
+import { useKeyboardControls } from './hooks/useKeyboardControls';
+import { useMultiplayer } from './hooks/useMultiplayer';
+import { useGameState } from './hooks/useGameState';
 
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
@@ -23,54 +24,26 @@ const formatTime = (ms: number) => {
 };
 
 const App = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1'>('MENU');
-  const appStateRef = useRef(appState);
-  useEffect(() => { appStateRef.current = appState; }, [appState]);
-
-  // Online Multiplayer States
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const socketRef = useRef(socket);
-  useEffect(() => { socketRef.current = socket; }, [socket]);
-  const [isWaiting, setIsWaiting] = useState(false);
-  const [opponentStage, setOpponentStage] = useState<Cell[][] | null>(null);
-  const [opponentScore, setOpponentScore] = useState(0);
-  const [opponentGameOver, setOpponentGameOver] = useState(false);
-  const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
-  const [pendingGarbage, setPendingGarbage] = useState<number[]>([]);
-  const pendingGarbageRef = useRef<number[]>([]);
-
-  const [gameMode, setGameMode] = useState<'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1'>('MARATHON');
-  const gameModeRef = useRef(gameMode);
-  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
-
-  const [records, setRecords] = useState<number[]>(() => {
-    const saved = localStorage.getItem('tetris40LinesRecords');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [startTime, setStartTime] = useState<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
-  const [finalTime, setFinalTime] = useState<number | null>(null);
-
-  const [countdown, setCountdown] = useState<string | null>(null);
-  const countdownRef = useRef(countdown);
-  useEffect(() => { countdownRef.current = countdown; }, [countdown]);
-  const countdownTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const [dropTime, setDropTime] = useState<number | null>(null);
-  const [gameOver, setGameOver] = useState(false);
-  const [score, setScore] = useState(0);
-  const [level, setLevel] = useState(1);
-  const [lines, setLines] = useState(0);
-
-  useEffect(() => {
-    if (appState !== 'PLAYING' || gameMode !== '40_LINES' || !startTime || gameOver) return;
-    const interval = setInterval(() => {
-      setElapsedTime(Date.now() - startTime);
-    }, 20);
-    return () => clearInterval(interval);
-  }, [appState, gameMode, startTime, gameOver]);
+  const {
+    appState, setAppState, appStateRef,
+    socket, setSocket, socketRef,
+    isWaiting, setIsWaiting,
+    opponentStage, setOpponentStage,
+    opponentScore, setOpponentScore,
+    matchResult, setMatchResult,
+    pendingGarbage, setPendingGarbage, pendingGarbageRef,
+    gameMode, setGameMode, gameModeRef,
+    records, setRecords,
+    setStartTime, startTimeRef,
+    elapsedTime, setElapsedTime,
+    finalTime, setFinalTime,
+    countdown, setCountdown, countdownRef, countdownTimeoutsRef,
+    dropTime, setDropTime,
+    gameOver, setGameOver,
+    score, setScore,
+    level, setLevel,
+    lines, setLines
+  } = useGameState();
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
@@ -97,42 +70,11 @@ const App = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  // ── Tuning (ARR, DAS, DCD, SDF) ─────────────────────────────────────────
-  const [tuning, setTuning] = useState(() => {
-    const saved = localStorage.getItem('tetrisTuning');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return { das: 133, arr: 33, dcd: 1, sdf: 6 };
-  });
-  const tuningRef = useRef(tuning);
-  useEffect(() => {
-    localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
-    tuningRef.current = tuning;
-  }, [tuning]);
-
-  // ── Key Config ──────────────────────────────────────────────────────────
-  const [keyConfig, setKeyConfig] = useState(() => {
-    const defaultConf = {
-      left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
-      rotateCW: 'Slash', rotateCCW: 'Comma', rotate180: 'Period',
-      hold: 'ShiftLeft', restart: 'KeyQ', quitToMenu: 'Escape'
-    };
-    const saved = localStorage.getItem('tetrisKeyConfig');
-    if (saved) {
-      try { return { ...defaultConf, ...JSON.parse(saved) }; } catch (e) {}
-    }
-    return defaultConf;
-  });
-  const keyConfigRef = useRef(keyConfig);
-  useEffect(() => {
-    localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
-    keyConfigRef.current = keyConfig;
-  }, [keyConfig]);
-
-  const [listeningAction, setListeningAction] = useState<keyof typeof keyConfig | null>(null);
-  const listeningActionRef = useRef(listeningAction);
-  useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
+  const {
+    tuning, setTuning, tuningRef,
+    keyConfig, setKeyConfig, keyConfigRef,
+    listeningAction, setListeningAction, listeningActionRef
+  } = useConfig();
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
   const b2bRef = useRef(false);
@@ -412,10 +354,7 @@ const App = () => {
     }
   }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
 
-  // ── Movement ────────────────────────────────────────────────────────────
-  const movePlayer = useCallback((dir: number, forceSnap: boolean = false) => {
-    movePlayerHorizontal(dir, stageRef.current, forceSnap);
-  }, [stageRef, movePlayerHorizontal]);
+
 
   const drop = useCallback(() => {
     setPlayer(prev => {
@@ -499,88 +438,7 @@ const App = () => {
     });
   }, [stageRef, setPlayer, clearLockTimer]);
 
-  // ── Online Matchmaking ──────────────────────────────────────────────────
-  const joinOnline = () => {
-    setAppState('ONLINE_1V1');
-    setGameMode('ONLINE_1V1');
-    setIsWaiting(true);
-    setOpponentStage(createStage(10));
-    setOpponentScore(0);
-    setOpponentGameOver(false);
-    setPendingGarbage([]);
-    pendingGarbageRef.current = [];
 
-    const newStage = createStage(10);
-    setStage(newStage);
-    stageRef.current = newStage;
-    resetPlayer(10);
-    resetHold();
-    setScore(0);
-    setLevel(1);
-    setLines(0);
-    setGameOver(false);
-    setMatchResult(null);
-
-    const newSocket = io('http://localhost:3000');
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      newSocket.emit('join_matchmaking');
-    });
-
-    newSocket.on('match_found', (data: { playerNum: number; seed: number }) => {
-      setRandomSeed(data.seed);
-      // Need a small timeout to let state settle before starting
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
-    });
-
-    newSocket.on('waiting_for_match', () => {
-      setIsWaiting(true);
-    });
-
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
-      setOpponentStage(data.stage);
-      setOpponentScore(data.score);
-    });
-
-    newSocket.on('receive_garbage', (data: { lines: number }) => {
-      pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
-      setPendingGarbage(pendingGarbageRef.current);
-    });
-
-    newSocket.on('opponent_game_over', () => {
-      setOpponentGameOver(true);
-      setMatchResult('WIN');
-      setGameOver(true);
-      setDropTime(null);
-    });
-
-    newSocket.on('opponent_disconnected', () => {
-      setOpponentGameOver(true);
-      setMatchResult('WIN');
-      setGameOver(true);
-      setDropTime(null);
-    });
-  };
-
-  useEffect(() => {
-    return () => {
-      if (socket) socket.disconnect();
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    if (socket && appState === 'ONLINE_1V1' && !isWaiting) {
-      // Basic rate limiting could be applied, but this is simple enough
-      socket.emit('board_update', { stage, score });
-    }
-  }, [stage, score, socket, appState, isWaiting]);
-
-  useEffect(() => {
-    if (socket && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {
-      socket.emit('game_over');
-    }
-  }, [gameOver, socket, appState, matchResult]);
 
   // ── Game control ────────────────────────────────────────────────────────
   const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => {
@@ -642,248 +500,24 @@ const App = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
+  const { joinOnline } = useMultiplayer({
+    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+    setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
+    stage, score, socket, setSocket, isWaiting, setIsWaiting,
+    setOpponentStage, setOpponentScore,
+    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
+  });
+
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
-  // Ref-proxy so DAS/ARR timer callbacks always call the latest movePlayer
-  // (movePlayer changes every render because it captures player/stage state)
-  const movePlayerRef = useRef<(dir: number, forceSnap?: boolean) => void>(() => {});
-  useEffect(() => { movePlayerRef.current = movePlayer; }, [movePlayer]);
-
-  const heldKeys = useRef<Set<string>>(new Set());
-  const horizKeys = useRef<string[]>([]);
-  const dasTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
-  const arrTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  /** Cancel both the DAS timer and the ARR interval. */
-  const clearDASARR = useCallback(() => {
-    if (dasTimerRef.current !== null) {
-      clearTimeout(dasTimerRef.current);
-      dasTimerRef.current = null;
-    }
-    if (arrTimerRef.current !== null) {
-      clearInterval(arrTimerRef.current);
-      arrTimerRef.current = null;
-    }
-  }, []);
-
-  /** Return the active horizontal direction (-1 / 1) or null if both/neither held. */
-  const getActiveDir = useCallback((): number | null => {
-    if (horizKeys.current.length === 0) return null;
-    const key = horizKeys.current[horizKeys.current.length - 1];
-    return key === keyConfigRef.current.left ? -1 : 1;
-  }, []);
-
-  const startARR = useCallback(() => {
-    if (arrTimerRef.current !== null) clearInterval(arrTimerRef.current);
-    
-    if (tuningRef.current.arr <= 0) {
-      const dir = getActiveDir();
-      if (dir !== null) movePlayerRef.current(dir, true);
-      
-      arrTimerRef.current = setInterval(() => {
-        const currentDir = getActiveDir();
-        if (currentDir !== null) movePlayerRef.current(currentDir, true);
-      }, 10);
-    } else {
-      arrTimerRef.current = setInterval(() => {
-        const dir = getActiveDir();
-        if (dir !== null) movePlayerRef.current(dir, false);
-      }, tuningRef.current.arr);
-    }
-  }, [getActiveDir]);
-
-  /** Start DAS timer; after it fires, start ARR interval. */
-  const startDASARR = useCallback(() => {
-    clearDASARR();
-    dasTimerRef.current = setTimeout(() => {
-      dasTimerRef.current = null;
-      startARR();
-    }, tuningRef.current.das);
-  }, [clearDASARR, startARR]);
-
-  // Apply DCD (DAS Cut Delay) when a new piece spawns (tetromino changes)
-  useEffect(() => {
-    if (gameOver || !dropTime) return;
-
-    if (tuningRef.current.dcd > 0) {
-      const dir = getActiveDir();
-      if (dir !== null) {
-        clearDASARR();
-        setTimeout(() => {
-          const currentDir = getActiveDir();
-          if (currentDir !== null) {
-            movePlayerRef.current(currentDir, false);
-            startARR();
-          }
-        }, tuningRef.current.dcd);
-      }
-    }
-  }, [player.tetromino, gameOver, dropTime, clearDASARR, getActiveDir, startARR]);
-
-  // Stop DAS/ARR whenever the game pauses or ends
-  useEffect(() => {
-    if (gameOver || !dropTime) {
-      clearDASARR();
-      heldKeys.current.clear();
-      horizKeys.current = [];
-    }
-  }, [gameOver, dropTime, clearDASARR]);
-
-  // Clean up timers on unmount
-  useEffect(() => () => clearDASARR(), [clearDASARR]);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      const code = e.code;
-      const conf = keyConfigRef.current;
-      const listening = listeningActionRef.current;
-
-      if (listening) {
-        e.preventDefault();
-        setKeyConfig(prev => ({ ...prev, [listening]: code }));
-        setListeningAction(null);
-        return;
-      }
-
-      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1') return;
-
-      if (Object.values(conf).includes(code)) {
-        e.preventDefault();
-      }
-
-      if (code === conf.restart) {
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1') startGame();
-        return;
-      }
-
-      if (code === conf.quitToMenu) {
-        if (!e.repeat) {
-          if (socketRef.current) {
-            socketRef.current.disconnect();
-            setSocket(null);
-          }
-          setIsWaiting(false);
-          setDropTime(null);
-          setAppState('MENU');
-        }
-        return;
-      }
-
-      if (countdownRef.current === 'READY') return;
-
-      if (gameOver || !dropTime) return;
-
-      switch (code) {
-        case conf.left:
-        case conf.right: {
-          const dir = code === conf.left ? -1 : 1;
-          // Only react to the first physical press; ignore browser key-repeat.
-          // ARR interval handles subsequent repeats after DAS.
-          if (!heldKeys.current.has(code)) {
-            heldKeys.current.add(code);
-            horizKeys.current.push(code);
-            movePlayer(dir, false);   // immediate single move
-            startDASARR();     // start DAS → ARR chain
-          }
-          break;
-        }
-        case conf.softDrop:
-          if (!heldKeys.current.has(conf.softDrop)) {
-            heldKeys.current.add(conf.softDrop);
-          }
-          // Soft drop
-          softDrop();
-          break;
-        case conf.hardDrop:
-          if (!e.repeat) hardDrop();
-          break;
-        case conf.rotateCW:
-          if (!e.repeat) playerRotate(stageRef.current, 1);
-          break;
-        case conf.rotateCCW:
-          if (!e.repeat) playerRotate(stageRef.current, -1);
-          break;
-        case conf.rotate180:
-          if (!e.repeat) playerRotate(stageRef.current, 2);
-          break;
-        case conf.hold:
-          if (!e.repeat) playerHold(stageRef.current[0].length);
-          break;
-      }
-    },
-    [gameOver, dropTime, movePlayer, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame]
-  );
-
-  const handleKeyUp = useCallback(
-    (e: KeyboardEvent) => {
-      const code = e.code;
-      const conf = keyConfigRef.current;
-
-      if (code === conf.left || code === conf.right) {
-        heldKeys.current.delete(code);
-        
-        const wasActive = horizKeys.current.length > 0 && horizKeys.current[horizKeys.current.length - 1] === code;
-        horizKeys.current = horizKeys.current.filter(k => k !== code);
-        
-        if (wasActive) {
-          clearDASARR();
-          const dir = getActiveDir();
-          if (dir !== null) {
-            movePlayerRef.current(dir, false); // immediate move in remaining direction
-            startDASARR();
-          }
-        }
-      } else {
-        heldKeys.current.delete(code);
-      }
-    },
-    [clearDASARR, getActiveDir, startDASARR]
-  );
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [handleKeyDown, handleKeyUp]);
+  const { heldKeys } = useKeyboardControls({
+    player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
+    countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
+    socketRef, setSocket, setIsWaiting, setDropTime, setAppState
+  });
 
   // Auto-drop (gravity)
   useInterval(drop, dropTime);
-
-  // ── Hold box render (original UI) ───────────────────────────────────────
-  const renderHoldBox = () => {
-	  const boxStyle = {
-		  width: '80px', height: '80px', backgroundColor: '#333',
-		  display: 'flex', alignItems: 'center', justifyContent: 'center',
-		  borderRadius: '8px', border: '2px solid #555'
-	  };
-
-	  if (!holdInfo.tetromino) {
-		  return <div style={boxStyle}></div>;
-	  }
-
-	  const shape = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
-	  const color = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].color;
-
-	  return (
-		  <div style={boxStyle}>
-		  <div style={{
-			  display: 'grid',
-			  gridTemplateColumns: `repeat(${shape[0].length}, 15px)`,
-			  gap: '1px'
-		  }}>
-		  {shape.map((row, y) => row.map((cell, x) => (
-			  <div key={`${y}-${x}`} style={{
-				  width: 15, height: 15,
-				  backgroundColor: cell === 0 ? 'transparent' : `${color}`,
-				  borderRadius: '2px'
-			  }} />
-		  )))}
-		  </div>
-		  </div>
-	  );
-  };
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
   if (appState === 'MENU') {

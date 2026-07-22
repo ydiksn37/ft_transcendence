@@ -1,4 +1,5 @@
-import { useEffect, useCallback, useRef, MutableRefObject, Dispatch, SetStateAction } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
+import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import type { Player } from './usePlayer';
 import type { Cell } from '../utils/gameHelpers';
 import type { Socket } from 'socket.io-client';
@@ -15,7 +16,7 @@ type UseKeyboardControlsProps = {
   listeningActionRef: MutableRefObject<string | null>;
   setKeyConfig: Dispatch<SetStateAction<Record<string, string>>>;
   setListeningAction: (action: string | null) => void;
-  movePlayerHorizontal: (dir: number, stage: Cell[][], forceSnap?: boolean) => void;
+  movePlayerHorizontal: (dir: number, stage: Cell[][], isArrZero: boolean) => void;
   softDrop: () => void;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
