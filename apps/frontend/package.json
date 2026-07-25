@@ -11,13 +11,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@transcendence/shared": "*",
     "@pixi/react": "7.1.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@transcendence/shared": "*",
     "pixi.js": "^7.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.7.0",
     "socket.io-client": "^4.8.1",
+    "tailwindcss": "^4.3.3",
     "zustand": "^5.0.6"
   },
   "devDependencies": {
