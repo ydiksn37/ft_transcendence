@@ -11,6 +11,9 @@ help: ## コマンド一覧を表示する
 up: ## Dockerコンテナを起動する (バックグラウンド)
 	docker compose up -d
 
+up-infra: ## 開発用にDB等のインフラコンテナのみを起動する
+	docker compose up -d postgres redis vault
+
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
 
@@ -45,6 +48,12 @@ reset-db: ## DBボリュームを削除し、コンテナを再起動する
 	npm run db:migrate -- --name init
 
 # --- 開発用コマンド ---
+dev: ## 開発サーバーを起動する (フロント・バック両方)
+	npm run dev
+
+generate: ## Prisma Client を生成する (ホスト側)
+	npm run db:generate
+
 migrate: ## Prisma のマイグレーションを実行する (ホスト側)
 	npm run db:migrate
 
@@ -53,6 +62,8 @@ studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
 
 install: ## 依存パッケージをすべてインストールする
 	npm install
+	@ln -sf ../../.env apps/backend/.env
+	@ln -sf ../../.env apps/frontend/.env
 
 # --- コンテナ内シェル ---
 exec-backend: ## backendコンテナの中に入る (シェル)
@@ -71,4 +82,4 @@ exec-vault: ## vaultコンテナの中に入る
 ps: ## このプロジェクトに関わるコンテナの状態を表示する
 	docker compose ps -a
 
-.PHONY: help up down build logs logs-backend logs-frontend restart re clean fclean reset-db migrate studio install exec-backend exec-frontend exec-db exec-vault ps
+.PHONY: help up up-infra down build logs logs-backend logs-frontend restart re clean fclean reset-db dev generate migrate studio install exec-backend exec-frontend exec-db exec-vault ps

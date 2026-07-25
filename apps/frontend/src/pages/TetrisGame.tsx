@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePlayer } from './hooks/usePlayer';
-import { useStage } from './hooks/useStage';
-import { useInterval } from './hooks/useInterval';
-import { createStage, checkCollision, calculateGhostY, type Cell } from './utils/gameHelpers';
-import { resetTetrominoBag, TETROMINOS, setRandomSeed } from './utils/tetrominos';
-import { Menu } from './components/UI/Menu';
-import { Records } from './components/UI/Records';
-import { Config } from './components/UI/Config';
-import { TetrisUI } from './components/UI/TetrisUI';
-import { useConfig } from './hooks/useConfig';
-import { useKeyboardControls } from './hooks/useKeyboardControls';
-import { useMultiplayer } from './hooks/useMultiplayer';
-import { useGameState } from './hooks/useGameState';
+import { usePlayer } from '../hooks/usePlayer';
+import { useStage } from '../hooks/useStage';
+import { useInterval } from '../hooks/useInterval';
+import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
+import { resetTetrominoBag, TETROMINOS, setRandomSeed } from '../utils/tetrominos';
+import { Menu } from '../components/UI/Menu';
+import { Records } from '../components/UI/Records';
+import { Config } from '../components/UI/Config';
+import { TetrisUI } from '../components/UI/TetrisUI';
+import { useConfig } from '../hooks/useConfig';
+import { useKeyboardControls } from '../hooks/useKeyboardControls';
+import { useMultiplayer } from '../hooks/useMultiplayer';
+import { useGameState } from '../hooks/useGameState';
 
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
@@ -23,7 +23,7 @@ const formatTime = (ms: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
-const App = () => {
+const TetrisGame = () => {
   const {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
@@ -574,4 +574,4 @@ const App = () => {
   );
 };
 
-export default App;
+export { TetrisGame };
