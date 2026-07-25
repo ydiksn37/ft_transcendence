@@ -33,6 +33,8 @@ make up-infra
 Docker で立ち上げた PostgreSQL に対してマイグレーションを適用し、同時に Prisma Client の型定義を生成します。
 ```bash
 make generate
+```
+```bash
 make migrate
 ```
 
