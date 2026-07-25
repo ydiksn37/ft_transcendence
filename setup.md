@@ -55,5 +55,6 @@ make dev
     rm -rf node_modules package-lock.json apps/*/node_modules
     npm install
     ```
-*   **ポートが競合して起動しない場合**
-    `.env` 内のポート番号指定（DB: `5432` など）や、`apps/frontend/package.json` 内の `5173` ポート設定を、空いているポートに変更してください。
+*   **ポートが競合して起動しない場合 (`bind: address already in use`)**
+    42のiMacなどの共有PC環境では、他の学生のプロセスがデフォルトポート（5432や6379）を占有していることがよくあります。
+    `.env` 内の `POSTGRES_PORT` や `REDIS_PORT` を、他の人が使っていなさそうな別の番号（例: `54321`, `63791` など）に変更してから、再度 `make up-infra` を実行してください。（※ `docker-compose.yml` 側は `.env` の値を読み取るようになっているため、`.env` を変更するだけで大丈夫です）
