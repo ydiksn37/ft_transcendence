@@ -1,15 +1,17 @@
 import { TetrisGame } from './pages/TetrisGame';
-import { Panel } from "@/components/UI/Panel"
 import './App.css';
+
+
+import { Panel } from "@/components/UI/Panel"
+import { NeonBtn } from "@/components/UI/NeonBtn"
 
 function App() {
   // return <TetrisGame />;
 
   return (
-    <Panel glow="cyan">
-      <h2>Panel</h2>
-      <p>最初のコンポーネント</p>
-    </Panel>
+      <div>
+        <NeonBtn color="red" onClick={() => alert("hello")}>PLAY</NeonBtn>
+      </div>
   )
 }
 
