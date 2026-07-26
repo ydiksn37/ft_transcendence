@@ -4,13 +4,15 @@ import './App.css';
 
 import { Panel } from "@/components/UI/Panel"
 import { NeonBtn } from "@/components/UI/NeonBtn"
+import { NeonInput } from "@/components/UI/NeonInput"
 
 function App() {
   // return <TetrisGame />;
 
   return (
       <div>
-        <NeonBtn color="red" onClick={() => alert("hello")}>PLAY</NeonBtn>
+        <NeonInput placeholder='ユーザー名'/>
+        <NeonInput type='password' placeholder='パスワード' />
       </div>
   )
 }
