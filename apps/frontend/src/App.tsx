@@ -5,14 +5,15 @@ import './App.css';
 import { Panel } from "@/components/UI/Panel"
 import { NeonBtn } from "@/components/UI/NeonBtn"
 import { NeonInput } from "@/components/UI/NeonInput"
+import { AvatarIcon } from "@/components/UI/AvatarIcon"
+import { getAvatarPreset } from './lib/avatarPresets';
 
 function App() {
   // return <TetrisGame />;
-
+  const preset = getAvatarPreset(0);
   return (
       <div>
-        <NeonInput placeholder='ユーザー名'/>
-        <NeonInput type='password' placeholder='パスワード' />
+        <AvatarIcon color={preset.color} symbol={preset.symbol} size={80} />
       </div>
   )
 }
