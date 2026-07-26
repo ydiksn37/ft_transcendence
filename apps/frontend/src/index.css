@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "./styles/theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -180,4 +181,44 @@
   body {
     @apply bg-background text-foreground;}
   html {
-    @apply font-sans;}}
+    @apply font-sans;}
+  html, body, #root {
+    min-height: 100vh;
+  }
+  body {
+    margin: 0;
+    @apply bg-surface text-white;
+  }
+
+  /* 文字をドラッグしたとき */
+  ::selection {
+    background: rgba(255, 0, 229, .3); 
+    color: #fff;
+  }
+
+  /* ブラウザごとのスクロールバーの対応設定 */
+  * {scrollbar-width: thin; scrollbar-color: rgba(0, 240, 255, .35) transparent;}
+  *::-webkit-scrollbar {width: 8px; height: 8px;}
+  *::-webkit-scrollbar-track {background: transparent;}
+  *::-webkit-scrollbar-thumb {background: rgba(0, 240, 255, .3); border-radius: 999px;}
+  *::-webkit-scrollbar-thumb:hover {background: rgba(0, 240, 255, .55);}
+
+    /* 端末の設定によるアニメーションの変更 */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+  }
+}
+
+@keyframes neon-pulse {
+  0%, 100% {opacity: 1;}
+  50% {opacity: .8;}
+}
+
+@keyframes grid-pan {
+  from {background-position: 0 0;}
+  to {background-position: 0 40px;}
+}

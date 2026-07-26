@@ -1,0 +1,28 @@
+/* ネオンデザイントークン — Tailwind v4 @theme で utility として使える */
+@theme {
+  /* --- ネオンカラー（text-neon-cyan / bg-neon-cyan / border-neon-cyan で使える） --- */
+  --color-neon-cyan: #00f0ff;
+  --color-neon-magenta: #ff00e5;
+  --color-neon-purple: #aa3bff;
+  --color-neon-pink: #ff2d95;
+  --color-neon-green: #39ff14;
+  --color-neon-yellow: #ffe600;
+  --color-neon-blue: #2d7bff;
+  --color-neon-red: #ff3b5c;
+
+  /* パネル/盤面の下地 */
+  --color-surface: #0d0e14;
+  --color-surface-2: #16171d;
+
+  /* --- グロー影（shadow-glow-cyan などで使える） --- */
+  --shadow-glow-cyan: 0 0 8px rgba(0, 240, 255, 0.6), 0 0 20px rgba(0, 240, 255, 0.35);
+  --shadow-glow-magenta: 0 0 8px rgba(255, 0, 229, 0.6), 0 0 20px rgba(255, 0, 229, 0.35);
+  --shadow-glow-purple: 0 0 8px rgba(170, 59, 255, 0.6), 0 0 20px rgba(170, 59, 255, 0.35);
+  --shadow-glow-green: 0 0 8px rgba(57, 255, 20, 0.6), 0 0 20px rgba(57, 255, 20, 0.35);
+
+  /* 強めのグロー（ホバー/フォーカス用） */
+  --shadow-glow-cyan-lg: 0 0 12px rgba(0, 240, 255, 0.8), 0 0 32px rgba(0, 240, 255, 0.5);
+  --shadow-glow-magenta-lg: 0 0 12px rgba(255, 0, 229, 0.8), 0 0 32px rgba(255, 0, 229, 0.5);
+  --shadow-glow-purple-lg: 0 0 12px rgba(170, 59, 255, 0.8), 0 0 32px rgba(170, 59, 255, 0.5);
+  --shadow-glow-green-lg:  0 0 12px rgba(57, 255, 20, 0.8),  0 0 32px rgba(57, 255, 20, 0.5);
+}
