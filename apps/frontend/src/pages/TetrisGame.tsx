@@ -42,7 +42,9 @@ const TetrisGame = () => {
     gameOver, setGameOver,
     score, setScore,
     level, setLevel,
-    lines, setLines
+    lines, setLines,
+    piecesPlaced, setPiecesPlaced,
+    attackLines, setAttackLines
   } = useGameState();
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
@@ -87,6 +89,8 @@ const TetrisGame = () => {
   useEffect(() => {
     if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current) return;
     lastProcessedEventIdRef.current = lockEvent.id;
+    
+    setPiecesPlaced(prev => prev + 1);
 
     const { lines, tSpinType, perfectClear } = lockEvent;
     
@@ -198,6 +202,10 @@ const TetrisGame = () => {
         
         if (comboRef.current > 0) {
            generatedGarbage += Math.floor((comboRef.current + 1) / 2);
+        }
+
+        if (generatedGarbage > 0) {
+           setAttackLines(prev => prev + generatedGarbage);
         }
 
         let remainingAttacks = [...pendingGarbageRef.current];
@@ -476,6 +484,8 @@ const TetrisGame = () => {
     setScore(0);
     setLevel(1);
     setLines(0);
+    setPiecesPlaced(0);
+    setAttackLines(0);
     comboRef.current = -1;
     b2bRef.current = false;
     setActionText(null);
@@ -561,6 +571,8 @@ const TetrisGame = () => {
       countdown={countdown}
       finalTime={finalTime}
       elapsedTime={elapsedTime}
+      piecesPlaced={piecesPlaced}
+      attackLines={attackLines}
       socketRef={socketRef}
       setSocket={setSocket}
       setIsWaiting={setIsWaiting}

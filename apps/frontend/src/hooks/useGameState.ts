@@ -42,9 +42,11 @@ export const useGameState = () => {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [lines, setLines] = useState(0);
+  const [piecesPlaced, setPiecesPlaced] = useState(0);
+  const [attackLines, setAttackLines] = useState(0);
 
   useEffect(() => {
-    if (appState !== 'PLAYING' || gameMode !== '40_LINES' || !startTime || gameOver) return;
+    if ((appState !== 'PLAYING' && appState !== 'ONLINE_1V1') || !startTime || gameOver) return;
     const interval = setInterval(() => {
       setElapsedTime(Date.now() - startTime);
     }, 20);
@@ -69,6 +71,8 @@ export const useGameState = () => {
     gameOver, setGameOver,
     score, setScore,
     level, setLevel,
-    lines, setLines
+    lines, setLines,
+    piecesPlaced, setPiecesPlaced,
+    attackLines, setAttackLines
   };
 };
