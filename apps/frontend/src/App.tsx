@@ -1,21 +1,33 @@
-import { TetrisGame } from './pages/TetrisGame';
-import './App.css';
+import { Routes, Route, Navigate } from "react-router-dom"
 
+import Login from "@/pages/Login"
+import { AppShell } from "@/components/AppShell"
+import  Dashboard  from "@/pages/Dashboard"
+import Chat  from "@/pages/Chat"
+import Friends from "@/pages/Friends"
+import Profile from "@/pages/Profile"
+import BattleSetup from "@/pages/BattleSetup"
+import TetrisGame from "@/pages/TetrisGame"
 
-import { Panel } from "@/components/UI/Panel"
-import { NeonBtn } from "@/components/UI/NeonBtn"
-import { NeonInput } from "@/components/UI/NeonInput"
-import { AvatarIcon } from "@/components/UI/AvatarIcon"
-import { getAvatarPreset } from './lib/avatarPresets';
-
-function App() {
-  // return <TetrisGame />;
-  const preset = getAvatarPreset(0);
+export default function App() {
   return (
-      <div>
-        <AvatarIcon color={preset.color} symbol={preset.symbol} size={80} />
-      </div>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route element={<AppShell />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/friends" element={<Friends />} />
+        <Route path="/profile" element={<Profile />} />
+      </Route>
+
+      <Route path="/game" element={<TetrisGame />} />
+      <Route path="/battle-setup" element={<BattleSetup />} />
+      { /* <Route path="/battle" element={<Battle />} />   */}
+
+      {/* どこにも適さないURL */ }
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   )
 }
-
-export default App;
