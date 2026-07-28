@@ -19,6 +19,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+          // ── ネオン variant ──
+        neon:           "rounded-none border-neon-cyan/60 text-neon-cyan uppercase tracking-[0.18em] font-bold hover:border-neon-cyan hover:bg-neon-cyan/10 hover:shadow-glow-cyan",
+        "neon-magenta": "rounded-none border-neon-magenta/60 text-neon-magenta uppercase tracking-[0.18em] font-bold hover:border-neon-magenta hover:bg-neon-magenta/10 hover:shadow-glow-magenta",
+        "neon-green":   "rounded-none border-neon-green/60 text-neon-green uppercase tracking-[0.18em] font-bold hover:border-neon-green hover:bg-neon-green/10 hover:shadow-glow-green",
+        "neon-red":     "rounded-none border-neon-red/60 text-neon-red uppercase tracking-[0.18em] font-bold hover:border-neon-red hover:bg-neon-red/10 hover:shadow-glow-red",
       },
       size: {
         default:

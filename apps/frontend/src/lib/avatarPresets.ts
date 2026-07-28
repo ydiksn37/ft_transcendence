@@ -1,10 +1,3 @@
-/********************************************************************* */
-/*						DBができたら削除する　						   */
-/*				  AvatarIcon用に使っているモック	    		        */
-/********************************************************************* */
-
-
-// src/lib/avatarPresets.ts
 export const AVATAR_PRESETS = [
   { color: "#00f5ff", symbol: "◈" },
   { color: "#ff00aa", symbol: "◆" },
@@ -16,6 +9,8 @@ export const AVATAR_PRESETS = [
   { color: "#00ffcc", symbol: "⬡" },
 ] as const
 
+
+/* dbできたら切り替える */
 export function getAvatarPreset(avatarId: number) {
   return AVATAR_PRESETS[avatarId % AVATAR_PRESETS.length]
 }
