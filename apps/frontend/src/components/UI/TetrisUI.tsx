@@ -25,6 +25,8 @@ type TetrisUIProps = {
   countdown: string | null;
   finalTime: number | null;
   elapsedTime: number;
+  piecesPlaced: number;
+  attackLines: number;
   socketRef: React.MutableRefObject<Socket | null>;
   setSocket: (s: Socket | null) => void;
   setIsWaiting: (w: boolean) => void;
@@ -39,7 +41,7 @@ type TetrisUIProps = {
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
-  countdown, finalTime, elapsedTime, socketRef, setSocket, setIsWaiting, setDropTime,
+  countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   setAppState, joinOnline, formatTime, records, createStage
 }) => {
   const renderHoldBox = () => {
@@ -111,6 +113,18 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   New Record! Rank: {records.indexOf(finalTime) + 1}
                 </h3>
               )}
+            </div>
+          )}
+          {gameMode === 'ONLINE_1V1' && matchResult && (
+            <div style={{ color: 'white', fontSize: '18px', display: 'flex', justifyContent: 'center', gap: '30px', margin: '15px 0' }}>
+              <div style={{ textAlign: 'center' }}>
+                <strong style={{ color: '#aaa' }}>APM</strong><br/>
+                {elapsedTime > 0 ? (attackLines / (elapsedTime / 60000)).toFixed(1) : '0.0'}
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <strong style={{ color: '#aaa' }}>PPS</strong><br/>
+                {elapsedTime > 0 ? (piecesPlaced / (elapsedTime / 1000)).toFixed(2) : '0.00'}
+              </div>
             </div>
           )}
           {gameMode === 'ONLINE_1V1' && (
@@ -217,6 +231,14 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white' }}>
                 {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
               </span>
+              {finalTime && (
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #444' }}>
+                  <strong>PPS</strong><br />
+                  <span style={{ color: 'white', fontSize: '16px' }}>
+                    {(piecesPlaced / (finalTime / 1000)).toFixed(2)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
