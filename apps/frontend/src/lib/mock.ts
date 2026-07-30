@@ -4,6 +4,37 @@
 /***************************************************************** */
 
 /***************************************************************** */
+/* 				自分のユーザーデータのモック
+/***************************************************************** */
+
+import type { UserProfile } from "@/lib/types";
+
+/* mockなので固定の仮uuid。DB接続時は GET /me の User.id に置き換わる */
+const CURRENT_USER_ID = "11111111-1111-4111-8111-111111111111"
+
+/* IDからアバターidを求める */
+
+function avatarIdFromUserId(userId: string): number {
+	let sum = 0;
+	for (const ch of userId) 
+		sum += ch.charCodeAt(0);
+	return (sum % AVATAR_PRESETS.length);
+}
+
+export const MOCK_CURRENT_USER: UserProfile = {
+	id: CURRENT_USER_ID,
+	username: "CYBER_01",                              // UK・ログインID
+	displayName: "CYBER_01",                           // 初期は username と同値
+	avatarId: avatarIdFromUserId(CURRENT_USER_ID),     // id から導出（編集不可）
+	avatarUrl: null,
+	bio: "Neon runner. T-spin enjoyer.", 
+}
+
+export function getCurrentUser(): UserProfile {
+	return (MOCK_CURRENT_USER);
+}
+
+/***************************************************************** */
 /* 				ゲームデータのモック
 /***************************************************************** */
 
@@ -29,6 +60,7 @@ export function getGameHistory(): GameRecordView[] {
 /***************************************************************** */
 
 import type { UserStats } from "@/lib/types"
+import { AVATAR_PRESETS } from "./avatarPresets";
 
 export const MOCK_USER_STATS: UserStats = {
 	/* mocks/games.ts の ONLINE_1V1 4件（WIN 2 / LOSE 2）と一致させる */

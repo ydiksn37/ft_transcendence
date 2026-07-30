@@ -15,11 +15,13 @@ export type NavPage =
 /* すべてのページ */
 export type Page= "login" | "battle" | NavPage;
 
-/* ユーザー定義 */
+/* ユーザー定義  自分の型 */
 export interface UserProfile {
+	id: string
 	username: string
-	avatarId: number
-	avatarPhoto: string | null
+	displayName: string
+	avatarId: number // TODO: これ存在しない DBに足すか、毎回idから算出するか
+	avatarUrl: string | null
 	bio: string
 }
 

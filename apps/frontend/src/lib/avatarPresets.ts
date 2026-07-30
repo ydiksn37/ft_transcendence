@@ -9,6 +9,7 @@ export const AVATAR_PRESETS = [
   { color: "#00ffcc", symbol: "⬡" },
 ] as const
 
+export type AvatarPreset = typeof AVATAR_PRESETS[number];
 
 /* dbできたら切り替える */
 export function getAvatarPreset(avatarId: number) {
