@@ -58,6 +58,7 @@ studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
 
 install: ## 依存パッケージをすべてインストールする
 	npm install
+	npm run build --workspace=@transcendence/shared
 	@ln -sf ../../.env apps/backend/.env
 	@ln -sf ../../.env apps/frontend/.env
 
