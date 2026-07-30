@@ -325,3 +325,27 @@ export const MINO_COLORS: Record<TetrominoType, string> = {
   J: '#0088FF',
   L: '#FF8800',
 };
+
+export interface SignupDto {
+  email: string;
+  username: string;
+  password?: string;
+  displayName: string;
+}
+
+export interface SigninDto {
+  email: string;
+  password?: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string | null;
+    role: string;
+  };
+}

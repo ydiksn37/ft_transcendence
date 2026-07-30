@@ -331,41 +331,46 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  // ── OTPメール送信 ─────────────────────────────────────────
   private async sendOtpEmail(to: string, otp: string): Promise<void> {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT ?? 2525),
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+    this.logger.log(`\n========================================\n🔐 開発用テストOTP: [ ${otp} ] (送信先: ${to})\n========================================\n`);
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to,
-      subject: '【ft_transcendence】2段階認証コード',
-      text: `認証コード: ${otp}\n\nこのコードは${process.env.OTP_EXPIRES_MINUTES ?? 10}分間有効です。`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 24px;
-                    background: #0d1117; color: #e6edf3; border-radius: 12px;">
-          <h2 style="color: #00ffcc; text-align: center;">🎮 ft_transcendence</h2>
-          <p style="text-align: center;">2段階認証コード</p>
-          <div style="background: #161b22; border: 2px solid #00ffcc; border-radius: 8px;
-                      padding: 24px; text-align: center; margin: 24px 0;">
-            <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #00ffcc;">
-              ${otp}
-            </span>
+    try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT ?? 2525),
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM,
+        to,
+        subject: '【ft_transcendence】2段階認証コード',
+        text: `認証コード: ${otp}\n\nこのコードは${process.env.OTP_EXPIRES_MINUTES ?? 10}分間有効です。`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 24px;
+                      background: #0d1117; color: #e6edf3; border-radius: 12px;">
+            <h2 style="color: #00ffcc; text-align: center;">🎮 ft_transcendence</h2>
+            <p style="text-align: center;">2段階認証コード</p>
+            <div style="background: #161b22; border: 2px solid #00ffcc; border-radius: 8px;
+                        padding: 24px; text-align: center; margin: 24px 0;">
+              <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #00ffcc;">
+                ${otp}
+              </span>
+            </div>
+            <p style="color: #8b949e; text-align: center; font-size: 14px;">
+              このコードは ${process.env.OTP_EXPIRES_MINUTES ?? 10} 分間有効です。<br>
+              心当たりがない場合はこのメールを無視してください。
+            </p>
           </div>
-          <p style="color: #8b949e; text-align: center; font-size: 14px;">
-            このコードは ${process.env.OTP_EXPIRES_MINUTES ?? 10} 分間有効です。<br>
-            心当たりがない場合はこのメールを無視してください。
-          </p>
-        </div>
-      `,
-    });
+        `,
+      });
 
-    this.logger.log(`OTPメール送信: ${to}`);
+      this.logger.log(`OTPメール送信成功: ${to}`);
+    } catch (e: any) {
+      this.logger.warn(`SMTP設定が不完全なためメールは送信されませんでした (エラー: ${e.message})。開発用ターミナル出力のOTPを使用してください。`);
+    }
   }
 }
