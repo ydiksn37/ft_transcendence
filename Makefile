@@ -41,7 +41,7 @@ reset-db: ## DBボリュームを削除し、コンテナを再起動する
 	docker compose up -d postgres redis vault
 	@echo "Waiting for database to start..."
 	@sleep 3
-	npm run db:migrate -- --name init
+	npm run db:migrate -- -- --name init
 
 # --- 開発用コマンド ---
 dev: ## 開発サーバーを起動する (フロント・バック両方)
@@ -78,4 +78,10 @@ exec-vault: ## vaultコンテナの中に入る
 ps: ## このプロジェクトに関わるコンテナの状態を表示する
 	docker compose ps -a
 
-.PHONY: help up up-infra down build logs logs-backend logs-frontend restart re clean fclean reset-db dev generate migrate studio install exec-backend exec-frontend exec-db exec-vault ps
+lint: ## リンターを実行する
+	npm run lint
+
+type-check: ## 型チェックを実行する
+	npm run type-check
+
+.PHONY: all help up up-infra down build logs logs-backend logs-frontend restart re clean fclean reset-db dev generate migrate studio install exec-backend exec-frontend exec-db exec-vault ps lint type-check

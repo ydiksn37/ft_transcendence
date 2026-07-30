@@ -46,7 +46,25 @@ make dev
 
 起動後、ブラウザで以下のURLにアクセスして動作を確認してください。
 *   **フロントエンド (Tetris画面など)**: [http://localhost:5173/](http://localhost:5173/)
-*   **バックエンドAPI**: `http://localhost:3000/`
+*   **バックエンドAPI (Swagger UI)**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+
+## 7. 認証フロー（Phase 2）のテスト方法
+現在、ID/パスワードによるログイン、42 OAuth認証、および2段階認証（OTP）のフローが実装されています。
+
+### 42 API 連携のテスト
+42のIntraでアプリを登録し、取得した認証情報を `.env` に設定してください。
+1. `FT_CLIENT_ID` と `FT_CLIENT_SECRET` を自身のものに書き換える
+2. 42 Intra側の **Redirect URI** を `http://localhost:5173/api/auth/42/callback` に設定する
+3. ブラウザで `http://localhost:5173/` にアクセスし、「Login / Register」から「Login with 42」を実行する
+
+### 2段階認証 (2FA) のテスト
+2段階認証はオプトイン方式のため、デフォルトではオフになっています。UI上にはまだ設定画面がありませんが、以下の手順でAPI経由で有効化してフローをテストできます。
+1. 一度任意の方法（ID/PASS または 42）でログインする
+2. バックエンドのSwagger UI（`http://localhost:3000/api/docs`）を開き、右上の「Authorize」ボタンから現在ログイン中のJWT（Access Token）をセットする
+3. `POST /api/auth/2fa/setup` を実行し、EmailベースでOTPを発行する
+4. **バックエンドのターミナル（`make dev` を実行している画面）** にテスト用のOTPコードが出力されるので確認する
+5. `POST /api/auth/2fa/confirm` を実行し、取得したOTPを送信して有効化を完了する
+6. アプリケーション（`http://localhost:5173/`）をリロードしてログアウトし、再ログインすると自動的に2段階認証画面 (`/auth/2fa`) へ遷移します。再度ターミナルに出力された新しいOTPを入力してログインを完了させてください。
 
 ---
 
