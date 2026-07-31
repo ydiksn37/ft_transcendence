@@ -79,7 +79,30 @@ export interface UserStats {
 	level: number;
 	rank: Rank;
 	rankPoints: number;
+}
 
+/***************************************************************** */
+/* 				Friends情報の型
+				user table + friendship table
+/***************************************************************** */
 
+export interface PlayerSummary {
+	id: string;
+	username: string;
+	displayName: string;
+	avatarUrl: string | null;
+	isOnline: boolean;
+}
 
+export interface Friend extends PlayerSummary {}
+
+export interface PendingRequest extends PlayerSummary {
+	friendshipId: string;
+}
+
+export type PlayerStats = Pick<UserStats, "rank" | "wins" | "level">;
+
+export interface PlayerProfile extends PlayerSummary {
+	bio: string;
+	stats: PlayerStats;
 }
