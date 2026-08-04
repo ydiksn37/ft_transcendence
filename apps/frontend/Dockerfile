@@ -12,6 +12,9 @@ RUN npm ci
 
 COPY . .
 
+# 共有パッケージをビルド
+RUN npm run build --workspace=@transcendence/shared
+
 WORKDIR /app/apps/frontend
 EXPOSE 5173
 

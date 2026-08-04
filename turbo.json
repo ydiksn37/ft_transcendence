@@ -24,6 +24,9 @@
     "db:generate": {
       "cache": false,
       "outputs": ["node_modules/.prisma/**"]
+    },
+    "db:seed": {
+      "cache": false
     }
   }
 }

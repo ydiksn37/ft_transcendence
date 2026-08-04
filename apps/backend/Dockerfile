@@ -18,6 +18,9 @@ RUN cd apps/backend && npx prisma generate
 # ソースコード全体をコピー
 COPY . .
 
+# 共有パッケージをビルド
+RUN npm run build --workspace=@transcendence/shared
+
 WORKDIR /app/apps/backend
 EXPOSE 3000
 

@@ -4,11 +4,9 @@ help: ## コマンド一覧を表示する
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # --- Docker Compose 基本操作 ---
-up: ## Dockerコンテナを起動する (バックグラウンド)
+up: ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
 	docker compose up -d
 
-up-infra: ## 開発用にDB等のインフラコンテナのみを起動する
-	docker compose up -d postgres redis vault
 
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
@@ -36,22 +34,18 @@ clean: down ## コンテナとネットワークを削除する (ボリューム
 fclean: ## コンテナ、ネットワーク、イメージ、ボリューム(DB含む)を完全に削除する
 	docker compose down -v --rmi all --remove-orphans
 
-reset-db: ## DBボリュームを削除し、コンテナを再起動する
+reset-db: ## DBボリュームを削除して初期化する (削除後、再度 make up が必要です)
 	docker compose down -v
-	docker compose up -d postgres redis vault
-	@echo "Waiting for database to start..."
-	@sleep 3
-	npm run db:migrate -- -- --name init
 
-# --- 開発用コマンド ---
-dev: ## 開発サーバーを起動する (フロント・バック両方)
-	npm run dev
 
 generate: ## Prisma Client を生成する (ホスト側)
 	npm run db:generate
 
 migrate: ## Prisma のマイグレーションを実行する (ホスト側)
 	npm run db:migrate
+
+seed: ## データベースに初期データ(Seed)を投入する (ホスト側)
+	npm run db:seed
 
 studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
 	npm run db:studio
@@ -85,4 +79,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up up-infra down build logs logs-backend logs-frontend restart re clean fclean reset-db dev generate migrate studio install exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate seed studio install exec-backend exec-frontend exec-db exec-vault ps lint type-check

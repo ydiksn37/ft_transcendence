@@ -76,6 +76,7 @@ services:
       target: development
     container_name: transcendence_backend
     restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && npm run dev"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
