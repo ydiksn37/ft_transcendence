@@ -1,10 +1,23 @@
 import { create } from 'zustand';
-import type { AuthResponse } from '@transcendence/shared';
+
+// バックエンドの /api/users/me レスポンスに対応した型
+interface UserProfile {
+  id: string;
+  username: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: string;
+  bio?: string | null;
+  isOnline?: boolean;
+  twoFactorEnabled?: boolean;
+  createdAt?: string;
+}
 
 interface AuthState {
   token: string | null;
-  user: AuthResponse['user'] | null;
-  setAuth: (data: AuthResponse) => void;
+  user: UserProfile | null;
+  setAuth: (data: { accessToken: string; refreshToken?: string; user: UserProfile | null }) => void;
   logout: () => void;
 }
 
@@ -14,17 +27,23 @@ export const useAuth = create<AuthState>((set) => ({
     try {
       const item = localStorage.getItem('user');
       return item && item !== 'undefined' ? JSON.parse(item) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })(),
   setAuth: (data) => {
     localStorage.setItem('token', data.accessToken);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.refreshToken) {
+      localStorage.setItem('refreshToken', data.refreshToken);
+    }
+    if (data.user) {
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
     set({ token: data.accessToken, user: data.user });
   },
   logout: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     set({ token: null, user: null });
   },

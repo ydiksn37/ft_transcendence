@@ -44,9 +44,13 @@ export const Auth: React.FC = () => {
       const userRes = await fetch('/api/users/me', {
         headers: { Authorization: `Bearer ${data.accessToken}` }
       });
+      
+      if (!userRes.ok) {
+        throw new Error('Failed to fetch user profile');
+      }
       const user = await userRes.json();
       
-      setAuth({ accessToken: data.accessToken, user });
+      setAuth({ accessToken: data.accessToken, refreshToken: data.refreshToken, user });
       navigate('/');
     } catch (err: any) {
       setError(err.message);

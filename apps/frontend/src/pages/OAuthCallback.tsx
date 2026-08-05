@@ -20,7 +20,7 @@ export const OAuthCallback: React.FC = () => {
           return res.json();
         })
         .then((user) => {
-          setAuth({ accessToken, user });
+          setAuth({ accessToken, refreshToken: refreshToken ?? undefined, user });
           navigate('/', { replace: true });
         })
         .catch((err) => {
