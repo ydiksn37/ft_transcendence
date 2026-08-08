@@ -7,7 +7,6 @@ help: ## コマンド一覧を表示する
 up: ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
 	docker compose up -d
 
-
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
 
@@ -36,7 +35,6 @@ fclean: ## コンテナ、ネットワーク、イメージ、ボリューム(DB
 
 reset-db: ## DBボリュームを削除して初期化する (削除後、再度 make up が必要です)
 	docker compose down -v
-
 
 generate: ## Prisma Client を生成する (ホスト側)
 	npm run db:generate

@@ -145,7 +145,6 @@ model User {
   twoFactorMethod   TwoFactorMethod?
   twoFactorContact  String? // メールアドレスまたは電話番号
   isEmailVerified   Boolean @default(false)
-  isPhoneVerified   Boolean @default(false)
   deletedAt       DateTime? // ソフトデリート (GDPR)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -177,6 +176,7 @@ model User {
   tmatchAsP1      TournamentMatch[]  @relation("TMatchP1")
   tmatchAsP2      TournamentMatch[]  @relation("TMatchP2")
   tmatchWon       TournamentMatch[]  @relation("TMatchWinner")
+  sprintRecords   SprintRecord[]
 
   @@index([username])
   @@index([email])
@@ -224,7 +224,10 @@ model UserGameSettings {
   userId                String   @unique
   minoSkin              MinoSkin @default(NEON)
   showGhost             Boolean  @default(true)
-  fallSpeedMultiplier   Decimal  @default(1.0) @db.Decimal(3, 1)
+  arr                   Int      @default(33)  // ms
+  das                   Int      @default(170) // ms
+  dcd                   Int      @default(0)   // ms
+  sdf                   Int      @default(6)   // 0 = Infinity
   keyBindings           Json?    // カスタムキーバインド
   volume                Int      @default(100)
   sfxEnabled            Boolean  @default(true)
@@ -602,4 +605,24 @@ model DataExportRequest {
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+}
+
+// ─────────────────────────────────────────────
+//  SprintRecord（40 Lines等のソロプレイ記録）
+// ─────────────────────────────────────────────
+
+model SprintRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  timeMs      Int      // クリアタイム (ミリ秒)
+  lines       Int      @default(40) // 40 Lines 以外の拡張用
+  pieces      Int?     // 置いたミノの数
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 全体の 40 Lines ランキングを高速に取得するためのインデックス
+  @@index([lines, timeMs])
+  // 個人の 40 Lines ランキングを高速に取得するためのインデックス
+  @@index([userId, lines, timeMs])
 }

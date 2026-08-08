@@ -14,6 +14,7 @@
 | `UserGameSettings` | エンティティ (1:1) | スキン・ゴースト・キーバインド等のゲーム設定 |
 | `GameResult` | エンティティ | 全対戦の結果・詳細データ |
 | `GameAnalytic` | エンティティ | 日次集計データ（ダッシュボード高速化） |
+| `SprintRecord` | エンティティ | 40 Lines 等のソロプレイのクリアタイム記録 |
 | **`Friendship`** | **中間テーブル** | User ↔ User（PENDING/ACCEPTED/REJECTED） |
 | **`Block`** | **中間テーブル** | User ↔ User（ブロック関係） |
 | `ChatRoom` | エンティティ | GLOBAL/DIRECT/GAME/TOURNAMENT のチャット部屋 |
@@ -56,7 +57,6 @@ erDiagram
         string twoFactorMethod "EMAIL SMS nullable"
         string twoFactorContact "nullable"
         bool isEmailVerified
-        bool isPhoneVerified
         datetime deletedAt "nullable soft delete"
         datetime createdAt
         datetime updatedAt
@@ -89,7 +89,10 @@ erDiagram
         uuid userId FK "UNIQUE 1to1"
         string minoSkin "NEON RETRO MINIMAL"
         bool showGhost
-        decimal fallSpeedMultiplier
+        int arr
+        int das
+        int dcd
+        int sdf
         json keyBindings
         int volume
         bool sfxEnabled
@@ -119,6 +122,15 @@ erDiagram
         int durationSeconds
         string gameMode "VERSUS AI TOURNAMENT"
         uuid tournamentMatchId FK "nullable"
+        datetime createdAt
+    }
+
+    SprintRecord {
+        uuid id PK
+        uuid userId FK
+        int timeMs
+        int lines
+        int pieces "nullable"
         datetime createdAt
     }
 
@@ -325,6 +337,7 @@ erDiagram
     User ||--o{ ApiKey : "owns"
     User ||--o{ FileUpload : "uploads"
     User ||--o{ DataExportRequest : "requests"
+    User ||--o{ SprintRecord : "records"
     Tournament ||--o{ TournamentEntry : "has entries"
     Tournament ||--o{ TournamentMatch : "has matches"
     TournamentMatch ||--o| GameResult : "result"

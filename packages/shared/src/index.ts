@@ -238,7 +238,10 @@ export type MinoSkin = 'NEON' | 'RETRO' | 'MINIMAL';
 export interface GameSettings {
   minoSkin: MinoSkin;
   showGhost: boolean;
-  fallSpeedMultiplier: number; // 0.5 | 1.0 | 1.5 | 2.0
+  arr: number; // ms
+  das: number; // ms
+  dcd: number; // ms
+  sdf: number; // Soft Drop Factor, 0 = Infinity
   keyBindings: KeyBindings;
   volume: number;    // 0-100
   sfxEnabled: boolean;
@@ -348,4 +351,22 @@ export interface AuthResponse {
     avatarUrl: string | null;
     role: string;
   };
+}
+
+// ───────────────────────────────────────────────
+//  Sprint Record (40 Lines)
+// ───────────────────────────────────────────────
+export interface SprintRecord {
+  id: string;
+  userId: string;
+  timeMs: number;
+  lines: number;
+  pieces: number | null;
+  createdAt: string;
+}
+
+export interface SprintLeaderboardEntry {
+  rank: number;
+  record: SprintRecord;
+  user: PublicUser;
 }
