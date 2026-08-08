@@ -1,5 +1,5 @@
 # DB 設計書
- 
+
 > ORM: Prisma | DB: PostgreSQL 16 | 全エンティティ: 16 | 中間テーブル: 6 | 総テーブル数: 22
 
 ---
@@ -380,22 +380,6 @@ PENDING → REJECTED  (受信者が拒否、再申請を防ぐためレコード
 ACCEPTED → (レコード削除でフレンド解除)
 ```
 
-**トランザクション例 (フレンド承認):**
-```sql
-BEGIN;
-  UPDATE "Friendship"
-    SET status = 'ACCEPTED', "updatedAt" = NOW()
-    WHERE id = $friendshipId
-    AND "addresseeId" = $currentUserId
-    AND status = 'PENDING';
-
-  INSERT INTO "Notification" (id, "userId", type, title, content, "relatedId", "relatedType")
-  VALUES (gen_random_uuid(), $requesterId, 'FRIEND_ACCEPT',
-          'フレンドリクエストが承認されました', $addresseeUsername || 'さんと友達になりました',
-          $friendshipId, 'friendship');
-COMMIT;
-```
-
 ---
 
 ### 3-2. `Block`（ブロック）
@@ -418,15 +402,6 @@ Block
   INDEX(blockedId)                        -- 「自分がブロックされているか」確認
 ```
 
-**チャット表示ロジック (アプリケーション層):**
-```
-メッセージ取得時: WHERE senderId NOT IN (
-  SELECT blockedId FROM Block WHERE blockerId = $currentUserId
-  UNION
-  SELECT blockerId FROM Block WHERE blockedId = $currentUserId
-)
-```
-
 ---
 
 ### 3-3. `ChatRoomMembership`（チャット部屋参加）
@@ -447,17 +422,6 @@ ChatRoomMembership
 インデックス:
   INDEX(userId, roomId)             -- ユーザーの参加ルーム一覧
   INDEX(roomId)                     -- ルームの参加者一覧
-```
-
-**未読数計算:**
-```sql
-SELECT COUNT(*) FROM "ChatMessage"
-WHERE "roomId" = $roomId
-  AND "createdAt" > (
-    SELECT "lastReadAt" FROM "ChatRoomMembership"
-    WHERE "roomId" = $roomId AND "userId" = $userId
-  )
-  AND "isDeleted" = false;
 ```
 
 ---
@@ -505,18 +469,6 @@ OrgMembership
 インデックス:
   INDEX(orgId, role)                -- 役割別メンバー一覧
   INDEX(userId)                     -- ユーザーの参加クラン一覧
-```
-
-**トランザクション例 (クラン作成):**
-```sql
-BEGIN;
-  INSERT INTO "Organization" (id, name, slug, "creatorId", ...)
-  VALUES (gen_random_uuid(), $name, $slug, $userId, ...);
-
-  INSERT INTO "OrgMembership" (id, "orgId", "userId", role)
-  VALUES (gen_random_uuid(), $orgId, $userId, 'OWNER');
-COMMIT;
--- ロールバック時: クランもメンバーシップも残らない（一貫性保証）
 ```
 
 ---
