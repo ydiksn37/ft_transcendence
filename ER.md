@@ -1,7 +1,6 @@
-# ft_transcendence — 完全 DB 設計書 (ER.md)
-
-> バージョン: 1.0 | 最終更新: 2026-07-22  
-> ORM: Prisma | DB: PostgreSQL 16 | 全テーブル数: 17 | 中間テーブル: 6
+# DB 設計書
+ 
+> ORM: Prisma | DB: PostgreSQL 16 | 全エンティティ: 16 | 中間テーブル: 6 | 総テーブル数: 22
 
 ---
 
@@ -370,8 +369,8 @@ Friendship
 
 インデックス:
   INDEX(addresseeId, status)              -- 受信した申請一覧
-  INDEX(requesterId, status)             -- 送信した申請一覧
-  INDEX(status, createdAt DESC)          -- 未処理申請の古い順
+  INDEX(requesterId, status)              -- 送信した申請一覧
+  INDEX(status, createdAt DESC)           -- 未処理申請の古い順
 ```
 
 **状態機械:**
@@ -543,255 +542,369 @@ UserAchievement
 
 ---
 
-## 4. トランザクションシナリオ
 
-### T-1: ゲーム終了処理（最も複雑）
+## 4. 各テーブルの定義 (DDL風)
 
-```
-影響テーブル: GameResult, UserStats(×2), GameAnalytic(×2),
-              UserAchievement(条件付き), Notification(×2),
-              TournamentMatch(条件付き), TournamentEntry(条件付き)
-```
+各テーブルの物理的な構造（カラム、型、制約）です。
 
-```typescript
-// NestJS + Prisma トランザクション
-await prisma.$transaction(async (tx) => {
-  // 1. 対戦結果を保存
-  const result = await tx.gameResult.create({ data: { ...gameData } });
-
-  // 2. player1 の統計を更新
-  await tx.userStats.update({
-    where: { userId: player1Id },
-    data: {
-      wins: { increment: isPlayer1Winner ? 1 : 0 },
-      losses: { increment: isPlayer1Winner ? 0 : 1 },
-      totalGames: { increment: 1 },
-      bestApm: { set: Math.max(currentBestApm, player1Apm) },
-      currentWinStreak: { set: isPlayer1Winner ? currentStreak + 1 : 0 },
-      bestWinStreak: { set: Math.max(bestStreak, newStreak) },
-      xp: { increment: calculateXP(player1Data) },
-    },
-  });
-
-  // 3. player2 の統計を更新
-  await tx.userStats.update({ where: { userId: player2Id }, data: { ... } });
-
-  // 4. 日次アナリティクス（日付ベースのUPSERT）
-  await tx.gameAnalytic.upsert({
-    where: { userId_date: { userId: player1Id, date: today } },
-    update: { gamesPlayed: { increment: 1 }, wins: { increment: ... } },
-    create: { userId: player1Id, date: today, gamesPlayed: 1, ... },
-  });
-
-  // 5. 実績チェックと付与（条件を満たす実績のみ）
-  const achievements = await checkAchievements(tx, player1Id, player1Data);
-  for (const ach of achievements) {
-    await tx.userAchievement.createMany({
-      data: { userId: player1Id, achievementId: ach.id },
-      skipDuplicates: true, // 既取得の実績はスキップ
-    });
-  }
-
-  // 6. 通知
-  await tx.notification.createMany({
-    data: [
-      { userId: player1Id, type: 'GAME_RESULT', ... },
-      { userId: player2Id, type: 'GAME_RESULT', ... },
-    ],
-  });
-
-  // 7. トーナメント試合の場合: ブラケット更新
-  if (tournamentMatchId) {
-    await tx.tournamentMatch.update({
-      where: { id: tournamentMatchId },
-      data: { winnerId: winnerId, status: 'COMPLETED', gameResultId: result.id },
-    });
-
-    // 次ラウンドのマッチへ勝者を進める
-    const nextMatch = await findNextMatch(tx, tournamentMatchId);
-    if (nextMatch) {
-      await tx.tournamentMatch.update({
-        where: { id: nextMatch.id },
-        data: { [nextMatch.slotField]: winnerId, status: 'READY' },
-      });
-    }
-  }
-});
-// どこかで失敗した場合、全変更が自動ロールバック
+### 4-1. User
+```sql
+User (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    displayName VARCHAR(255) NOT NULL,
+    passwordHash VARCHAR(255),
+    avatarUrl VARCHAR(255),
+    bio TEXT,
+    role VARCHAR(50) NOT NULL DEFAULT 'USER',
+    isOnline BOOLEAN NOT NULL DEFAULT FALSE,
+    lastSeenAt TIMESTAMP,
+    bannedUntil TIMESTAMP,
+    banReason VARCHAR(255),
+    oauthProvider VARCHAR(50),
+    oauthId VARCHAR(255),
+    twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,
+    twoFactorMethod VARCHAR(50),
+    twoFactorContact VARCHAR(255),
+    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,
+    deletedAt TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
----
-
-### T-2: トーナメント開始（ブラケット生成）
-
-```
-影響テーブル: Tournament, TournamentEntry(全エントリー), TournamentMatch(新規作成)
-```
-
-```typescript
-await prisma.$transaction(async (tx) => {
-  // 1. ステータスを SEEDING に更新
-  await tx.tournament.update({
-    where: { id: tournamentId },
-    data: { status: 'SEEDING' },
-  });
-
-  // 2. エントリーをシャッフルしてシード番号を割当
-  const entries = await tx.tournamentEntry.findMany({ where: { tournamentId } });
-  const shuffled = shuffle(entries);
-  await Promise.all(
-    shuffled.map((entry, idx) =>
-      tx.tournamentEntry.update({
-        where: { id: entry.id },
-        data: { seed: idx + 1 },
-      })
-    )
-  );
-
-  // 3. ラウンド1の試合を一括生成
-  const round1Matches = generateRound1(shuffled); // [[p1,p2], [p3,p4], ...]
-  await tx.tournamentMatch.createMany({
-    data: round1Matches.map(([p1, p2], idx) => ({
-      tournamentId,
-      round: 1,
-      matchNumber: idx + 1,
-      player1Id: p1.userId,
-      player2Id: p2?.userId ?? null, // BYE の場合 null
-      status: p2 ? 'READY' : 'BYE',
-    })),
-  });
-
-  // 4. 後続ラウンドの空マッチを生成（player は後で埋める）
-  const totalRounds = Math.log2(shuffled.length);
-  for (let r = 2; r <= totalRounds; r++) {
-    const matchCount = shuffled.length / Math.pow(2, r);
-    await tx.tournamentMatch.createMany({
-      data: Array.from({ length: matchCount }, (_, idx) => ({
-        tournamentId, round: r, matchNumber: idx + 1, status: 'PENDING',
-      })),
-    });
-  }
-
-  // 5. ステータスを IN_PROGRESS に更新
-  await tx.tournament.update({
-    where: { id: tournamentId },
-    data: { status: 'IN_PROGRESS', startedAt: new Date() },
-  });
-
-  // 6. 全参加者に通知
-  await tx.notification.createMany({
-    data: shuffled.map((e) => ({
-      userId: e.userId, type: 'TOURNAMENT_START',
-      title: 'トーナメントが開始しました', content: '...',
-    })),
-  });
-});
+### 4-2. UserStats
+```sql
+UserStats (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    totalGames INTEGER NOT NULL DEFAULT 0,
+    winRate DECIMAL(5,2) NOT NULL DEFAULT 0,
+    bestApm DECIMAL(8,2) NOT NULL DEFAULT 0,
+    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,
+    bestPps DECIMAL(6,3) NOT NULL DEFAULT 0,
+    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,
+    totalLinesCleared INTEGER NOT NULL DEFAULT 0,
+    totalTSpins INTEGER NOT NULL DEFAULT 0,
+    totalTetrises INTEGER NOT NULL DEFAULT 0,
+    currentWinStreak INTEGER NOT NULL DEFAULT 0,
+    bestWinStreak INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0,
+    level INTEGER NOT NULL DEFAULT 1,
+    rank VARCHAR(50) NOT NULL DEFAULT 'BRONZE',
+    rankPoints INTEGER NOT NULL DEFAULT 0,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
----
-
-### T-3: GDPR — ユーザーデータ削除
-
-```
-影響テーブル: User (soft delete), 個人データの匿名化
-方針: 対戦履歴は統計として残す（個人特定情報のみ削除）
-```
-
-```typescript
-await prisma.$transaction(async (tx) => {
-  // 1. 個人テーブルをハード削除
-  await tx.userAchievement.deleteMany({ where: { userId } });
-  await tx.orgMembership.deleteMany({ where: { userId } });
-  await tx.tournamentEntry.deleteMany({ where: { userId } });
-  await tx.friendship.deleteMany({
-    where: { OR: [{ requesterId: userId }, { addresseeId: userId }] },
-  });
-  await tx.block.deleteMany({
-    where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
-  });
-  await tx.chatRoomMembership.deleteMany({ where: { userId } });
-  await tx.notification.deleteMany({ where: { userId } });
-  await tx.apiKey.deleteMany({ where: { userId } });
-  await tx.dataExportRequest.deleteMany({ where: { userId } });
-  await tx.userGameSettings.delete({ where: { userId } });
-  await tx.userStats.delete({ where: { userId } });
-  await tx.gameAnalytic.deleteMany({ where: { userId } });
-
-  // 2. チャットメッセージをソフトデリート（内容を匿名化）
-  await tx.chatMessage.updateMany({
-    where: { senderId: userId },
-    data: { isDeleted: true, content: '[削除済みメッセージ]', deletedAt: new Date() },
-  });
-
-  // 3. 対戦記録のプレイヤーIDを NULL に（履歴は残す、個人は特定不可に）
-  await tx.gameResult.updateMany({
-    where: { player1Id: userId },
-    data: { player1Id: null },
-  });
-  await tx.gameResult.updateMany({
-    where: { player2Id: userId },
-    data: { player2Id: null },
-  });
-
-  // 4. User を soft delete（emailも匿名化）
-  await tx.user.update({
-    where: { id: userId },
-    data: {
-      deletedAt: new Date(),
-      email: `deleted_${userId}@deleted.invalid`,
-      username: `deleted_${userId.slice(0, 8)}`,
-      displayName: '削除済みユーザー',
-      passwordHash: null,
-      avatarUrl: null,
-      bio: null,
-      twoFactorContact: null,
-      oauthId: null,
-    },
-  });
-});
+### 4-3. UserGameSettings
+```sql
+UserGameSettings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
+    minoSkin VARCHAR(50) NOT NULL DEFAULT 'NEON',
+    showGhost BOOLEAN NOT NULL DEFAULT TRUE,
+    arr INTEGER NOT NULL DEFAULT 33,
+    das INTEGER NOT NULL DEFAULT 170,
+    dcd INTEGER NOT NULL DEFAULT 0,
+    sdf INTEGER NOT NULL DEFAULT 6,
+    keyBindings JSONB,
+    volume INTEGER NOT NULL DEFAULT 100,
+    sfxEnabled BOOLEAN NOT NULL DEFAULT TRUE,
+    musicEnabled BOOLEAN NOT NULL DEFAULT TRUE,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
----
-
-### T-4: フレンド承認
-
-```typescript
-await prisma.$transaction(async (tx) => {
-  const friendship = await tx.friendship.update({
-    where: { id: friendshipId, addresseeId: currentUserId, status: 'PENDING' },
-    data: { status: 'ACCEPTED' },
-  });
-  if (!friendship) throw new NotFoundException('Friendship not found or already processed');
-
-  await tx.notification.create({
-    data: {
-      userId: friendship.requesterId,
-      type: 'FRIEND_ACCEPT',
-      title: 'フレンドリクエストが承認されました',
-      content: `${addresseeUsername} さんと友達になりました`,
-      relatedId: friendshipId,
-      relatedType: 'friendship',
-    },
-  });
-});
+### 4-4. GameResult
+```sql
+GameResult (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    roomId VARCHAR(255) NOT NULL,
+    player1Id UUID REFERENCES User(id) ON DELETE SET NULL,
+    player2Id UUID REFERENCES User(id) ON DELETE SET NULL,
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
+    isAiGame BOOLEAN NOT NULL DEFAULT FALSE,
+    aiDifficulty VARCHAR(50),
+    player1Apm DECIMAL(8,2) NOT NULL,
+    player2Apm DECIMAL(8,2),
+    player1Pps DECIMAL(6,3) NOT NULL,
+    player2Pps DECIMAL(6,3),
+    player1LinesCleared INTEGER NOT NULL,
+    player2LinesCleared INTEGER,
+    player1TSpins INTEGER NOT NULL DEFAULT 0,
+    player2TSpins INTEGER NOT NULL DEFAULT 0,
+    player1Tetrises INTEGER NOT NULL DEFAULT 0,
+    player2Tetrises INTEGER NOT NULL DEFAULT 0,
+    garbageSent1to2 INTEGER NOT NULL DEFAULT 0,
+    garbageSent2to1 INTEGER NOT NULL DEFAULT 0,
+    durationSeconds INTEGER NOT NULL,
+    gameMode VARCHAR(50) NOT NULL DEFAULT 'VERSUS',
+    tournamentMatchId UUID,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
----
-
-### T-5: クラン作成
-
-```typescript
-await prisma.$transaction(async (tx) => {
-  const org = await tx.organization.create({
-    data: { name, slug, description, creatorId: userId, isPublic },
-  });
-
-  await tx.orgMembership.create({
-    data: { orgId: org.id, userId, role: 'OWNER' },
-  });
-  // 失敗時: Organization も OrgMembership も残らない
-});
+### 4-5. GameAnalytic
+```sql
+GameAnalytic (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    gamesPlayed INTEGER NOT NULL DEFAULT 0,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,
+    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,
+    totalLinesCleared INTEGER NOT NULL DEFAULT 0,
+    totalPlaytimeSeconds INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (userId, date)
+);
 ```
+
+### 4-6. SprintRecord
+```sql
+SprintRecord (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    timeMs INTEGER NOT NULL,
+    lines INTEGER NOT NULL DEFAULT 40,
+    pieces INTEGER,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-7. Friendship
+```sql
+Friendship (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    requesterId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    addresseeId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (requesterId, addresseeId)
+);
+```
+
+### 4-8. Block
+```sql
+Block (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    blockerId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    blockedId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (blockerId, blockedId)
+);
+```
+
+### 4-9. ChatRoom
+```sql
+ChatRoom (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type VARCHAR(50) NOT NULL,
+    name VARCHAR(255),
+    relatedId UUID,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-10. ChatRoomMembership
+```sql
+ChatRoomMembership (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE,
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    lastReadAt TIMESTAMP,
+    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (roomId, userId)
+);
+```
+
+### 4-11. ChatMessage
+```sql
+ChatMessage (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE,
+    senderId UUID REFERENCES User(id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    isDeleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deletedAt TIMESTAMP,
+    editedAt TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-12. Notification
+```sql
+Notification (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    relatedId UUID,
+    relatedType VARCHAR(50),
+    isRead BOOLEAN NOT NULL DEFAULT FALSE,
+    readAt TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-13. Tournament
+```sql
+Tournament (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    creatorId UUID REFERENCES User(id) ON DELETE SET NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'REGISTRATION',
+    maxPlayers INTEGER NOT NULL,
+    minPlayers INTEGER NOT NULL DEFAULT 4,
+    registrationDeadline TIMESTAMP,
+    startedAt TIMESTAMP,
+    endedAt TIMESTAMP,
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-14. TournamentEntry
+```sql
+TournamentEntry (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE,
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    seed INTEGER,
+    finalRank INTEGER,
+    registeredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tournamentId, userId)
+);
+```
+
+### 4-15. TournamentMatch
+```sql
+TournamentMatch (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE,
+    round INTEGER NOT NULL,
+    matchNumber INTEGER NOT NULL,
+    player1Id UUID REFERENCES User(id) ON DELETE SET NULL,
+    player2Id UUID REFERENCES User(id) ON DELETE SET NULL,
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
+    gameResultId UUID UNIQUE REFERENCES GameResult(id) ON DELETE SET NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    scheduledAt TIMESTAMP,
+    completedAt TIMESTAMP,
+    UNIQUE (tournamentId, round, matchNumber)
+);
+```
+
+### 4-16. Organization
+```sql
+Organization (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    slug VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    avatarUrl VARCHAR(255),
+    maxMembers INTEGER NOT NULL DEFAULT 50,
+    isPublic BOOLEAN NOT NULL DEFAULT TRUE,
+    creatorId UUID REFERENCES User(id) ON DELETE SET NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-17. OrgMembership
+```sql
+OrgMembership (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    orgId UUID NOT NULL REFERENCES Organization(id) ON DELETE CASCADE,
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'MEMBER',
+    invitedBy UUID REFERENCES User(id) ON DELETE SET NULL,
+    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (orgId, userId)
+);
+```
+
+### 4-18. Achievement
+```sql
+Achievement (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    key VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    iconUrl VARCHAR(255),
+    xpReward INTEGER NOT NULL DEFAULT 0,
+    category VARCHAR(50) NOT NULL,
+    isSecret BOOLEAN NOT NULL DEFAULT FALSE,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-19. UserAchievement
+```sql
+UserAchievement (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    achievementId UUID NOT NULL REFERENCES Achievement(id) ON DELETE CASCADE,
+    earnedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (userId, achievementId)
+);
+```
+
+### 4-20. ApiKey
+```sql
+ApiKey (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    label VARCHAR(255) NOT NULL,
+    keyPrefix VARCHAR(8) NOT NULL,
+    keyHash VARCHAR(255) NOT NULL UNIQUE,
+    rateLimit INTEGER NOT NULL DEFAULT 1000,
+    isActive BOOLEAN NOT NULL DEFAULT TRUE,
+    lastUsedAt TIMESTAMP,
+    expiresAt TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-21. FileUpload
+```sql
+FileUpload (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    uploaderId UUID REFERENCES User(id) ON DELETE SET NULL,
+    filename VARCHAR(255) NOT NULL,
+    originalName VARCHAR(255) NOT NULL,
+    mimeType VARCHAR(100) NOT NULL,
+    sizeBytes BIGINT NOT NULL,
+    storageUrl VARCHAR(255) NOT NULL,
+    purpose VARCHAR(50) NOT NULL,
+    isPublic BOOLEAN NOT NULL DEFAULT FALSE,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 4-22. DataExportRequest
+```sql
+DataExportRequest (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    requestedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processedAt TIMESTAMP,
+    fileUrl VARCHAR(255),
+    expiresAt TIMESTAMP
+);
+```
+
 
 ---
 
@@ -886,56 +999,7 @@ model ApiKey {
 
 ---
 
-## 7. ENUM 一覧
-
-```prisma
-enum Role           { ADMIN MODERATOR USER GUEST }
-enum TwoFactorMethod { EMAIL SMS }
-enum Rank           { BRONZE SILVER GOLD PLATINUM DIAMOND MASTER }
-enum MinoSkin       { NEON RETRO MINIMAL }
-enum AiDifficulty   { EASY MEDIUM HARD }
-enum GameMode       { VERSUS AI TOURNAMENT }
-enum FriendshipStatus { PENDING ACCEPTED REJECTED }
-enum ChatRoomType   { GLOBAL DIRECT GAME TOURNAMENT }
-enum NotificationType {
-  FRIEND_REQUEST FRIEND_ACCEPT
-  GAME_INVITE GAME_RESULT
-  TOURNAMENT_START TOURNAMENT_MATCH TOURNAMENT_RESULT
-  ACHIEVEMENT_UNLOCKED SYSTEM_MESSAGE ORG_INVITE
-}
-enum TournamentStatus { REGISTRATION SEEDING IN_PROGRESS COMPLETED CANCELLED }
-enum MatchStatus    { PENDING READY IN_PROGRESS COMPLETED BYE }
-enum OrgRole        { OWNER ADMIN MEMBER }
-enum AchievementCategory { GAME SOCIAL TOURNAMENT SPECIAL }
-enum FilePurpose    { AVATAR CHAT_ATTACHMENT EXPORT }
-enum ExportStatus   { PENDING PROCESSING READY DOWNLOADED EXPIRED }
-```
-
----
-
-## 8. 2FA — SendGrid/Twilio なしの代替戦略
-
-SendGrid/Twilio アカウントがない場合、以下の段階的アプローチを取ります：
-
-| フェーズ | メール送信 | SMS 送信 |
-|---|---|---|
-| **開発中** | Mailtrap (無料 SMTP テスト) | コンソールログに出力（モック） |
-| **評価時** | Gmail SMTP (無料, 1日500通) | Twilio トライアル (~$15 無料枠) |
-| **本番** | SendGrid 無料枠 (100通/日) | Twilio 従量課金 |
-
-```typescript
-// 開発環境でのメールモック（.env の NODE_ENV=development で自動切替）
-if (process.env.NODE_ENV === 'development') {
-  // Mailtrap SMTP または console.log にフォールバック
-  console.log(`[DEV OTP] userId=${userId} code=${code} → ${contact}`);
-} else {
-  await this.mailer.send({ to: contact, subject: '...', html: '...' });
-}
-```
-
----
-
-## 9. 設計上の注意点
+## 7. 設計上の注意点
 
 > [!IMPORTANT]
 > **GameResult の player1Id/player2Id は SET NULL**  

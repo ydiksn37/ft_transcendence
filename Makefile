@@ -53,13 +53,11 @@ seed: ## データベースに初期データ(Seed)を投入する (ホスト側
 	npm run db:seed
 
 studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
-	npm run db:studio
+	npx prisma studio --schema apps/backend/prisma/schema.prisma
 
 install: ## 依存パッケージをすべてインストールする
 	npm install
 	npm run build --workspace=@transcendence/shared
-	@ln -sf ../../.env apps/backend/.env
-	@ln -sf ../../.env apps/frontend/.env
 
 # --- テスト ---
 test: ## 全ての単体テストを実行する
@@ -73,7 +71,7 @@ test-cov: ## テストカバレッジを測定する
 
 # --- インフラ & セキュリティテスト ---
 vault-init: ## Vault開発環境に初期テストシークレットを投入する
-	docker exec -e VAULT_TOKEN=dev-root-token transcendence_vault vault kv put secret/transcendence JWT_SECRET="vault_test_secret_12345"
+	docker compose exec -e VAULT_TOKEN=dev-root-token vault vault kv put secret/transcendence JWT_SECRET="vault_test_secret_12345"
 
 waf-test: ## WAF (ModSecurity) がXSS攻撃を遮断(403)するかテストする
 	curl -i -k -X POST https://localhost:8443/api/auth/login -H "Content-Type: application/json" -d '{"username": "<script>alert(1)</script>"}'
