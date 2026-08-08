@@ -42,6 +42,13 @@ generate: ## Prisma Client を生成する (ホスト側)
 migrate: ## Prisma のマイグレーションを実行する (ホスト側)
 	npm run db:migrate
 
+migrate-dev: ## Prismaのマイグレーションを作成・適用する (例: make migrate-dev name=update_game_settings)
+	@if [ -z "$(name)" ]; then \
+		echo "Usage: make migrate-dev name=<migration_name>"; \
+		exit 1; \
+	fi
+	npx prisma migrate dev --name $(name) --schema apps/backend/prisma/schema.prisma
+
 seed: ## データベースに初期データ(Seed)を投入する (ホスト側)
 	npm run db:seed
 
@@ -53,6 +60,23 @@ install: ## 依存パッケージをすべてインストールする
 	npm run build --workspace=@transcendence/shared
 	@ln -sf ../../.env apps/backend/.env
 	@ln -sf ../../.env apps/frontend/.env
+
+# --- テスト ---
+test: ## 全ての単体テストを実行する
+	npm run test
+
+test-e2e: ## E2E(結合)テストを実行する
+	npm run test:e2e
+
+test-cov: ## テストカバレッジを測定する
+	npm run test:cov
+
+# --- インフラ & セキュリティテスト ---
+vault-init: ## Vault開発環境に初期テストシークレットを投入する
+	docker exec -e VAULT_TOKEN=dev-root-token transcendence_vault vault kv put secret/transcendence JWT_SECRET="vault_test_secret_12345"
+
+waf-test: ## WAF (ModSecurity) がXSS攻撃を遮断(403)するかテストする
+	curl -i -k -X POST https://localhost:8443/api/auth/login -H "Content-Type: application/json" -d '{"username": "<script>alert(1)</script>"}'
 
 # --- コンテナ内シェル ---
 exec-backend: ## backendコンテナの中に入る (シェル)
@@ -77,4 +101,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate seed studio install exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check

@@ -12,7 +12,10 @@
     "type-check": "turbo type-check",
     "db:migrate": "turbo db:migrate",
     "db:generate": "turbo db:generate",
-    "db:seed": "turbo db:seed"
+    "db:seed": "turbo db:seed",
+    "test": "turbo test",
+    "test:e2e": "turbo test:e2e",
+    "test:cov": "turbo test:cov"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
@@ -27,6 +30,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1"
+    "@types/react-dom": "^18.3.1",
+    "@nestjs/swagger": {
+      "js-yaml": "5.2.3"
+    }
   }
 }
