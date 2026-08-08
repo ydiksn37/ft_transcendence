@@ -2,7 +2,6 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { TetrisGame } from './pages/TetrisGame';
 import { Auth } from './pages/Auth';
 import { OAuthCallback } from './pages/OAuthCallback';
-import { TwoFactorAuth } from './pages/TwoFactorAuth';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
 
@@ -36,7 +35,6 @@ function App() {
       <Route path="/" element={<MainScreen />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
-      <Route path="/auth/2fa" element={<TwoFactorAuth />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

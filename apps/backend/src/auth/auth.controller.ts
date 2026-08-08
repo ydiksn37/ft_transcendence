@@ -15,7 +15,7 @@ import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { Verify2faDto, Setup2faDto, RefreshTokenDto } from './dto/twofa.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { FtOauthGuard, JwtAuthGuard } from './guards/auth.guard';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -63,64 +63,10 @@ export class AuthController {
 
     const frontendUrl = process.env.VITE_API_BASE_URL?.replace('/api', '') ?? 'http://localhost:5173';
 
-    if ('requires2FA' in result && result.requires2FA) {
-      return res.redirect(
-        `${frontendUrl}/auth/2fa?tempToken=${result.tempToken}&method=${result.method}`,
-      );
-    }
-
     const tokens = result as { accessToken: string; refreshToken: string; userId: string };
     return res.redirect(
       `${frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
     );
-  }
-
-  // ── 2FA 検証 ─────────────────────────────────────────────
-  @Public()
-  @Post('2fa/verify')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'OTPコードを検証してJWTを発行' })
-  verify2fa(@Body() dto: Verify2faDto) {
-    return this.authService.verify2fa(dto.otp, dto.tempToken);
-  }
-
-  // ── 2FA セットアップ ──────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
-  @Post('2fa/setup')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '2FA方式（EMAIL/SMS）を設定してOTPを送信' })
-  setup2fa(@CurrentUser() user: any, @Body() dto: Setup2faDto) {
-    return this.authService.setup2fa(user.id, dto);
-  }
-
-  // ── 2FA セットアップ確認 ──────────────────────────────────
-  @UseGuards(JwtAuthGuard)
-  @Post('2fa/confirm')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '2FAセットアップのOTPを確認して有効化' })
-  confirmSetup2fa(
-    @CurrentUser() user: any,
-    @Body() body: { otp: string },
-  ) {
-    return this.authService.confirmSetup2fa(user.id, body.otp);
-  }
-
-  // ── 2FA 無効化 ─────────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
-  @Post('2fa/disable')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '2FAを無効化' })
-  disable2fa(@CurrentUser() user: any, @Body() body: { otp: string }) {
-    return this.authService.disable2fa(user.id, body.otp);
-  }
-
-  // ── OTP 再送 ──────────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
-  @Post('2fa/resend')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'OTPコードを再送' })
-  resendOtp(@CurrentUser() user: any) {
-    return this.authService.resendOtp(user.id);
   }
 
   // ── Refresh Token ─────────────────────────────────────────

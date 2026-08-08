@@ -21,11 +21,6 @@ enum Role {
   GUEST
 }
 
-enum TwoFactorMethod {
-  EMAIL
-  SMS
-}
-
 enum Rank {
   BRONZE
   SILVER
@@ -127,56 +122,54 @@ enum ExportStatus {
 // ─────────────────────────────────────────────
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  username        String    @unique
-  displayName     String
-  passwordHash    String?   // OAuth のみの場合は null
-  avatarUrl       String?
-  bio             String?   @db.Text
-  role            Role      @default(USER)
-  isOnline        Boolean   @default(false)
-  lastSeenAt      DateTime?
-  bannedUntil     DateTime?
-  banReason       String?
-  oauthProvider   String?   // "42"
-  oauthId         String?
-  twoFactorEnabled  Boolean @default(false)
-  twoFactorMethod   TwoFactorMethod?
-  twoFactorContact  String? // メールアドレスまたは電話番号
-  isEmailVerified   Boolean @default(false)
-  deletedAt       DateTime? // ソフトデリート (GDPR)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  email            String    @unique
+  username         String    @unique
+  displayName      String
+  passwordHash     String? // OAuth のみの場合は null
+  avatarUrl        String?
+  bio              String?   @db.Text
+  role             Role      @default(USER)
+  isOnline         Boolean   @default(false)
+  lastSeenAt       DateTime?
+  bannedUntil      DateTime?
+  banReason        String?
+  oauthProvider    String? // "42"
+  oauthId          String?
+  twoFactorEnabled Boolean   @default(false)
+  isEmailVerified  Boolean   @default(false)
+  deletedAt        DateTime? // ソフトデリート (GDPR)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // ─ リレーション ─
-  stats           UserStats?
-  gameSettings    UserGameSettings?
-  gameResultsAsP1 GameResult[]       @relation("Player1")
-  gameResultsAsP2 GameResult[]       @relation("Player2")
-  gameResultsWon  GameResult[]       @relation("Winner")
-  analytics       GameAnalytic[]
-  friendRequestsSent     Friendship[] @relation("Requester")
-  friendRequestsReceived Friendship[] @relation("Addressee")
-  blocksSent      Block[]            @relation("Blocker")
-  blocksReceived  Block[]            @relation("Blocked")
-  chatMemberships ChatRoomMembership[]
-  chatMessages    ChatMessage[]
-  notifications   Notification[]
-  tournamentEntries TournamentEntry[]
-  tournamentsCreated Tournament[]    @relation("TournamentCreator")
-  tournamentsWon     Tournament[]    @relation("TournamentWinner")
-  orgMemberships  OrgMembership[]
-  orgsCreated     Organization[]    @relation("OrgCreator")
-  orgInvitesSent  OrgMembership[]   @relation("Inviter")
-  achievements    UserAchievement[]
-  apiKeys         ApiKey[]
-  fileUploads     FileUpload[]
-  dataExports     DataExportRequest[]
-  tmatchAsP1      TournamentMatch[]  @relation("TMatchP1")
-  tmatchAsP2      TournamentMatch[]  @relation("TMatchP2")
-  tmatchWon       TournamentMatch[]  @relation("TMatchWinner")
-  sprintRecords   SprintRecord[]
+  stats                  UserStats?
+  gameSettings           UserGameSettings?
+  gameResultsAsP1        GameResult[]         @relation("Player1")
+  gameResultsAsP2        GameResult[]         @relation("Player2")
+  gameResultsWon         GameResult[]         @relation("Winner")
+  analytics              GameAnalytic[]
+  friendRequestsSent     Friendship[]         @relation("Requester")
+  friendRequestsReceived Friendship[]         @relation("Addressee")
+  blocksSent             Block[]              @relation("Blocker")
+  blocksReceived         Block[]              @relation("Blocked")
+  chatMemberships        ChatRoomMembership[]
+  chatMessages           ChatMessage[]
+  notifications          Notification[]
+  tournamentEntries      TournamentEntry[]
+  tournamentsCreated     Tournament[]         @relation("TournamentCreator")
+  tournamentsWon         Tournament[]         @relation("TournamentWinner")
+  orgMemberships         OrgMembership[]
+  orgsCreated            Organization[]       @relation("OrgCreator")
+  orgInvitesSent         OrgMembership[]      @relation("Inviter")
+  achievements           UserAchievement[]
+  apiKeys                ApiKey[]
+  fileUploads            FileUpload[]
+  dataExports            DataExportRequest[]
+  tmatchAsP1             TournamentMatch[]    @relation("TMatchP1")
+  tmatchAsP2             TournamentMatch[]    @relation("TMatchP2")
+  tmatchWon              TournamentMatch[]    @relation("TMatchWinner")
+  sprintRecords          SprintRecord[]
 
   @@index([username])
   @@index([email])
@@ -190,29 +183,29 @@ model User {
 // ─────────────────────────────────────────────
 
 model UserStats {
-  id                  String   @id @default(uuid())
-  userId              String   @unique
-  wins                Int      @default(0)
-  losses              Int      @default(0)
-  totalGames          Int      @default(0)
-  winRate             Decimal  @default(0) @db.Decimal(5, 2)
-  bestApm             Decimal  @default(0) @db.Decimal(8, 2)
-  avgApm              Decimal  @default(0) @db.Decimal(8, 2)
-  bestPps             Decimal  @default(0) @db.Decimal(6, 3)
-  avgPps              Decimal  @default(0) @db.Decimal(6, 3)
-  totalLinesCleared   Int      @default(0)
-  totalTSpins         Int      @default(0)
-  totalTetrises       Int      @default(0)
-  currentWinStreak    Int      @default(0)
-  bestWinStreak       Int      @default(0)
-  xp                  Int      @default(0)
-  level               Int      @default(1)
-  rank                Rank     @default(BRONZE)
-  rankPoints          Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  wins              Int      @default(0)
+  losses            Int      @default(0)
+  totalGames        Int      @default(0)
+  winRate           Decimal  @default(0) @db.Decimal(5, 2)
+  bestApm           Decimal  @default(0) @db.Decimal(8, 2)
+  avgApm            Decimal  @default(0) @db.Decimal(8, 2)
+  bestPps           Decimal  @default(0) @db.Decimal(6, 3)
+  avgPps            Decimal  @default(0) @db.Decimal(6, 3)
+  totalLinesCleared Int      @default(0)
+  totalTSpins       Int      @default(0)
+  totalTetrises     Int      @default(0)
+  currentWinStreak  Int      @default(0)
+  bestWinStreak     Int      @default(0)
+  xp                Int      @default(0)
+  level             Int      @default(1)
+  rank              Rank     @default(BRONZE)
+  rankPoints        Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ─────────────────────────────────────────────
@@ -220,22 +213,22 @@ model UserStats {
 // ─────────────────────────────────────────────
 
 model UserGameSettings {
-  id                    String   @id @default(uuid())
-  userId                String   @unique
-  minoSkin              MinoSkin @default(NEON)
-  showGhost             Boolean  @default(true)
-  arr                   Int      @default(33)  // ms
-  das                   Int      @default(170) // ms
-  dcd                   Int      @default(0)   // ms
-  sdf                   Int      @default(6)   // 0 = Infinity
-  keyBindings           Json?    // カスタムキーバインド
-  volume                Int      @default(100)
-  sfxEnabled            Boolean  @default(true)
-  musicEnabled          Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  minoSkin     MinoSkin @default(NEON)
+  showGhost    Boolean  @default(true)
+  arr          Int      @default(33) // ms
+  das          Int      @default(170) // ms
+  dcd          Int      @default(0) // ms
+  sdf          Int      @default(6) // 0 = Infinity
+  keyBindings  Json? // カスタムキーバインド
+  volume       Int      @default(100)
+  sfxEnabled   Boolean  @default(true)
+  musicEnabled Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ─────────────────────────────────────────────
@@ -244,10 +237,10 @@ model UserGameSettings {
 
 model GameResult {
   id                  String        @id @default(uuid())
-  roomId              String        // エフェメラルな部屋ID（文字列）
-  player1Id           String?       // GDPR: ユーザー削除時に null に
-  player2Id           String?       // null = vs AI
-  winnerId            String?       // null = draw/abandoned
+  roomId              String // エフェメラルな部屋ID（文字列）
+  player1Id           String? // GDPR: ユーザー削除時に null に
+  player2Id           String? // null = vs AI
+  winnerId            String? // null = draw/abandoned
   isAiGame            Boolean       @default(false)
   aiDifficulty        AiDifficulty?
   player1Apm          Decimal       @db.Decimal(8, 2)
@@ -266,12 +259,12 @@ model GameResult {
   gameMode            GameMode      @default(VERSUS)
   tournamentMatchId   String?
 
-  createdAt           DateTime      @default(now())
+  createdAt DateTime @default(now())
 
-  player1             User?         @relation("Player1", fields: [player1Id], references: [id], onDelete: SetNull)
-  player2             User?         @relation("Player2", fields: [player2Id], references: [id], onDelete: SetNull)
-  winner              User?         @relation("Winner",  fields: [winnerId],  references: [id], onDelete: SetNull)
-  tournamentMatch     TournamentMatch?
+  player1         User?            @relation("Player1", fields: [player1Id], references: [id], onDelete: SetNull)
+  player2         User?            @relation("Player2", fields: [player2Id], references: [id], onDelete: SetNull)
+  winner          User?            @relation("Winner", fields: [winnerId], references: [id], onDelete: SetNull)
+  tournamentMatch TournamentMatch?
 
   @@index([player1Id, createdAt(sort: Desc)])
   @@index([player2Id, createdAt(sort: Desc)])
@@ -284,18 +277,18 @@ model GameResult {
 // ─────────────────────────────────────────────
 
 model GameAnalytic {
-  id                  String   @id @default(uuid())
-  userId              String
-  date                DateTime @db.Date
-  gamesPlayed         Int      @default(0)
-  wins                Int      @default(0)
-  losses              Int      @default(0)
-  avgApm              Decimal  @default(0) @db.Decimal(8, 2)
-  avgPps              Decimal  @default(0) @db.Decimal(6, 3)
-  totalLinesCleared   Int      @default(0)
-  totalPlaytimeSeconds Int     @default(0)
+  id                   String   @id @default(uuid())
+  userId               String
+  date                 DateTime @db.Date
+  gamesPlayed          Int      @default(0)
+  wins                 Int      @default(0)
+  losses               Int      @default(0)
+  avgApm               Decimal  @default(0) @db.Decimal(8, 2)
+  avgPps               Decimal  @default(0) @db.Decimal(6, 3)
+  totalLinesCleared    Int      @default(0)
+  totalPlaytimeSeconds Int      @default(0)
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
   @@index([userId, date(sort: Desc)])
@@ -313,8 +306,8 @@ model Friendship {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  requester   User             @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
-  addressee   User             @relation("Addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  requester User @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("Addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, addresseeId])
   @@index([addresseeId, status])
@@ -331,8 +324,8 @@ model Block {
   blockedId String
   createdAt DateTime @default(now())
 
-  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
-  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
   @@index([blockerId])
@@ -347,7 +340,7 @@ model ChatRoom {
   id        String       @id @default(uuid())
   type      ChatRoomType
   name      String?
-  relatedId String?      // gameRoomId or tournamentId
+  relatedId String? // gameRoomId or tournamentId
   createdAt DateTime     @default(now())
 
   memberships ChatRoomMembership[]
@@ -361,8 +354,8 @@ model ChatRoomMembership {
   lastReadAt DateTime?
   joinedAt   DateTime  @default(now())
 
-  room       ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
   @@index([userId, roomId])
@@ -372,15 +365,15 @@ model ChatRoomMembership {
 model ChatMessage {
   id        String    @id @default(uuid())
   roomId    String
-  senderId  String?   // GDPR: ユーザー削除時に null に
+  senderId  String? // GDPR: ユーザー削除時に null に
   content   String    @db.Text
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
   editedAt  DateTime?
   createdAt DateTime  @default(now())
 
-  room      ChatRoom  @relation(fields: [roomId],   references: [id], onDelete: Cascade)
-  sender    User?     @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
 
   @@index([roomId, createdAt(sort: Desc)])
   @@index([senderId])
@@ -396,13 +389,13 @@ model Notification {
   type        NotificationType
   title       String
   content     String           @db.Text
-  relatedId   String?          // ポリモーフィック
-  relatedType String?          // "friendship" | "game" | "tournament" | "org"
+  relatedId   String? // ポリモーフィック
+  relatedType String? // "friendship" | "game" | "tournament" | "org"
   isRead      Boolean          @default(false)
   readAt      DateTime?
   createdAt   DateTime         @default(now())
 
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt(sort: Desc)])
 }
@@ -417,7 +410,7 @@ model Tournament {
   description          String?          @db.Text
   creatorId            String?
   status               TournamentStatus @default(REGISTRATION)
-  maxPlayers           Int              // 4 | 8 | 16
+  maxPlayers           Int // 4 | 8 | 16
   minPlayers           Int              @default(4)
   registrationDeadline DateTime?
   startedAt            DateTime?
@@ -425,24 +418,24 @@ model Tournament {
   winnerId             String?
   createdAt            DateTime         @default(now())
 
-  creator  User?          @relation("TournamentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  winner   User?          @relation("TournamentWinner", fields: [winnerId],  references: [id], onDelete: SetNull)
-  entries  TournamentEntry[]
-  matches  TournamentMatch[]
+  creator User?             @relation("TournamentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  winner  User?             @relation("TournamentWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  entries TournamentEntry[]
+  matches TournamentMatch[]
 
   @@index([status])
 }
 
 model TournamentEntry {
-  id           String     @id @default(uuid())
+  id           String   @id @default(uuid())
   tournamentId String
   userId       String
-  seed         Int?       // null = 未シード
-  finalRank    Int?       // null = 進行中
-  registeredAt DateTime   @default(now())
+  seed         Int? // null = 未シード
+  finalRank    Int? // null = 進行中
+  registeredAt DateTime @default(now())
 
-  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId],       references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tournamentId, userId])
   // seed の UNIQUE は null を除外するため、アプリ層で担保
@@ -463,11 +456,11 @@ model TournamentMatch {
   scheduledAt  DateTime?
   completedAt  DateTime?
 
-  tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  player1      User?       @relation("TMatchP1",      fields: [player1Id],    references: [id], onDelete: SetNull)
-  player2      User?       @relation("TMatchP2",      fields: [player2Id],    references: [id], onDelete: SetNull)
-  winner       User?       @relation("TMatchWinner",  fields: [winnerId],     references: [id], onDelete: SetNull)
-  gameResult   GameResult? @relation(fields: [gameResultId], references: [id], onDelete: SetNull)
+  tournament Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player1    User?       @relation("TMatchP1", fields: [player1Id], references: [id], onDelete: SetNull)
+  player2    User?       @relation("TMatchP2", fields: [player2Id], references: [id], onDelete: SetNull)
+  winner     User?       @relation("TMatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  gameResult GameResult? @relation(fields: [gameResultId], references: [id], onDelete: SetNull)
 
   @@unique([tournamentId, round, matchNumber])
   @@index([tournamentId, round])
@@ -491,7 +484,7 @@ model Organization {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  creator     User?    @relation("OrgCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  creator     User?           @relation("OrgCreator", fields: [creatorId], references: [id], onDelete: SetNull)
   memberships OrgMembership[]
 
   @@index([name])
@@ -505,9 +498,9 @@ model OrgMembership {
   invitedBy String?
   joinedAt  DateTime @default(now())
 
-  org       Organization @relation(fields: [orgId],  references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId],    references: [id], onDelete: Cascade)
-  inviter   User?        @relation("Inviter", fields: [invitedBy], references: [id], onDelete: SetNull)
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inviter User?        @relation("Inviter", fields: [invitedBy], references: [id], onDelete: SetNull)
 
   @@unique([orgId, userId])
   @@index([orgId, role])
@@ -533,13 +526,13 @@ model Achievement {
 }
 
 model UserAchievement {
-  id            String      @id @default(uuid())
+  id            String   @id @default(uuid())
   userId        String
   achievementId String
-  earnedAt      DateTime    @default(now())
+  earnedAt      DateTime @default(now())
 
-  user          User        @relation(fields: [userId],        references: [id], onDelete: Cascade)
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
   @@index([userId, earnedAt(sort: Desc)])
@@ -551,18 +544,18 @@ model UserAchievement {
 // ─────────────────────────────────────────────
 
 model ApiKey {
-  id          String    @id @default(uuid())
-  userId      String
-  label       String
-  keyPrefix   String    // 表示用の先頭8文字
-  keyHash     String    @unique // bcrypt ハッシュ
-  rateLimit   Int       @default(1000)
-  isActive    Boolean   @default(true)
-  lastUsedAt  DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  label      String
+  keyPrefix  String // 表示用の先頭8文字
+  keyHash    String    @unique // bcrypt ハッシュ
+  rateLimit  Int       @default(1000)
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([keyHash])
   @@index([userId, isActive])
@@ -584,7 +577,7 @@ model FileUpload {
   isPublic     Boolean     @default(false)
   createdAt    DateTime    @default(now())
 
-  uploader     User?       @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+  uploader User? @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
 
   @@index([uploaderId])
 }
@@ -602,7 +595,7 @@ model DataExportRequest {
   fileUrl     String?
   expiresAt   DateTime?
 
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
 }
@@ -612,14 +605,14 @@ model DataExportRequest {
 // ─────────────────────────────────────────────
 
 model SprintRecord {
-  id          String   @id @default(uuid())
-  userId      String
-  timeMs      Int      // クリアタイム (ミリ秒)
-  lines       Int      @default(40) // 40 Lines 以外の拡張用
-  pieces      Int?     // 置いたミノの数
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  timeMs    Int // クリアタイム (ミリ秒)
+  lines     Int      @default(40) // 40 Lines 以外の拡張用
+  pieces    Int? // 置いたミノの数
+  createdAt DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 全体の 40 Lines ランキングを高速に取得するためのインデックス
   @@index([lines, timeMs])

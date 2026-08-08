@@ -144,8 +144,7 @@ export interface PaginatedResponse<T> {
 //  ユーザー関連の共通型
 // ───────────────────────────────────────────────
 export type UserRole = 'ADMIN' | 'MODERATOR' | 'USER' | 'GUEST';
-export type TwoFactorMethod = 'EMAIL' | 'SMS';
-export type FriendshipStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+|export type FriendshipStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 export type OrgRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 export type Rank = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'MASTER';
 
@@ -163,7 +162,6 @@ export interface UserProfile extends PublicUser {
   email: string;
   bio: string | null;
   twoFactorEnabled: boolean;
-  twoFactorMethod: TwoFactorMethod | null;
   createdAt: string;
 }
 

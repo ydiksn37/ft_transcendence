@@ -302,7 +302,6 @@ export class UsersService {
     const {
       passwordHash,
       email,
-      twoFactorContact,
       oauthId,
       bannedUntil,
       banReason,

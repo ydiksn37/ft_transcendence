@@ -53,8 +53,6 @@ erDiagram
         string oauthProvider "nullable"
         string oauthId "nullable"
         bool twoFactorEnabled
-        string twoFactorMethod "EMAIL SMS nullable"
-        string twoFactorContact "nullable"
         bool isEmailVerified
         datetime deletedAt "nullable soft delete"
         datetime createdAt
@@ -495,34 +493,32 @@ UserAchievement
 ---
 
 
-## 4. 各テーブルの定義 (DDL風)
+## 4. 各テーブルの定義
 
-各テーブルの物理的な構造（カラム、型、制約）です。他メンバーへの共有用として詳細なコメントを記載しています。
+各テーブルの物理的な構造（カラム、型、制約）です。
 
 ### 4-1. User
 ```sql
 User (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),           -- ユニークなユーザーID、デフォルトはuuid_generate_v4()で自動生成
-    email VARCHAR(255) NOT NULL UNIQUE,                       -- メールアドレス、ログイン用途および一意性を保証
-    username VARCHAR(100) NOT NULL UNIQUE,                    -- アプリ内で表示・検索される一意のユーザー名
-    displayName VARCHAR(255) NOT NULL,                        -- 画面表示用の名前（変更可能、一意である必要はない）
-    passwordHash VARCHAR(255),                                -- パスワードのハッシュ値（OAuthのみの場合はNULL）
-    avatarUrl VARCHAR(255),                                   -- プロフィール画像のURL
-    bio TEXT,                                                 -- ユーザーの自己紹介文
-    role VARCHAR(50) NOT NULL DEFAULT 'USER',                 -- 権限ロール（ADMIN, MODERATOR, USER, GUEST）
-    isOnline BOOLEAN NOT NULL DEFAULT FALSE,                  -- 現在オンラインかどうかのフラグ
-    lastSeenAt TIMESTAMP,                                     -- 最終アクセス日時
-    bannedUntil TIMESTAMP,                                    -- BAN（利用停止）の期限（NULLなら有効）
-    banReason VARCHAR(255),                                   -- BANされた理由のメモ
-    oauthProvider VARCHAR(50),                                -- OAuthプロバイダー名（例: "42"）
-    oauthId VARCHAR(255),                                     -- OAuthプロバイダー側の一意のID
-    twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,          -- 2段階認証が有効かどうかのフラグ
-    twoFactorMethod VARCHAR(50),                              -- 2FAの手段（EMAIL, SMS など）
-    twoFactorContact VARCHAR(255),                            -- 2FAの送信先（メアドや電話番号）
-    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,           -- メールアドレスが確認済みかどうかのフラグ
-    deletedAt TIMESTAMP,                                      -- 論理削除用タイムスタンプ（GDPR対応）
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- レコード作成日時
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP    -- レコード更新日時
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),            -- ユニークなユーザーID、デフォルトはuuid_generate_v4()で自動生成
+    email VARCHAR(255) NOT NULL UNIQUE,                        -- メールアドレス、ログイン用途および一意性を保証
+    username VARCHAR(100) NOT NULL UNIQUE,                     -- アプリ内で表示・検索される一意のユーザー名
+    displayName VARCHAR(255) NOT NULL,                         -- 画面表示用の名前（変更可能、一意である必要はない）
+    passwordHash VARCHAR(255),                                 -- パスワードのハッシュ値（OAuthのみの場合はNULL）
+    avatarUrl VARCHAR(255),                                    -- プロフィール画像のURL
+    bio TEXT,                                                  -- ユーザーの自己紹介文
+    role VARCHAR(50) NOT NULL DEFAULT 'USER',                  -- 権限ロール（ADMIN, MODERATOR, USER, GUEST）
+    isOnline BOOLEAN NOT NULL DEFAULT FALSE,                   -- 現在オンラインかどうかのフラグ
+    lastSeenAt TIMESTAMP,                                      -- 最終アクセス日時
+    bannedUntil TIMESTAMP,                                     -- BAN（利用停止）の期限（NULLなら有効）
+    banReason VARCHAR(255),                                    -- BANされた理由のメモ
+    oauthProvider VARCHAR(50),                                 -- OAuthプロバイダー名（例: "42"）
+    oauthId VARCHAR(255),                                      -- OAuthプロバイダー側の一意のID
+    twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,           -- 2段階認証が有効かどうかのフラグ
+    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,            -- メールアドレスが確認済みかどうかのフラグ
+    deletedAt TIMESTAMP,                                       -- 論理削除用タイムスタンプ（GDPR対応）
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,    -- レコード作成日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP     -- レコード更新日時
 );
 ```
 
