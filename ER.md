@@ -497,363 +497,363 @@ UserAchievement
 
 ## 4. 各テーブルの定義 (DDL風)
 
-各テーブルの物理的な構造（カラム、型、制約）です。
+各テーブルの物理的な構造（カラム、型、制約）です。他メンバーへの共有用として詳細なコメントを記載しています。
 
 ### 4-1. User
 ```sql
 User (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(255) NOT NULL UNIQUE,
-    username VARCHAR(100) NOT NULL UNIQUE,
-    displayName VARCHAR(255) NOT NULL,
-    passwordHash VARCHAR(255),
-    avatarUrl VARCHAR(255),
-    bio TEXT,
-    role VARCHAR(50) NOT NULL DEFAULT 'USER',
-    isOnline BOOLEAN NOT NULL DEFAULT FALSE,
-    lastSeenAt TIMESTAMP,
-    bannedUntil TIMESTAMP,
-    banReason VARCHAR(255),
-    oauthProvider VARCHAR(50),
-    oauthId VARCHAR(255),
-    twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,
-    twoFactorMethod VARCHAR(50),
-    twoFactorContact VARCHAR(255),
-    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,
-    deletedAt TIMESTAMP,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),           -- ユニークなユーザーID、デフォルトはuuid_generate_v4()で自動生成
+    email VARCHAR(255) NOT NULL UNIQUE,                       -- メールアドレス、ログイン用途および一意性を保証
+    username VARCHAR(100) NOT NULL UNIQUE,                    -- アプリ内で表示・検索される一意のユーザー名
+    displayName VARCHAR(255) NOT NULL,                        -- 画面表示用の名前（変更可能、一意である必要はない）
+    passwordHash VARCHAR(255),                                -- パスワードのハッシュ値（OAuthのみの場合はNULL）
+    avatarUrl VARCHAR(255),                                   -- プロフィール画像のURL
+    bio TEXT,                                                 -- ユーザーの自己紹介文
+    role VARCHAR(50) NOT NULL DEFAULT 'USER',                 -- 権限ロール（ADMIN, MODERATOR, USER, GUEST）
+    isOnline BOOLEAN NOT NULL DEFAULT FALSE,                  -- 現在オンラインかどうかのフラグ
+    lastSeenAt TIMESTAMP,                                     -- 最終アクセス日時
+    bannedUntil TIMESTAMP,                                    -- BAN（利用停止）の期限（NULLなら有効）
+    banReason VARCHAR(255),                                   -- BANされた理由のメモ
+    oauthProvider VARCHAR(50),                                -- OAuthプロバイダー名（例: "42"）
+    oauthId VARCHAR(255),                                     -- OAuthプロバイダー側の一意のID
+    twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,          -- 2段階認証が有効かどうかのフラグ
+    twoFactorMethod VARCHAR(50),                              -- 2FAの手段（EMAIL, SMS など）
+    twoFactorContact VARCHAR(255),                            -- 2FAの送信先（メアドや電話番号）
+    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,           -- メールアドレスが確認済みかどうかのフラグ
+    deletedAt TIMESTAMP,                                      -- 論理削除用タイムスタンプ（GDPR対応）
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- レコード作成日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP    -- レコード更新日時
 );
 ```
 
 ### 4-2. UserStats
 ```sql
 UserStats (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
-    wins INTEGER NOT NULL DEFAULT 0,
-    losses INTEGER NOT NULL DEFAULT 0,
-    totalGames INTEGER NOT NULL DEFAULT 0,
-    winRate DECIMAL(5,2) NOT NULL DEFAULT 0,
-    bestApm DECIMAL(8,2) NOT NULL DEFAULT 0,
-    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,
-    bestPps DECIMAL(6,3) NOT NULL DEFAULT 0,
-    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,
-    totalLinesCleared INTEGER NOT NULL DEFAULT 0,
-    totalTSpins INTEGER NOT NULL DEFAULT 0,
-    totalTetrises INTEGER NOT NULL DEFAULT 0,
-    currentWinStreak INTEGER NOT NULL DEFAULT 0,
-    bestWinStreak INTEGER NOT NULL DEFAULT 0,
-    xp INTEGER NOT NULL DEFAULT 0,
-    level INTEGER NOT NULL DEFAULT 1,
-    rank VARCHAR(50) NOT NULL DEFAULT 'BRONZE',
-    rankPoints INTEGER NOT NULL DEFAULT 0,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                    -- ユニークな統計ID
+    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE, -- Userテーブルへの外部キー（1:1関係、ユーザー削除時に連動削除）
+    wins INTEGER NOT NULL DEFAULT 0,                                   -- 勝利数
+    losses INTEGER NOT NULL DEFAULT 0,                                 -- 敗北数
+    totalGames INTEGER NOT NULL DEFAULT 0,                             -- 総プレイ試合数
+    winRate DECIMAL(5,2) NOT NULL DEFAULT 0,                           -- 勝率（計算可能だが高速化のため保存）
+    bestApm DECIMAL(8,2) NOT NULL DEFAULT 0,                           -- 自己ベストAPM（Actions Per Minute）
+    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,                            -- 平均APM
+    bestPps DECIMAL(6,3) NOT NULL DEFAULT 0,                           -- 自己ベストPPS（Pieces Per Second）
+    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,                            -- 平均PPS
+    totalLinesCleared INTEGER NOT NULL DEFAULT 0,                      -- 累計の消去ライン数
+    totalTSpins INTEGER NOT NULL DEFAULT 0,                            -- 累計のT-Spin回数
+    totalTetrises INTEGER NOT NULL DEFAULT 0,                          -- 累計のTetris（4ライン消し）回数
+    currentWinStreak INTEGER NOT NULL DEFAULT 0,                       -- 現在の連勝数
+    bestWinStreak INTEGER NOT NULL DEFAULT 0,                          -- 最大連勝数の記録
+    xp INTEGER NOT NULL DEFAULT 0,                                     -- 獲得経験値
+    level INTEGER NOT NULL DEFAULT 1,                                  -- 現在のレベル
+    rank VARCHAR(50) NOT NULL DEFAULT 'BRONZE',                        -- 現在のランク帯（BRONZE, SILVERなど）
+    rankPoints INTEGER NOT NULL DEFAULT 0,                             -- ランクのポイント（RP）
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,            -- レコード作成日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP             -- レコード更新日時
 );
 ```
 
 ### 4-3. UserGameSettings
 ```sql
 UserGameSettings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
-    minoSkin VARCHAR(50) NOT NULL DEFAULT 'NEON',
-    showGhost BOOLEAN NOT NULL DEFAULT TRUE,
-    arr INTEGER NOT NULL DEFAULT 33,
-    das INTEGER NOT NULL DEFAULT 170,
-    dcd INTEGER NOT NULL DEFAULT 0,
-    sdf INTEGER NOT NULL DEFAULT 6,
-    keyBindings JSONB,
-    volume INTEGER NOT NULL DEFAULT 100,
-    sfxEnabled BOOLEAN NOT NULL DEFAULT TRUE,
-    musicEnabled BOOLEAN NOT NULL DEFAULT TRUE,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                    -- ユニークな設定ID
+    userId UUID NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE, -- Userテーブルへの外部キー（1:1関係）
+    minoSkin VARCHAR(50) NOT NULL DEFAULT 'NEON',                      -- ミノのデザインスキン
+    showGhost BOOLEAN NOT NULL DEFAULT TRUE,                           -- ゴーストブロックの表示設定
+    arr INTEGER NOT NULL DEFAULT 33,                                   -- ARR (Auto Repeat Rate: 連続移動速度) ms
+    das INTEGER NOT NULL DEFAULT 170,                                  -- DAS (Delayed Auto Shift: 長押し判定までの時間) ms
+    dcd INTEGER NOT NULL DEFAULT 0,                                    -- DCD (DAS Cut Delay) ms
+    sdf INTEGER NOT NULL DEFAULT 6,                                    -- SDF (Soft Drop Factor: 下移動の倍率)
+    keyBindings JSONB,                                                 -- カスタムキーバインド（JSON形式）
+    volume INTEGER NOT NULL DEFAULT 100,                               -- マスター音量（0-100）
+    sfxEnabled BOOLEAN NOT NULL DEFAULT TRUE,                          -- SE（効果音）の有効化設定
+    musicEnabled BOOLEAN NOT NULL DEFAULT TRUE,                        -- BGMの有効化設定
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,            -- レコード作成日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP             -- レコード更新日時
 );
 ```
 
 ### 4-4. GameResult
 ```sql
 GameResult (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    roomId VARCHAR(255) NOT NULL,
-    player1Id UUID REFERENCES User(id) ON DELETE SET NULL,
-    player2Id UUID REFERENCES User(id) ON DELETE SET NULL,
-    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
-    isAiGame BOOLEAN NOT NULL DEFAULT FALSE,
-    aiDifficulty VARCHAR(50),
-    player1Apm DECIMAL(8,2) NOT NULL,
-    player2Apm DECIMAL(8,2),
-    player1Pps DECIMAL(6,3) NOT NULL,
-    player2Pps DECIMAL(6,3),
-    player1LinesCleared INTEGER NOT NULL,
-    player2LinesCleared INTEGER,
-    player1TSpins INTEGER NOT NULL DEFAULT 0,
-    player2TSpins INTEGER NOT NULL DEFAULT 0,
-    player1Tetrises INTEGER NOT NULL DEFAULT 0,
-    player2Tetrises INTEGER NOT NULL DEFAULT 0,
-    garbageSent1to2 INTEGER NOT NULL DEFAULT 0,
-    garbageSent2to1 INTEGER NOT NULL DEFAULT 0,
-    durationSeconds INTEGER NOT NULL,
-    gameMode VARCHAR(50) NOT NULL DEFAULT 'VERSUS',
-    tournamentMatchId UUID,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),        -- ユニークな試合結果ID
+    roomId VARCHAR(255) NOT NULL,                          -- 試合が行われたエフェメラルなルームID
+    player1Id UUID REFERENCES User(id) ON DELETE SET NULL, -- プレイヤー1のID（削除時は履歴を残すためNULL）
+    player2Id UUID REFERENCES User(id) ON DELETE SET NULL, -- プレイヤー2のID（AI対戦時はNULL）
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,  -- 勝者のID（引き分けや無効試合時はNULL）
+    isAiGame BOOLEAN NOT NULL DEFAULT FALSE,               -- AIとの対戦かどうか
+    aiDifficulty VARCHAR(50),                              -- AIの難易度（EASY, MEDIUM, HARD など）
+    player1Apm DECIMAL(8,2) NOT NULL,                      -- プレイヤー1の最終APM
+    player2Apm DECIMAL(8,2),                               -- プレイヤー2の最終APM
+    player1Pps DECIMAL(6,3) NOT NULL,                      -- プレイヤー1の最終PPS
+    player2Pps DECIMAL(6,3),                               -- プレイヤー2の最終PPS
+    player1LinesCleared INTEGER NOT NULL,                  -- プレイヤー1のライン消去数
+    player2LinesCleared INTEGER,                           -- プレイヤー2のライン消去数
+    player1TSpins INTEGER NOT NULL DEFAULT 0,              -- プレイヤー1のT-Spin回数
+    player2TSpins INTEGER NOT NULL DEFAULT 0,              -- プレイヤー2のT-Spin回数
+    player1Tetrises INTEGER NOT NULL DEFAULT 0,            -- プレイヤー1のTetris回数
+    player2Tetrises INTEGER NOT NULL DEFAULT 0,            -- プレイヤー2のTetris回数
+    garbageSent1to2 INTEGER NOT NULL DEFAULT 0,            -- プレイヤー1から2へ送ったお邪魔ブロック数
+    garbageSent2to1 INTEGER NOT NULL DEFAULT 0,            -- プレイヤー2から1へ送ったお邪魔ブロック数
+    durationSeconds INTEGER NOT NULL,                      -- 試合時間（秒）
+    gameMode VARCHAR(50) NOT NULL DEFAULT 'VERSUS',        -- ゲームモード（VERSUS, AI, TOURNAMENT）
+    tournamentMatchId UUID,                                -- トーナメントの試合だった場合の参照ID
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- 試合終了（レコード作成）日時
 );
 ```
 
 ### 4-5. GameAnalytic
 ```sql
 GameAnalytic (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
-    gamesPlayed INTEGER NOT NULL DEFAULT 0,
-    wins INTEGER NOT NULL DEFAULT 0,
-    losses INTEGER NOT NULL DEFAULT 0,
-    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,
-    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,
-    totalLinesCleared INTEGER NOT NULL DEFAULT 0,
-    totalPlaytimeSeconds INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (userId, date)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),             -- ユニークな分析ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- Userテーブルへの外部キー
+    date DATE NOT NULL,                                         -- 集計対象の日付
+    gamesPlayed INTEGER NOT NULL DEFAULT 0,                     -- この日にプレイした試合数
+    wins INTEGER NOT NULL DEFAULT 0,                            -- この日の勝利数
+    losses INTEGER NOT NULL DEFAULT 0,                          -- この日の敗北数
+    avgApm DECIMAL(8,2) NOT NULL DEFAULT 0,                     -- この日の平均APM
+    avgPps DECIMAL(6,3) NOT NULL DEFAULT 0,                     -- この日の平均PPS
+    totalLinesCleared INTEGER NOT NULL DEFAULT 0,               -- この日に消した総ライン数
+    totalPlaytimeSeconds INTEGER NOT NULL DEFAULT 0,            -- この日の総プレイ時間（秒）
+    UNIQUE (userId, date)                                       -- ユーザーごと・日ごとに1レコードを保証（UPSERT用）
 );
 ```
 
 ### 4-6. SprintRecord
 ```sql
 SprintRecord (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    timeMs INTEGER NOT NULL,
-    lines INTEGER NOT NULL DEFAULT 40,
-    pieces INTEGER,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),             -- ユニークなスプリント記録ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- Userテーブルへの外部キー
+    timeMs INTEGER NOT NULL,                                    -- クリアタイム（ミリ秒）
+    lines INTEGER NOT NULL DEFAULT 40,                          -- 目標ライン数（標準は 40 Lines）
+    pieces INTEGER,                                             -- クリアまでに置いた総ミノ数
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP      -- 記録達成日時
 );
 ```
 
 ### 4-7. Friendship
 ```sql
 Friendship (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    requesterId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    addresseeId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (requesterId, addresseeId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                  -- ユニークなフレンドシップID
+    requesterId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- 申請を送ったユーザーのID
+    addresseeId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- 申請を受け取ったユーザーのID
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',                   -- 現在のステータス（PENDING, ACCEPTED, REJECTED）
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,          -- 申請日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,          -- ステータス更新日時
+    UNIQUE (requesterId, addresseeId)                                -- 同じペア間の重複申請を防止
 );
 ```
 
 ### 4-8. Block
 ```sql
 Block (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    blockerId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    blockedId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (blockerId, blockedId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                -- ユニークなブロックID
+    blockerId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- ブロックした側のユーザーID
+    blockedId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- ブロックされた側のユーザーID
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,        -- ブロック日時
+    UNIQUE (blockerId, blockedId)                                  -- 同じペア間の重複ブロックを防止
 );
 ```
 
 ### 4-9. ChatRoom
 ```sql
 ChatRoom (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    type VARCHAR(50) NOT NULL,
-    name VARCHAR(255),
-    relatedId UUID,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),        -- ユニークなチャットルームID
+    type VARCHAR(50) NOT NULL,                             -- ルーム種別（GLOBAL, DIRECT, GAME, TOURNAMENT）
+    name VARCHAR(255),                                     -- ルーム名（グループチャットなどの場合に使用）
+    relatedId UUID,                                        -- 関連するID（試合IDやトーナメントIDなど、ポリモーフィック）
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- ルーム作成日時
 );
 ```
 
 ### 4-10. ChatRoomMembership
 ```sql
 ChatRoomMembership (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE,
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    lastReadAt TIMESTAMP,
-    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (roomId, userId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                 -- ユニークな参加ID
+    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE, -- ChatRoomへの外部キー
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,     -- Userへの外部キー
+    lastReadAt TIMESTAMP,                                           -- このルームを最後に開いた日時（未読数の計算に使用）
+    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,          -- ルームへの参加日時
+    UNIQUE (roomId, userId)                                         -- 同一ルームへの二重参加を防止
 );
 ```
 
 ### 4-11. ChatMessage
 ```sql
 ChatMessage (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE,
-    senderId UUID REFERENCES User(id) ON DELETE SET NULL,
-    content TEXT NOT NULL,
-    isDeleted BOOLEAN NOT NULL DEFAULT FALSE,
-    deletedAt TIMESTAMP,
-    editedAt TIMESTAMP,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                 -- ユニークなメッセージID
+    roomId UUID NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE, -- 投稿先のルームID
+    senderId UUID REFERENCES User(id) ON DELETE SET NULL,           -- 投稿者のユーザーID（退会時はNULLになり履歴は残る）
+    content TEXT NOT NULL,                                          -- メッセージの本文
+    isDeleted BOOLEAN NOT NULL DEFAULT FALSE,                       -- 論理削除フラグ（True時は本文を「削除済み」として扱う）
+    deletedAt TIMESTAMP,                                            -- 論理削除された日時
+    editedAt TIMESTAMP,                                             -- メッセージが編集された日時
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP          -- 投稿日時
 );
 ```
 
 ### 4-12. Notification
 ```sql
 Notification (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    type VARCHAR(50) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    relatedId UUID,
-    relatedType VARCHAR(50),
-    isRead BOOLEAN NOT NULL DEFAULT FALSE,
-    readAt TIMESTAMP,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),             -- ユニークな通知ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- 通知を受け取るユーザーのID
+    type VARCHAR(50) NOT NULL,                                  -- 通知の種類（FRIEND_REQUEST, GAME_INVITEなど）
+    title VARCHAR(255) NOT NULL,                                -- 通知のタイトル
+    content TEXT NOT NULL,                                      -- 通知の本文・詳細
+    relatedId UUID,                                             -- 関連するリソースのID（ポリモーフィック）
+    relatedType VARCHAR(50),                                    -- 関連するリソースの種類（friendship, gameなど）
+    isRead BOOLEAN NOT NULL DEFAULT FALSE,                      -- 既読フラグ
+    readAt TIMESTAMP,                                           -- 既読になった日時
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP      -- 通知の作成日時
 );
 ```
 
 ### 4-13. Tournament
 ```sql
 Tournament (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    creatorId UUID REFERENCES User(id) ON DELETE SET NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'REGISTRATION',
-    maxPlayers INTEGER NOT NULL,
-    minPlayers INTEGER NOT NULL DEFAULT 4,
-    registrationDeadline TIMESTAMP,
-    startedAt TIMESTAMP,
-    endedAt TIMESTAMP,
-    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),        -- ユニークなトーナメントID
+    name VARCHAR(255) NOT NULL,                            -- トーナメント名
+    description TEXT,                                      -- 大会の詳細やルール説明
+    creatorId UUID REFERENCES User(id) ON DELETE SET NULL, -- 大会を主催したユーザーのID
+    status VARCHAR(50) NOT NULL DEFAULT 'REGISTRATION',    -- 現在の進行ステータス
+    maxPlayers INTEGER NOT NULL,                           -- 参加上限人数（4, 8, 16 など）
+    minPlayers INTEGER NOT NULL DEFAULT 4,                 -- 開催に必要な最低人数
+    registrationDeadline TIMESTAMP,                        -- 参加登録の締め切り日時
+    startedAt TIMESTAMP,                                   -- トーナメント開始日時
+    endedAt TIMESTAMP,                                     -- トーナメント終了日時
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,  -- 優勝者のユーザーID
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- トーナメント作成日時
 );
 ```
 
 ### 4-14. TournamentEntry
 ```sql
 TournamentEntry (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE,
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    seed INTEGER,
-    finalRank INTEGER,
-    registeredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (tournamentId, userId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                         -- ユニークなエントリーID
+    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE, -- 参加するトーナメントID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,             -- 参加者のユーザーID
+    seed INTEGER,                                                           -- トーナメントのシード番号（未割り当て時はNULL）
+    finalRank INTEGER,                                                      -- トーナメント終了後の最終順位
+    registeredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,              -- 参加登録日時
+    UNIQUE (tournamentId, userId)                                           -- 同一トーナメントへの二重エントリーを防止
 );
 ```
 
 ### 4-15. TournamentMatch
 ```sql
 TournamentMatch (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE,
-    round INTEGER NOT NULL,
-    matchNumber INTEGER NOT NULL,
-    player1Id UUID REFERENCES User(id) ON DELETE SET NULL,
-    player2Id UUID REFERENCES User(id) ON DELETE SET NULL,
-    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,
-    gameResultId UUID UNIQUE REFERENCES GameResult(id) ON DELETE SET NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    scheduledAt TIMESTAMP,
-    completedAt TIMESTAMP,
-    UNIQUE (tournamentId, round, matchNumber)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                         -- ユニークな試合管理ID
+    tournamentId UUID NOT NULL REFERENCES Tournament(id) ON DELETE CASCADE, -- 属するトーナメントID
+    round INTEGER NOT NULL,                                                 -- 試合のラウンド（1回戦=1, 準決勝=2など）
+    matchNumber INTEGER NOT NULL,                                           -- ラウンド内での試合番号
+    player1Id UUID REFERENCES User(id) ON DELETE SET NULL,                  -- プレイヤー1のID（未決定時はNULL）
+    player2Id UUID REFERENCES User(id) ON DELETE SET NULL,                  -- プレイヤー2のID（未決定時はNULL）
+    winnerId UUID REFERENCES User(id) ON DELETE SET NULL,                   -- この試合の勝者ID
+    gameResultId UUID UNIQUE REFERENCES GameResult(id) ON DELETE SET NULL,  -- 実際の対戦結果(GameResult)との紐付け
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',                          -- 試合のステータス（PENDING, READY, IN_PROGRESS, COMPLETED, BYE）
+    scheduledAt TIMESTAMP,                                                  -- 試合予定日時
+    completedAt TIMESTAMP,                                                  -- 試合完了日時
+    UNIQUE (tournamentId, round, matchNumber)                               -- トーナメント内の特定の試合枠を一意に特定
 );
 ```
 
 ### 4-16. Organization
 ```sql
 Organization (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL UNIQUE,
-    slug VARCHAR(255) NOT NULL UNIQUE,
-    description TEXT,
-    avatarUrl VARCHAR(255),
-    maxMembers INTEGER NOT NULL DEFAULT 50,
-    isPublic BOOLEAN NOT NULL DEFAULT TRUE,
-    creatorId UUID REFERENCES User(id) ON DELETE SET NULL,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),         -- ユニークな組織(クラン)ID
+    name VARCHAR(255) NOT NULL UNIQUE,                      -- 組織名（一意）
+    slug VARCHAR(255) NOT NULL UNIQUE,                      -- URL等で用いる一意の識別子（例: "team-alpha"）
+    description TEXT,                                       -- 組織の説明・紹介文
+    avatarUrl VARCHAR(255),                                 -- 組織のアイコン画像URL
+    maxMembers INTEGER NOT NULL DEFAULT 50,                 -- 所属可能な最大人数
+    isPublic BOOLEAN NOT NULL DEFAULT TRUE,                 -- 公開設定（誰でも参加可能か、招待制か）
+    creatorId UUID REFERENCES User(id) ON DELETE SET NULL,  -- 組織を設立したユーザーID
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 設立日時
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP  -- 更新日時
 );
 ```
 
 ### 4-17. OrgMembership
 ```sql
 OrgMembership (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    orgId UUID NOT NULL REFERENCES Organization(id) ON DELETE CASCADE,
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    role VARCHAR(50) NOT NULL DEFAULT 'MEMBER',
-    invitedBy UUID REFERENCES User(id) ON DELETE SET NULL,
-    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (orgId, userId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                    -- ユニークな所属ID
+    orgId UUID NOT NULL REFERENCES Organization(id) ON DELETE CASCADE, -- 組織ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,        -- メンバーのユーザーID
+    role VARCHAR(50) NOT NULL DEFAULT 'MEMBER',                        -- 組織内での役割（OWNER, ADMIN, MEMBER）
+    invitedBy UUID REFERENCES User(id) ON DELETE SET NULL,             -- 招待したユーザーのID
+    joinedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,             -- 組織への参加日時
+    UNIQUE (orgId, userId)                                             -- 同一組織への二重加入を防止
 );
 ```
 
 ### 4-18. Achievement
 ```sql
 Achievement (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    key VARCHAR(100) NOT NULL UNIQUE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT NOT NULL,
-    iconUrl VARCHAR(255),
-    xpReward INTEGER NOT NULL DEFAULT 0,
-    category VARCHAR(50) NOT NULL,
-    isSecret BOOLEAN NOT NULL DEFAULT FALSE,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),        -- ユニークな実績マスタID
+    key VARCHAR(100) NOT NULL UNIQUE,                      -- 実績の識別キー（"first_win" など）
+    name VARCHAR(255) NOT NULL,                            -- 実績の表示名
+    description TEXT NOT NULL,                             -- 実績の達成条件や説明文
+    iconUrl VARCHAR(255),                                  -- 実績のアイコン画像URL
+    xpReward INTEGER NOT NULL DEFAULT 0,                   -- 達成時に付与される経験値（XP）
+    category VARCHAR(50) NOT NULL,                         -- 実績のカテゴリ（GAME, SOCIALなど）
+    isSecret BOOLEAN NOT NULL DEFAULT FALSE,               -- 未達成時に内容を隠すかどうかのシークレットフラグ
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- マスタデータの作成日時
 );
 ```
 
 ### 4-19. UserAchievement
 ```sql
 UserAchievement (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    achievementId UUID NOT NULL REFERENCES Achievement(id) ON DELETE CASCADE,
-    earnedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (userId, achievementId)
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),                           -- ユニークな実績獲得ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,               -- 獲得したユーザーのID
+    achievementId UUID NOT NULL REFERENCES Achievement(id) ON DELETE CASCADE, -- 獲得した実績のID
+    earnedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,                    -- 実績を達成した日時
+    UNIQUE (userId, achievementId)                                            -- 同一実績の二重獲得を防止
 );
 ```
 
 ### 4-20. ApiKey
 ```sql
 ApiKey (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    label VARCHAR(255) NOT NULL,
-    keyPrefix VARCHAR(8) NOT NULL,
-    keyHash VARCHAR(255) NOT NULL UNIQUE,
-    rateLimit INTEGER NOT NULL DEFAULT 1000,
-    isActive BOOLEAN NOT NULL DEFAULT TRUE,
-    lastUsedAt TIMESTAMP,
-    expiresAt TIMESTAMP,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),             -- ユニークなAPIキー管理ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- キーを所有するユーザーID
+    label VARCHAR(255) NOT NULL,                                -- キーの用途ラベル（例: "Dashboard Bot"）
+    keyPrefix VARCHAR(8) NOT NULL,                              -- 画面表示用のキー先頭部分（セキュリティのため全体は表示しない）
+    keyHash VARCHAR(255) NOT NULL UNIQUE,                       -- 実際のAPIキーのハッシュ値（プレーンテキストでは保存しない）
+    rateLimit INTEGER NOT NULL DEFAULT 1000,                    -- このキーでのリクエスト上限（例: 1000回/日）
+    isActive BOOLEAN NOT NULL DEFAULT TRUE,                     -- キーが現在有効かどうかのフラグ
+    lastUsedAt TIMESTAMP,                                       -- 最後にキーが利用された日時
+    expiresAt TIMESTAMP,                                        -- キーの有効期限
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP      -- キーの作成日時
 );
 ```
 
 ### 4-21. FileUpload
 ```sql
 FileUpload (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    uploaderId UUID REFERENCES User(id) ON DELETE SET NULL,
-    filename VARCHAR(255) NOT NULL,
-    originalName VARCHAR(255) NOT NULL,
-    mimeType VARCHAR(100) NOT NULL,
-    sizeBytes BIGINT NOT NULL,
-    storageUrl VARCHAR(255) NOT NULL,
-    purpose VARCHAR(50) NOT NULL,
-    isPublic BOOLEAN NOT NULL DEFAULT FALSE,
-    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),         -- ユニークなファイルアップロードID
+    uploaderId UUID REFERENCES User(id) ON DELETE SET NULL, -- ファイルをアップロードしたユーザーのID
+    filename VARCHAR(255) NOT NULL,                         -- 保存システム上のファイル名
+    originalName VARCHAR(255) NOT NULL,                     -- ユーザーがアップロードした元のファイル名
+    mimeType VARCHAR(100) NOT NULL,                         -- ファイルのMIMEタイプ（例: "image/png"）
+    sizeBytes BIGINT NOT NULL,                              -- ファイルサイズ（バイト）
+    storageUrl VARCHAR(255) NOT NULL,                       -- ファイルへアクセスするためのURL
+    purpose VARCHAR(50) NOT NULL,                           -- ファイルの用途（AVATAR, CHAT_ATTACHMENT など）
+    isPublic BOOLEAN NOT NULL DEFAULT FALSE,                -- 誰でもアクセス可能な公開ファイルかどうかのフラグ
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP  -- アップロード日時
 );
 ```
 
 ### 4-22. DataExportRequest
 ```sql
 DataExportRequest (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    requestedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    processedAt TIMESTAMP,
-    fileUrl VARCHAR(255),
-    expiresAt TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),             -- ユニークなデータエクスポート要求ID
+    userId UUID NOT NULL REFERENCES User(id) ON DELETE CASCADE, -- 要求したユーザーのID
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',              -- 処理のステータス（PENDING, PROCESSING, READY など）
+    requestedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- ユーザーが要求を送信した日時
+    processedAt TIMESTAMP,                                      -- システムがデータ集計を完了した日時
+    fileUrl VARCHAR(255),                                       -- 抽出されたデータ(ZIP等)のダウンロードURL
+    expiresAt TIMESTAMP                                         -- ダウンロード可能期限（期限切れでファイルは削除）
 );
 ```
 
