@@ -4,8 +4,10 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression = require('compression');
+import { initializeVault } from './vault';
 
 async function bootstrap() {
+  await initializeVault();
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 

@@ -12,6 +12,7 @@ import { useConfig } from '../hooks/useConfig';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { useGameState } from '../hooks/useGameState';
+import { useAuth } from '../hooks/useAuth';
 
 /** Drop interval for a given level (min 80 ms) */
 const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
@@ -46,6 +47,8 @@ const TetrisGame = () => {
     piecesPlaced, setPiecesPlaced,
     attackLines, setAttackLines
   } = useGameState();
+
+  const { token } = useAuth();
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
@@ -287,7 +290,27 @@ const TetrisGame = () => {
          actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
        }, 0);
     }
-  }, [lockEvent, level]);
+  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setRecords, setPiecesPlaced, setOpponentStage, setMatchResult]);
+
+  // Sprint Record Submission Effect
+  useEffect(() => {
+    if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
+      if (token) {
+        fetch('http://localhost:3000/api/sprint', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            timeMs: finalTime,
+            lines: lines >= 40 ? lines : 40,
+            pieces: piecesPlaced
+          })
+        }).catch(err => console.error('Failed to save sprint record:', err));
+      }
+    }
+  }, [gameOver, finalTime, token]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

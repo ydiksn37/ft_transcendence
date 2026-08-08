@@ -19,6 +19,7 @@ import { AppService } from './app.service';
 import { JwtAuthGuard } from './auth/guards/auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
+import { SprintModule } from './sprint/sprint.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { Reflector } from '@nestjs/core';
     GameModule,
     TournamentModule,
     PublicApiModule,
+    SprintModule,
   ],
   controllers: [AppController],
   providers: [
