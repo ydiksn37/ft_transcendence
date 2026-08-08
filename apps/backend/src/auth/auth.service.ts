@@ -119,7 +119,6 @@ export class AuthService {
             avatarUrl: profile.avatarUrl,
             oauthProvider: profile.oauthProvider,
             oauthId: profile.oauthId,
-            isEmailVerified: true, // OAuthプロバイダー経由は検証済みとみなす
             stats: { create: {} },
             gameSettings: { create: {} },
           },

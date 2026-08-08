@@ -137,7 +137,6 @@ model User {
   oauthProvider    String? // "42"
   oauthId          String?
   twoFactorEnabled Boolean   @default(false)
-  isEmailVerified  Boolean   @default(false)
   deletedAt        DateTime? // ソフトデリート (GDPR)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

@@ -53,7 +53,6 @@ erDiagram
         string oauthProvider "nullable"
         string oauthId "nullable"
         bool twoFactorEnabled
-        bool isEmailVerified
         datetime deletedAt "nullable soft delete"
         datetime createdAt
         datetime updatedAt
@@ -515,7 +514,6 @@ User (
     oauthProvider VARCHAR(50),                                 -- OAuthプロバイダー名（例: "42"）
     oauthId VARCHAR(255),                                      -- OAuthプロバイダー側の一意のID
     twoFactorEnabled BOOLEAN NOT NULL DEFAULT FALSE,           -- 2段階認証が有効かどうかのフラグ
-    isEmailVerified BOOLEAN NOT NULL DEFAULT FALSE,            -- メールアドレスが確認済みかどうかのフラグ
     deletedAt TIMESTAMP,                                       -- 論理削除用タイムスタンプ（GDPR対応）
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,    -- レコード作成日時
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP     -- レコード更新日時
