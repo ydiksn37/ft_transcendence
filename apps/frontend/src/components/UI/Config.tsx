@@ -9,7 +9,7 @@ type ConfigProps = {
   setAppState: (state: 'MENU') => void;
 };
 
-export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, keyConfig, listeningAction, setListeningAction, setAppState }) => {
+export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, keyConfig, listeningAction, setListeningAction,}) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
       <h1>Configuration</h1>
@@ -64,12 +64,6 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, keyConfig, li
         </div>
       </div>
 
-      <button
-        onClick={() => setAppState('MENU')}
-        style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-      >
-        Back to Menu
-      </button>
     </div>
   );
 };

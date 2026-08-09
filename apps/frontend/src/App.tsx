@@ -7,7 +7,10 @@ import Chat from "@/pages/Chat"
 import Friends from "@/pages/Friends"
 import Profile from "@/pages/Profile"
 import BattleSetup from "@/pages/BattleSetup"
-import TetrisGame from "@/pages/TetrisGame"
+import JoinPage from "@/pages/JoinPage"
+import MenuPage from "@/pages/MenuPage"
+import LobbyPage from "@/pages/LobbyPage"
+import PlayPage from "@/pages/PlayPage"
 
 import { OAuthCallback } from "@/pages/OAuthCallback"
 
@@ -24,8 +27,12 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
       </Route>
 
-      {/* TOPページ（ゲーム） */}
-      <Route path="/" element={<TetrisGame />} />
+      {/* TOPページ（JOIN -> ゲーム） */}
+      <Route path="/" element={<JoinPage />} />
+      <Route path="/menu" element={<MenuPage />} />
+      <Route path="/lobby/:mode" element={<LobbyPage />} />
+      <Route path="/play/:mode" element={<PlayPage />} />
+      
       <Route path="/battle-setup" element={<BattleSetup />} />
       { /* <Route path="/battle" element={<Battle />} />   */}
 

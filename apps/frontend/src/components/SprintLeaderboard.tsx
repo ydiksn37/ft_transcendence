@@ -102,10 +102,10 @@ export const SprintLeaderboard = () => {
                       {entry.user?.username || 'Unknown'}
                     </td>
                   )}
-                  <td className="py-3 px-4 text-right font-bold text-neon-blue text-glow-sm">
+                  <td className="py-3 px-4 text-right font-bold text-neon-blue text-glow-sm tabular-nums">
                     {formatTime(entry.record.timeMs)}
                   </td>
-                  <td className="py-3 px-4 text-right text-gray-400">
+                  <td className="py-3 px-4 text-right text-gray-400 tabular-nums">
                     {pps}
                   </td>
                   <td className="py-3 px-4 text-right text-gray-500 text-sm">
