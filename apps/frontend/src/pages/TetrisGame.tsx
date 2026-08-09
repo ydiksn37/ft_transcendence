@@ -609,4 +609,4 @@ const TetrisGame = () => {
   );
 };
 
-export { TetrisGame };
+export default TetrisGame;
