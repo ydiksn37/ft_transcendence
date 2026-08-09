@@ -7,7 +7,7 @@ import { createStage, type Cell } from '../utils/gameHelpers';
 
 type UseMultiplayerProps = {
   appState: string;
-  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1') => void;
+  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS') => void;
   setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
   stageRef: MutableRefObject<Cell[][]>;
@@ -65,20 +65,73 @@ export const useMultiplayer = ({
     setGameOver(false);
     setMatchResult(null);
 
-    const newSocket = io('http://localhost:3000');
+    const newSocket = io('/');
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
       newSocket.emit('join_matchmaking');
     });
 
-    newSocket.on('match_found', (data: { playerNum: number; seed: number }) => {
+    newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
       setRandomSeed(data.seed);
       setTimeout(() => startGame('ONLINE_1V1'), 100);
     });
 
     newSocket.on('waiting_for_match', () => {
       setIsWaiting(true);
+    });
+
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+      setOpponentStage(data.stage);
+      setOpponentScore(data.score);
+    });
+
+    newSocket.on('receive_garbage', (data: { lines: number }) => {
+      pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
+      setPendingGarbage(pendingGarbageRef.current);
+    });
+
+    newSocket.on('opponent_game_over', () => {
+      setMatchResult('WIN');
+      setGameOver(true);
+      setDropTime(null);
+    });
+
+    newSocket.on('opponent_disconnected', () => {
+      setMatchResult('WIN');
+      setGameOver(true);
+      setDropTime(null);
+    });
+  }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
+
+  const setupCustomRoomConnection = useCallback(() => {
+    setAppState('CUSTOM_ROOMS');
+    setGameMode('ONLINE_1V1');
+    setIsWaiting(true);
+    setOpponentStage(createStage(10));
+    setOpponentScore(0);
+    setPendingGarbage([]);
+    pendingGarbageRef.current = [];
+
+    const newStage = createStage(10);
+    setStage(newStage);
+    stageRef.current = newStage;
+    resetPlayer(10);
+    resetHold();
+    setScore(0);
+    setLevel(1);
+    setLines(0);
+    setGameOver(false);
+    setMatchResult(null);
+
+    const newSocket = io('/');
+    setSocket(newSocket);
+
+    newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
+      setRandomSeed(data.seed);
+      setAppState('ONLINE_1V1');
+      setIsWaiting(false);
+      setTimeout(() => startGame('ONLINE_1V1'), 100);
     });
 
     newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
@@ -122,5 +175,5 @@ export const useMultiplayer = ({
     }
   }, [gameOver, socket, appState, matchResult]);
 
-  return { joinOnline };
+  return { joinOnline, setupCustomRoomConnection };
 };

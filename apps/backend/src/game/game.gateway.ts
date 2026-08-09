@@ -25,6 +25,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private rooms = new Map<string, GameInstance>();
   private clientRoom = new Map<string, string>(); // socketId -> roomId
   private matchmakingQueue: Socket[] = [];
+  
+  // Custom Rooms
+  private customRooms = new Map<string, {
+    roomId: string;
+    name: string;
+    ownerId: string;
+    ownerSocket: Socket;
+  }>();
 
   constructor(private readonly gameService: GameService) {}
 
@@ -49,6 +57,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
       this.clientRoom.delete(client.id);
     }
+
+    // カスタムルームのオーナーだった場合ルーム削除
+    for (const [cRoomId, room] of this.customRooms.entries()) {
+      if (room.ownerSocket.id === client.id) {
+        this.customRooms.delete(cRoomId);
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      }
+    }
+  }
+
+  private getCustomRoomsList() {
+    return Array.from(this.customRooms.values()).map(r => ({
+      roomId: r.roomId,
+      name: r.name,
+      ownerId: r.ownerId
+    }));
   }
 
   // ── マッチメイキング ──────────────────────────────────────
@@ -96,6 +120,78 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleLeaveQueue(@ConnectedSocket() client: Socket) {
     this.matchmakingQueue = this.matchmakingQueue.filter((s) => s.id !== client.id);
     client.emit('queue_left');
+  }
+
+  // ── カスタムルーム (マルチプレイ) ──────────────────────────
+  @SubscribeMessage('game:create_custom_room')
+  handleCreateCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { name?: string }) {
+    // 既存の自分のルームがあれば削除（1人1ルーム）
+    for (const [rId, room] of this.customRooms.entries()) {
+      if (room.ownerSocket.id === client.id) {
+        this.customRooms.delete(rId);
+      }
+    }
+
+    const roomId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const roomName = data?.name?.trim() || `Room ${roomId.slice(-4)}`;
+    
+    this.customRooms.set(roomId, {
+      roomId,
+      name: roomName,
+      ownerId: (client.data?.userId as string) || client.id,
+      ownerSocket: client
+    });
+
+    client.join(roomId);
+    client.emit('custom_room_created', { roomId, name: roomName });
+    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+  }
+
+  @SubscribeMessage('game:get_custom_rooms')
+  handleGetCustomRooms(@ConnectedSocket() client: Socket) {
+    client.emit('custom_rooms_updated', this.getCustomRoomsList());
+  }
+
+  @SubscribeMessage('game:join_custom_room')
+  handleJoinCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { roomId: string }) {
+    const room = this.customRooms.get(data.roomId);
+    if (!room) {
+      client.emit('error', { message: 'ルームが見つかりません' });
+      return;
+    }
+
+    if (room.ownerSocket.id === client.id) {
+      client.emit('error', { message: '自分のルームには参加できません' });
+      return;
+    }
+
+    // マッチ成立
+    const opponent = room.ownerSocket;
+    const seed = Math.floor(Math.random() * 2147483647);
+    const instance = new GameInstance(room.roomId, this.server, seed);
+
+    const userId1 = (opponent.data?.userId as string) ?? null;
+    const userId2 = (client.data?.userId as string) ?? null;
+
+    instance.addPlayer(opponent.id, userId1);
+    instance.addPlayer(client.id, userId2);
+
+    client.join(room.roomId);
+    this.clientRoom.set(opponent.id, room.roomId);
+    this.clientRoom.set(client.id, room.roomId);
+    this.rooms.set(room.roomId, instance);
+
+    this.customRooms.delete(room.roomId); // 募集終了
+    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+
+    this.server.to(room.roomId).emit(ServerEvent.MATCH_FOUND, {
+      roomId: room.roomId,
+      seed,
+      player1: opponent.id,
+      player2: client.id,
+    });
+
+    setTimeout(() => instance.start(), 3000); // 3秒後にスタート
   }
 
   // ── AI 対戦開始 ───────────────────────────────────────────

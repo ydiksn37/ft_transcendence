@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom"
 
+import AuthCallback from "@/pages/AuthCallback"
 import Login from "@/pages/Login"
 import { AppShell } from "@/components/AppShell"
 import  Dashboard  from "@/pages/Dashboard"
@@ -13,6 +14,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/dashboard" replace />} />

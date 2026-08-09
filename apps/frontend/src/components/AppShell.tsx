@@ -14,11 +14,14 @@ const NAV: {id: NavPage; label: string}[] = [
 ]
 
 
+import { useAuth } from "../hooks/useAuth"
+
 export function AppShell() {
+	const { user } = useAuth();
 	// TODO: DBからデータを取得するように書き換える
 	// 印象は後回しにする。現在は仮の適当な値を取得
 	const preset = getAvatarPreset(0);
-	const username = "GUEST";
+	const username = user?.displayName || user?.username || "GUEST";
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-surface text-white">

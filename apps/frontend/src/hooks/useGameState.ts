@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { Cell } from '../utils/gameHelpers';
 
 export const useGameState = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1'>('MENU');
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>('MENU');
   const appStateRef = useRef(appState);
   useEffect(() => { appStateRef.current = appState; }, [appState]);
 
@@ -22,10 +22,7 @@ export const useGameState = () => {
   const gameModeRef = useRef(gameMode);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
-  const [records, setRecords] = useState<number[]>(() => {
-    const saved = localStorage.getItem('tetris40LinesRecords');
-    return saved ? JSON.parse(saved) : [];
-  });
+
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -62,7 +59,6 @@ export const useGameState = () => {
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, setGameMode, gameModeRef,
-    records, setRecords,
     startTime, setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
     finalTime, setFinalTime,

@@ -6,6 +6,7 @@ import { createStage, checkCollision, calculateGhostY, type Cell } from '../util
 import { resetTetrominoBag, TETROMINOS, setRandomSeed } from '../utils/tetrominos';
 import { Menu } from '../components/UI/Menu';
 import { Records } from '../components/UI/Records';
+import { CustomRoomsList } from '../components/UI/CustomRoomsList';
 import { Config } from '../components/UI/Config';
 import { TetrisUI } from '../components/UI/TetrisUI';
 import { useConfig } from '../hooks/useConfig';
@@ -14,8 +15,10 @@ import { useMultiplayer } from '../hooks/useMultiplayer';
 import { useGameState } from '../hooks/useGameState';
 import { useAuth } from '../hooks/useAuth';
 
-/** Drop interval for a given level (min 80 ms) */
-const levelDropTime = (level: number) => Math.max(80, 1000 - (level - 1) * 90);
+const levelDropTime = (level: number) => {
+  if (level >= 15) return 0; // 20G (Instant drop)
+  return Math.pow(0.8 - ((level - 1) * 0.007), level - 1) * 1000;
+};
 
 const formatTime = (ms: number) => {
   const minutes = Math.floor(ms / 60000);
@@ -34,7 +37,6 @@ const TetrisGame = () => {
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, setGameMode, gameModeRef,
-    records, setRecords,
     setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
     finalTime, setFinalTime,
@@ -84,6 +86,7 @@ const TetrisGame = () => {
   // ── Score / Level / Speed ───────────────────────────────────────────────
   const b2bRef = useRef(false);
   const comboRef = useRef(-1);
+  const levelPointsRef = useRef(0);
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionText, setActionText] = useState<string | null>(null);
 
@@ -158,7 +161,37 @@ const TetrisGame = () => {
     if (totalScore > 0) {
        setScore(prev => prev + totalScore);
     }
+
+    // Official Variable Goal Leveling
+    let levelPts = 0;
+    if (tSpinType === 't-spin') {
+      if (lines === 0) levelPts = 2;
+      else if (lines === 1) levelPts = 2;
+      else if (lines === 2) levelPts = 4;
+      else if (lines === 3) levelPts = 6;
+    } else if (tSpinType === 'mini-t-spin') {
+      levelPts = 1;
+    } else {
+      if (lines === 1) levelPts = 1;
+      else if (lines === 2) levelPts = 3;
+      else if (lines === 3) levelPts = 5;
+      else if (lines === 4) levelPts = 8;
+    }
+    if (isB2B && lines > 0) {
+      levelPts = Math.floor(levelPts * 1.5);
+    }
+    levelPointsRef.current += levelPts;
+
+    const calculatedLevel = Math.max(1, Math.floor((1 + Math.sqrt(1 + 8 * (levelPointsRef.current / 5))) / 2));
     
+    setLevel(prevLevel => {
+       if (calculatedLevel > prevLevel) {
+          setDropTime(levelDropTime(calculatedLevel));
+          return calculatedLevel;
+       }
+       return prevLevel;
+    });
+
     if (lines > 0) {
        setLines(prev => {
           const newLines = prev + lines;
@@ -168,18 +201,7 @@ const TetrisGame = () => {
              setFinalTime(timeTaken);
              setGameOver(true);
              setDropTime(null);
-             
-             setRecords(prevRecs => {
-               const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
-               localStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
-               return newRecs;
-             });
-             return newLines;
           }
-
-          const newLevel = Math.floor(newLines / 10) + 1;
-          setLevel(newLevel);
-          setDropTime(levelDropTime(newLevel));
           return newLines;
        });
     }
@@ -290,13 +312,13 @@ const TetrisGame = () => {
          actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
        }, 0);
     }
-  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setRecords, setPiecesPlaced, setOpponentStage, setMatchResult]);
+  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
 
   // Sprint Record Submission Effect
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
       if (token) {
-        fetch('http://localhost:3000/api/sprint', {
+        fetch('/api/sprint', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -304,7 +326,7 @@ const TetrisGame = () => {
           },
           body: JSON.stringify({
             timeMs: finalTime,
-            lines: lines >= 40 ? lines : 40,
+            lines: 40,
             pieces: piecesPlaced
           })
         }).catch(err => console.error('Failed to save sprint record:', err));
@@ -511,6 +533,7 @@ const TetrisGame = () => {
     setAttackLines(0);
     comboRef.current = -1;
     b2bRef.current = false;
+    levelPointsRef.current = 0;
     setActionText(null);
     if (nextMode !== 'ONLINE_1V1') {
       setAppState('PLAYING');
@@ -533,7 +556,7 @@ const TetrisGame = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
-  const { joinOnline } = useMultiplayer({
+  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, socket, setSocket, isWaiting, setIsWaiting,
@@ -554,11 +577,15 @@ const TetrisGame = () => {
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
   if (appState === 'MENU') {
-    return <Menu startGame={startGame} joinOnline={joinOnline} setAppState={setAppState} />;
+    return <Menu startGame={startGame} joinOnline={joinOnline} openCustomRooms={setupCustomRoomConnection} setAppState={setAppState} />;
   }
 
   if (appState === 'RECORDS') {
-    return <Records records={records} setAppState={setAppState} />;
+    return <Records setAppState={setAppState} />;
+  }
+
+  if (appState === 'CUSTOM_ROOMS') {
+    return <CustomRoomsList socket={socket} setAppState={setAppState} />;
   }
 
   if (appState === 'CONFIG') {
@@ -603,7 +630,6 @@ const TetrisGame = () => {
       setAppState={setAppState}
       joinOnline={joinOnline}
       formatTime={formatTime}
-      records={records}
       createStage={createStage}
     />
   );

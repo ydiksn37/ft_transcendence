@@ -34,7 +34,6 @@ type TetrisUIProps = {
   setAppState: (s: 'MENU') => void;
   joinOnline: () => void;
   formatTime: (ms: number) => string;
-  records: number[];
   createStage: (width?: number) => Cell[][];
 };
 
@@ -42,7 +41,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  setAppState, joinOnline, formatTime, records, createStage
+  setAppState, joinOnline, formatTime, createStage
 }) => {
   const renderHoldBox = () => {
     const boxStyle = {
@@ -108,11 +107,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           {gameMode === '40_LINES' && finalTime && (
             <div>
               <h3>Time: {formatTime(finalTime)}</h3>
-              {records.indexOf(finalTime) !== -1 && records.indexOf(finalTime) < 10 && (
-                <h3 style={{ color: 'gold', animation: 'pop 0.5s ease-out' }}>
-                  New Record! Rank: {records.indexOf(finalTime) + 1}
-                </h3>
-              )}
             </div>
           )}
           {gameMode === 'ONLINE_1V1' && matchResult && (

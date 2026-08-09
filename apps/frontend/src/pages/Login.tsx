@@ -29,7 +29,16 @@ export default function Login() {
 						onKeyDown={(e) => {if (e.key === "Enter") handleLogin()}}
 					/>
 					<NeonBtn color="cyan" variant="outline" size="lg" className="w-full" onClick={handleLogin}>
-						JACK IN
+						GUEST LOGIN
+					</NeonBtn>
+					<NeonBtn 
+						color="green" 
+						variant="solid" 
+						size="lg" 
+						className="w-full mt-4" 
+						onClick={() => window.location.href = '/api/auth/42'}
+					>
+						LOGIN WITH 42
 					</NeonBtn>
 				</div>
 			</Panel>

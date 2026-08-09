@@ -11,7 +11,7 @@ export interface RoomHeaderProps {
 export function RoomHeader({ room }: RoomHeaderProps) {
 	const peer = room.peer;
 	// TODO: アバタープリセットの取得方法
-	const preset = peer ? getAvatarPreset(avatarIdFromUserId(peer.id)): null;
+	
 
 
 	{/* TODO: GLOBAL以外のチャンネル対応 */}
