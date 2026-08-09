@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { Send } from "lucide-react";
 
-import { NeonInput } from "../UI/NeonInput";
+
 
 export interface MessageComposerProps {
 	onSend: (content: string) => void
@@ -23,7 +23,8 @@ export function MessageComposer({ onSend, placeholder = "Message ...", disabled 
 
 	return (
 		<div className="flex items-stretch gap-2">
-			<NeonInput
+			<input
+				type="text"
 				value={draft}
 				onChange={(e) => setDraft(e.target.value)}
 				onKeyDown={(e) => {
@@ -35,7 +36,7 @@ export function MessageComposer({ onSend, placeholder = "Message ...", disabled 
 				placeholder={placeholder}
 				disabled={disabled}
 				aria-label="メッセージを入力"
-				className="flex-1 font-mono"
+				className="flex-1 font-mono w-full rounded-md border border-zinc-700 bg-zinc-800/50 px-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
 			/>
 
 			<button
