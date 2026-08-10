@@ -7,12 +7,15 @@ export type LockEvent = {
   lines: number;
   tSpinType: 'none' | 't-spin' | 'mini-t-spin';
   perfectClear: boolean;
+  lockedX: number;
+  lockedY: number;
 };
 
 export const useStage = (
   player: Player,
   resetPlayer: (width?: number) => void,
-  checkGameOver: (stage: Cell[][]) => boolean
+  checkGameOver: (stage: Cell[][]) => boolean,
+  disableSweep: boolean = false
 ) => {
   const [stage, setStage] = useState<Cell[][]>(createStage());
   const [lockEvent, setLockEvent] = useState<LockEvent | null>(null);
@@ -54,7 +57,7 @@ export const useStage = (
           }
         });
       });
-      const { swept, cleared } = sweepRows(newStage);
+      const { swept, cleared } = disableSweep ? { swept: newStage, cleared: 0 } : sweepRows(newStage);
 
       let tSpinType: 'none' | 't-spin' | 'mini-t-spin' = 'none';
       if (
@@ -111,7 +114,9 @@ export const useStage = (
         id: lockEventIdRef.current,
         lines: cleared,
         tSpinType,
-        perfectClear
+        perfectClear,
+        lockedX: player.pos.x,
+        lockedY: player.pos.y
       });
       
       if (!checkGameOver(swept)) {

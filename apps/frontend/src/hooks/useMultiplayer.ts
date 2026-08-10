@@ -7,8 +7,6 @@ import { createStage, type Cell } from '../utils/gameHelpers';
 
 type UseMultiplayerProps = {
   appState: string;
-  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1') => void;
-  setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
   stageRef: MutableRefObject<Cell[][]>;
   resetPlayer: (w: number) => void;
@@ -35,7 +33,7 @@ type UseMultiplayerProps = {
 };
 
 export const useMultiplayer = ({
-  appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  appState, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
   stage, score,
   socket, setSocket,
@@ -46,8 +44,10 @@ export const useMultiplayer = ({
 }: UseMultiplayerProps) => {
 
   const joinOnline = useCallback(() => {
-    setAppState('ONLINE_1V1');
-    setGameMode('ONLINE_1V1');
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
     setIsWaiting(true);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
@@ -102,7 +102,7 @@ export const useMultiplayer = ({
       setGameOver(true);
       setDropTime(null);
     });
-  }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
+  }, [setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
 
   useEffect(() => {
     return () => {

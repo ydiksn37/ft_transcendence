@@ -5,6 +5,7 @@ import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
 import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
+import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 type TetrisUIProps = {
@@ -31,7 +32,9 @@ type TetrisUIProps = {
   socketRef: React.MutableRefObject<Socket | null>;
   setSocket: (s: Socket | null) => void;
   setIsWaiting: (w: boolean) => void;
-  setDropTime: React.Dispatch<React.SetStateAction<number | null>>;
+  setDropTime: (t: number | null) => void;
+  setAppState: (s: 'MENU' | 'CONFIG' | 'RECORDS') => void;
+  joinOnline: () => void;
   formatTime: (ms: number) => string;
   records: number[];
   createStage: (width?: number) => Cell[][];
@@ -42,9 +45,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, records, createStage, appState
+  setAppState, joinOnline, formatTime, records, createStage, appState
 }) => {
   const [scale, setScale] = useState(1);
+  const { token, user, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,21 +110,41 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={{ width: '80px', height: '80px', backgroundColor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0', border: '4px solid #fff' }} /> : renderHoldBox()}
+          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={{ width: '80px', height: '80px', backgroundColor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '2px solid #555' }} /> : renderHoldBox()}
           {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
           
           {(appState === 'PLAYING' || appState === 'ONLINE_1V1') && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px', width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '30px', width: '100%' }}>
               <button
                 onClick={() => {
                   if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
-                  setIsWaiting(false); setDropTime(null); 
-                  navigate(`/lobby/${gameMode}`);
+                  setIsWaiting(false); setDropTime(null); setAppState('MENU');
                 }}
-                style={{ padding: '12px 16px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#e53935', color: '#fff', border: '3px solid #8e0000', borderRadius: '0', width: '100%', fontFamily: 'inherit', textShadow: '2px 2px 0px #000' }}
+                style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#e53935', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}
               >
-                QUIT
+                Quit
               </button>
+              <button 
+                onClick={() => setAppState('CONFIG')} 
+                style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}
+              >
+                Config
+              </button>
+            </div>
+          )}
+
+          {appState === 'MENU' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '30px', width: '100%' }}>
+              <button onClick={() => setAppState('CONFIG')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Config</button>
+              <button onClick={() => setAppState('RECORDS')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#9b59b6', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Records</button>
+              {token && user ? (
+                <>
+                  <button onClick={() => navigate('/dashboard')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#00bcd4', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Dashboard</button>
+                  <button onClick={() => { logout(); navigate('/'); }} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#333', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Logout</button>
+                </>
+              ) : (
+                <button onClick={() => navigate('/login')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#e91e63', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Login</button>
+              )}
             </div>
           )}
         </div>
@@ -141,6 +165,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             />
           </Stage>
 
+          {appState === 'MENU' && (
+            <>
+              <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
+                 <h2 style={{ color: 'white', fontSize: '32px', letterSpacing: '4px', textShadow: '3px 3px 6px #000', backgroundColor: 'rgba(0,0,0,0.5)', padding: '10px 20px', borderRadius: '8px' }}>DROP TO SELECT MODE</h2>
+              </div>
+              <div style={{ position: 'absolute', bottom: '150px', left: '15px', width: '990px', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
+                <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>MARATHON</div>
+                <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>40 LINES</div>
+                <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>4-WIDE</div>
+                <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>ONLINE 1v1</div>
+              </div>
+            </>
+          )}
 
           {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
             <div style={{
@@ -227,7 +264,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                        socketRef.current.disconnect();
                        setSocket(null);
                      }
-                     navigate('/lobby/ONLINE_1V1');
+                     joinOnline();
                    }}
                    style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
                  >

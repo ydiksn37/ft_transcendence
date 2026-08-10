@@ -26,14 +26,14 @@ type UseKeyboardControlsProps = {
   setSocket: (s: Socket | null) => void;
   setIsWaiting: (w: boolean) => void;
   setDropTime: (t: number | null) => void;
-  setAppState: (s: 'MENU') => void;
+  quitGame: () => void;
 };
 
 export const useKeyboardControls = ({
   player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
   countdownRef, listeningActionRef, setKeyConfig, setListeningAction,
   movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-  socketRef, setSocket, setIsWaiting, setDropTime, setAppState
+  socketRef, setSocket, setIsWaiting, setDropTime, quitGame
 }: UseKeyboardControlsProps) => {
   const heldKeys = useRef<Set<string>>(new Set());
   const horizKeys = useRef<string[]>([]);
@@ -127,14 +127,14 @@ export const useKeyboardControls = ({
         return;
       }
 
-      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1') return;
+      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') return;
 
       if (Object.values(conf).includes(code)) {
         e.preventDefault();
       }
 
       if (code === conf.restart) {
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1') startGame();
+        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') startGame();
         return;
       }
 
@@ -146,7 +146,7 @@ export const useKeyboardControls = ({
           }
           setIsWaiting(false);
           setDropTime(null);
-          setAppState('MENU');
+          quitGame();
         }
         return;
       }
@@ -189,7 +189,7 @@ export const useKeyboardControls = ({
           break;
       }
     },
-    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, setAppState, countdownRef]
+    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, quitGame, countdownRef]
   );
 
   const handleKeyUp = useCallback(

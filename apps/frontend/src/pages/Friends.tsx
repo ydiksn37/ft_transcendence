@@ -4,7 +4,6 @@ import { useState } from "react";
 import { getFriends, getPendingRequests, getProfile } from "@/lib/mock"
 
 import { PageHeader } from "@/components/UI/PageHeader";
-import { NeonInput } from "@/components/UI/NeonInput";
 import { FriendList } from "@/components/friends/FriendList";
 import { AddFriend } from "@/components/friends/AddFriend";
 import { PendingRequest } from "@/components/friends/PendingRequest";
@@ -36,10 +35,12 @@ export default function Friends() {
 				{/* 左カラム */}
 				<div className="min-w-0 [flex:1_1_420px]">
 					<div className="mb-3.5">
-						<NeonInput
+						<input
+							type="text"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 							placeholder="SEARCH FRIENDS..."
+							className="w-full rounded-md border border-zinc-700 bg-zinc-800/50 px-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
 						/>
 					</div>
 					<FriendList friends={filtered} onSelect={(f) => setSelectedId(f.id)} />
