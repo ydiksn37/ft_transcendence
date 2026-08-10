@@ -47,9 +47,11 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
           g.endFill();
         }
       }
-
-      g.lineStyle(1, 0x333333, 1);
-      g.drawRect(0, 0, size, size);
+      
+      if (isFilled) {
+        g.lineStyle(0.7, 0x000000, isGhost ? 0.15 : 0.25);
+        g.drawRect(0, 0, size, size);
+      }
     },
     [hexColor, size, isFilled, isGhost]
   );
