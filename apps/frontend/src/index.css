@@ -265,3 +265,19 @@
   from {background-position: 0 0;}
   to {background-position: 0 40px;}
 }
+
+@keyframes glitch {
+  0%, 87%, 100% {
+    transform: translate(0);
+    text-shadow: 0 0 20px #00f5ff, 0 0 40px rgba(0,245,255,0.25);
+  }
+  86% { color: #00f5ff }
+  88% { transform: translate(-3px, 1px); color: #ff00aa; text-shadow: 3px 0 #39ff14, -3px 0 #ff00aa; }
+  90% { transform: translate(3px, -2px); color: #39ff14; text-shadow: -3px 0 #ff00aa; }
+  92% { transform: translate(-1px, 1px); color: #00f5ff; text-shadow: 0 0 20px #00f5ff; }
+}
+
+@keyframes scanline {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
