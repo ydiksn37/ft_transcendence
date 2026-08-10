@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Config } from '../components/UI/Config';
 import { Records } from '../components/UI/Records';
@@ -14,6 +14,17 @@ export default function LobbyPage() {
   const [startLevel, setStartLevel] = useState(1);
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction } = useConfig();
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Enter' && mode !== 'CONFIG') {
+        navigate(`/play/${mode}?level=${startLevel}`);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, startLevel, navigate]);
+
   // Load records directly here just for viewing
   const records = JSON.parse(localStorage.getItem('tetris40LinesRecords') || '[]');
 
@@ -21,9 +32,9 @@ export default function LobbyPage() {
     switch (mode) {
       case 'MARATHON': return 'MARATHON (Endless Survival)';
       case '40_LINES': return '40 LINES (Time Attack)';
-      case '4_WIDE': return '4-WIDE (Practice)';
-      case 'ONLINE_1V1': return 'ONLINE 1v1 (Versus Battle)';
-      case 'CONFIG': return 'CONFIG (Global Settings)';
+      case '4_WIDE': return '4-WIDE';
+      case 'ONLINE_1V1': return 'ONLINE 1v1';
+      case 'CONFIG': return 'CONFIG';
       default: return 'UNKNOWN MODE';
     }
   };
@@ -76,7 +87,7 @@ export default function LobbyPage() {
           
           {mode === '40_LINES' && (
             <div className="panel records-panel">
-              <Records records={records} setAppState={() => {}} />
+              <Records records={records} />
             </div>
           )}
         </div>

@@ -40,14 +40,14 @@ export function getCurrentUser(): UserProfile {
 import type { GameRecordView } from "@/lib/types"
 
 export const MOCK_GAMES: GameRecordView[] = [
-	{ id: "a1b2c3d4-0001-4000-8000-000000000001", date: "2077-07-18", mode: "ONLINE_1V1", score: 31500, level: 11, lines: 62, result: "WIN"  },
-	{ id: "a1b2c3d4-0002-4000-8000-000000000002", date: "2077-07-18", mode: "MARATHON",   score: 24800, level: 8,  lines: 48, result: null   },
-	{ id: "a1b2c3d4-0003-4000-8000-000000000003", date: "2077-07-17", mode: "40_LINES",   score: 12400, level: 5,  lines: 40, result: null   },
-	{ id: "a1b2c3d4-0004-4000-8000-000000000004", date: "2077-07-17", mode: "ONLINE_1V1", score: 9400,  level: 4,  lines: 18, result: "LOSE" },
-	{ id: "a1b2c3d4-0005-4000-8000-000000000005", date: "2077-07-16", mode: "4_WIDE",     score: 6800,  level: 3,  lines: 22, result: null   },
-	{ id: "a1b2c3d4-0006-4000-8000-000000000006", date: "2077-07-16", mode: "ONLINE_1V1", score: 22100, level: 9,  lines: 44, result: "WIN"  },
-	{ id: "a1b2c3d4-0007-4000-8000-000000000007", date: "2077-07-15", mode: "40_LINES",   score: 11900, level: 5,  lines: 40, result: null   },
-	{ id: "a1b2c3d4-0008-4000-8000-000000000008", date: "2077-07-15", mode: "ONLINE_1V1", score: 7200,  level: 3,  lines: 14, result: "LOSE" },
+	{ id: "a1b2c3d4-0001-4000-8000-000000000001", date: "2077-07-18", mode: "ONLINE_1V1", apm: 92.4, pps: 2.31, lines: 62, result: "WIN"  },
+	{ id: "a1b2c3d4-0002-4000-8000-000000000002", date: "2077-07-18", mode: "MARATHON",   apm: 85.0, pps: 1.95, lines: 48, result: null   },
+	{ id: "a1b2c3d4-0003-4000-8000-000000000003", date: "2077-07-17", mode: "40_LINES",   apm: 110.5, pps: 2.85, lines: 40, result: null   },
+	{ id: "a1b2c3d4-0004-4000-8000-000000000004", date: "2077-07-17", mode: "ONLINE_1V1", apm: 65.2, pps: 1.45, lines: 18, result: "LOSE" },
+	{ id: "a1b2c3d4-0005-4000-8000-000000000005", date: "2077-07-16", mode: "4_WIDE",     apm: 124.0, pps: 3.10, lines: 22, result: null   },
+	{ id: "a1b2c3d4-0006-4000-8000-000000000006", date: "2077-07-16", mode: "ONLINE_1V1", apm: 78.9, pps: 1.88, lines: 44, result: "WIN"  },
+	{ id: "a1b2c3d4-0007-4000-8000-000000000007", date: "2077-07-15", mode: "40_LINES",   apm: 105.2, pps: 2.70, lines: 40, result: null   },
+	{ id: "a1b2c3d4-0008-4000-8000-000000000008", date: "2077-07-15", mode: "ONLINE_1V1", apm: 55.4, pps: 1.25, lines: 14, result: "LOSE" },
 ]
 
 export function getGameHistory(): GameRecordView[] {

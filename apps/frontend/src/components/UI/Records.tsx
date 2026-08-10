@@ -2,7 +2,6 @@ import React from 'react';
 
 type RecordsProps = {
   records: number[];
-  setAppState: (state: 'MENU') => void;
 };
 
 const formatTime = (ms: number) => {
@@ -12,7 +11,7 @@ const formatTime = (ms: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
-export const Records: React.FC<RecordsProps> = ({ records, setAppState }) => {
+export const Records: React.FC<RecordsProps> = ({ records }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
       <h1>40 Lines Top 10</h1>
@@ -24,12 +23,6 @@ export const Records: React.FC<RecordsProps> = ({ records, setAppState }) => {
           </div>
         ))}
       </div>
-      <button
-        onClick={() => setAppState('MENU')}
-        style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-      >
-        Back to Menu
-      </button>
     </div>
   );
 };

@@ -133,7 +133,7 @@ export const useKeyboardControls = ({
         e.preventDefault();
       }
 
-      if (code === conf.restart) {
+      if (code === conf.restart || code === 'Enter') {
         if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') startGame();
         return;
       }

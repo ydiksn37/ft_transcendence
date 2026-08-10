@@ -21,11 +21,12 @@ export default function App() {
       <Route path="/auth/callback" element={<OAuthCallback />} />
 
       <Route element={<AppShell />}>
-        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/friends" element={<Friends />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
+
+      <Route path="/dashboard" element={<Dashboard />} />
 
       {/* TOPページ（JOIN -> ゲーム） */}
       <Route path="/" element={<JoinPage />} />

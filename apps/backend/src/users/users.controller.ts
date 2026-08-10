@@ -120,6 +120,23 @@ export class UsersController {
     return this.usersService.unblockUser(user.id, id);
   }
 
+  @Get('me/stats')
+  @ApiOperation({ summary: '自分のゲーム統計取得（APM/PPS/勝率等）' })
+  getMyStats(@CurrentUser() user: any) {
+    return this.usersService.getUserStats(user.id);
+  }
+
+  @Get('me/history')
+  @ApiOperation({ summary: '自分の対戦履歴取得' })
+  getMyHistory(
+    @CurrentUser() user: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('mode') mode?: string,
+  ) {
+    return this.usersService.getGameHistory(user.id, page, limit, mode);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'ユーザープロフィール取得' })
   getUserById(@Param('id') id: string) {
@@ -142,6 +159,7 @@ export class UsersController {
   ) {
     return this.usersService.getGameHistory(id, page, limit, mode);
   }
+
 }
 
 // ── 管理者専用コントローラー ──────────────────────────────────
