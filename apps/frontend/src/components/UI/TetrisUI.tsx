@@ -62,13 +62,20 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [gameMode]);
 
-  const renderHoldBox = () => {
-    const boxStyle = {
-      width: '80px', height: '80px', backgroundColor: '#333',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      borderRadius: '8px', border: '2px solid #555'
-    };
+  const neonSurface: React.CSSProperties = {
+    backgroundColor: 'color-mix(in srgb, var(--color-neon-purple) 10%, #06000f)',
+    border: '1px solid rgba(0,245,255,0.14)',
+    borderRadius: '4px',
+  }
 
+  const boxStyle: React.CSSProperties = {
+  ...neonSurface,
+    width: '80px', height: '80px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: 'inset 0 0 12px rgba(0,0,0,0.6)',
+  }
+
+  const renderHoldBox = () => {
     if (!holdInfo.tetromino) {
       return <div style={boxStyle}></div>;
     }
@@ -106,7 +113,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={{ width: '80px', height: '80px', backgroundColor: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0', border: '4px solid #fff' }} /> : renderHoldBox()}
+          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={boxStyle} /> : renderHoldBox()}
           {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
           
           {(appState === 'PLAYING' || appState === 'ONLINE_1V1') && (
@@ -281,17 +288,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {(gameMode === 'ONLINE_1V1' && isWaiting) ? (
                 [1,2,3,4,5].map(i => (
-                  <div key={i} style={{ width: '80px', height: '80px', backgroundColor: '#333', borderRadius: '8px', border: '2px solid #555' }} />
+                  <div key={i} style={boxStyle} />
                 ))
               ) : (
                 nextPieceKeys?.map((key, idx) => {
                   const shape = TETROMINOS[key as keyof typeof TETROMINOS].shape;
                   const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
-                  const boxStyle = {
-                    width: '80px', height: '80px', backgroundColor: '#333',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '8px', border: '2px solid #555'
-                  };
                   return (
                     <div key={idx} style={boxStyle}>
                       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '1px' }}>
@@ -305,9 +307,31 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               )}
             </div>
           </div>
-          <div><strong>SCORE</strong><br />{score}</div>
-          <div><strong>LEVEL</strong><br />{level}</div>
-          <div><strong>LINES</strong><br />{lines}</div>
+          
+          <div style={{
+            ...neonSurface,
+            padding: '12px 16px',
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            {[
+              { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
+              { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
+              { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
+            ].map((s) => (
+              <div key={s.label}>
+                <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)' }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums',}}>
+                  {s.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+
         </div>
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
