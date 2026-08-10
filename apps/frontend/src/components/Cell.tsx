@@ -37,9 +37,19 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
       if (isFilled) {
         if (isGhost) {
           // Ghost piece: same color but semi-transparent (alpha 0.3)
-          g.beginFill(hexColor, 0.3);
+          g.beginFill(hexColor, 0.2);
           g.drawRect(0, 0, size, size);
           g.endFill();
+
+          g.lineStyle(6, hexColor, 0.06);
+          g.drawRect(3, 3, size - 6, size - 6);
+          g.lineStyle(4, hexColor, 0.10);
+          g.drawRect(2, 2, size - 4, size - 4);
+          g.lineStyle(2, hexColor, 0.16);
+          g.drawRect(1, 1, size - 2, size - 2);
+
+          g.lineStyle(1, hexColor, 0.75);
+          g.drawRect(0, 0, size, size);
         } else {
           // Normal / merged piece: solid
           g.beginFill(hexColor);
