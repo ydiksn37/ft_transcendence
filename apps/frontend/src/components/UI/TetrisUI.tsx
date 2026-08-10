@@ -6,6 +6,7 @@ import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../ui/button';
 
 type TetrisUIProps = {
   stage: Cell[][];
@@ -118,16 +119,17 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           
           {(appState === 'PLAYING' || appState === 'ONLINE_1V1') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px', width: '100%' }}>
-              <button
+              <Button
+                variant="neon-red"
+                className='w-full'
                 onClick={() => {
                   if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
                   setIsWaiting(false); setDropTime(null); 
                   navigate(`/lobby/${gameMode}`);
                 }}
-                style={{ padding: '12px 16px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#e53935', color: '#fff', border: '3px solid #8e0000', borderRadius: '0', width: '100%', fontFamily: 'inherit', textShadow: '2px 2px 0px #000' }}
               >
                 QUIT
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -307,7 +309,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               )}
             </div>
           </div>
-          
+
           <div style={{
             ...neonSurface,
             padding: '12px 16px',
