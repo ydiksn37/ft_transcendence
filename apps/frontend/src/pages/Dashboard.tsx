@@ -4,7 +4,9 @@ import { StatCard } from "@/components/dashboard/StatCard"
 import { WinRatePanel } from "@/components/dashboard/WinRatePanel"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
 import type { UserStats, GameRecordView } from "@/lib/types"
+import { TETROMINOS } from '../utils/tetrominos'
 import './Dashboard.css'
+import '../pages/JoinPage.css'
 import './LobbyPage.css' // Reuse back-btn
 
 export default function Dashboard() {
@@ -12,6 +14,13 @@ export default function Dashboard() {
 	const [stats, setStats] = useState<UserStats | null>(null);
 	const [games, setGames] = useState<GameRecordView[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [loadingPiece, setLoadingPiece] = useState<any>(null);
+
+	useEffect(() => {
+		const pieces = 'IJLOSTZ';
+		const randomPiece = pieces[Math.floor(Math.random() * pieces.length)];
+		setLoadingPiece(TETROMINOS[randomPiece as keyof typeof TETROMINOS]);
+	}, []);
 
 	useEffect(() => {
 		const token = localStorage.getItem('token');
@@ -66,7 +75,9 @@ export default function Dashboard() {
 				console.error(error);
 				// Optionally handle error, e.g. navigate to login if unauthorized
 			} finally {
-				setLoading(false);
+				setTimeout(() => {
+					setLoading(false);
+				}, 1500);
 			}
 		}
 
@@ -76,7 +87,35 @@ export default function Dashboard() {
 	if (loading) {
 		return (
 			<div className="dashboard-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
-				<div style={{ fontSize: '24px', color: 'white', animation: 'pulse 2s infinite' }}>LOADING...</div>
+				<div className="loading-content">
+					<div className="tetris-spinner" style={{ 
+							width: loadingPiece ? loadingPiece.shape[0].length * 20 : 60, 
+							height: loadingPiece ? loadingPiece.shape.length * 20 : 60 
+						}}>
+						{loadingPiece && loadingPiece.shape.map((row: any[], y: number) => 
+							row.map((cell: any, x: number) => {
+								if (cell !== 0) {
+									return (
+										<div 
+											key={`${y}-${x}`} 
+											style={{ 
+												position: 'absolute', 
+												top: y * 20, 
+												left: x * 20, 
+												width: 20, 
+												height: 20, 
+												backgroundColor: loadingPiece.color, 
+												boxShadow: 'inset 0 0 0 2px #111' 
+											}} 
+										/>
+									);
+								}
+								return null;
+							})
+						)}
+					</div>
+					<div className="loading-text">LOADING...</div>
+				</div>
 			</div>
 		)
 	}

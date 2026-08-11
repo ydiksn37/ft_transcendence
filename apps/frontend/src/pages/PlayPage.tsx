@@ -605,6 +605,7 @@ const PlayPage = () => {
       records={records}
       createStage={createStage}
       appState={appState}
+      restartGame={() => startGame()}
     />
   );
 };
