@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 
 import bgImage from "../../assets/images/tetrisbg.jpeg"
+import { colorMap } from "../Cell"
 
 type TetrisUIProps = {
   stage: Cell[][];
@@ -164,7 +165,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-
           {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={boxStyle} /> : renderHoldBox()}
           {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
         </div>
@@ -339,7 +339,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     <div key={idx} style={boxStyle}>
                       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '1px' }}>
                         {shape.map((row, y) => row.map((cell, x) => (
-                          <div key={`${y}-${x}`} style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : `${color}`, borderRadius: '2px' }} />
+                          <div key={`${y}-${x}`} style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : "#" + colorMap[color].toString(16).padStart(6,'0'), borderRadius: '2px' }} />
                         )))}
                       </div>
                     </div>

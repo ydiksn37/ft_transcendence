@@ -12,16 +12,26 @@ type CellProps = {
   size: number;
 };
 
-const colorMap: Record<string, number> = {
+export const colorMap: Record<string, number> = {
   cyan: 0x00FFFF,
-  blue: 0x0000FF,
+  // blue: 0x0000FF,
+  blue: 0x0077D3,
   orange: 0xFFA500,
   yellow: 0xFFFF00,
   green: 0x008000,
-  purple: 0x800080,
+  // purple: 0x800080,  
+  purple: 0xDD0AB2,
   red: 0xFF0000,
   transparent: 0x000000,
   gray: 0x888888,
+};
+
+/** Lighten (amt>0) or darken (amt<0) a 0xRRGGBB color for bevel shading. */
+const shade = (color: number, amt: number): number => {
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 0xff) + amt));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) + amt));
+  const b = Math.max(0, Math.min(255, (color & 0xff) + amt));
+  return (r << 16) | (g << 8) | b;
 };
 
 const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
