@@ -41,7 +41,7 @@ const PlayPage = () => {
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
-    gameModeRef,
+    gameModeRef, setGameMode,
     records, setRecords,
     setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
@@ -494,6 +494,9 @@ const PlayPage = () => {
     setCountdown('READY');
 
     const nextMode = mode || gameModeRef.current;
+    if (nextMode !== gameModeRef.current) {
+      setGameMode(nextMode);
+    }
     
     setStartTime(null);
     startTimeRef.current = null;
@@ -561,7 +564,7 @@ const PlayPage = () => {
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => navigate(`/lobby/${gameModeRef.current}`)
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => navigate(`/lobby/${mode}`)
   });
 
   // Auto-drop (gravity)

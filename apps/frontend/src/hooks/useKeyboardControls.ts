@@ -134,7 +134,20 @@ export const useKeyboardControls = ({
       }
 
       if (code === conf.restart) {
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') startGame();
+        if (!e.repeat) {
+          if (appStateRef.current === 'MENU') {
+            setDropTime(dropTime ? null : 1000);
+          } else if (appStateRef.current !== 'ONLINE_1V1') {
+            startGame();
+          }
+        }
+        return;
+      }
+
+      if (code === 'Enter') {
+        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') {
+          startGame();
+        }
         return;
       }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Config } from '../components/UI/Config';
 import { Records } from '../components/UI/Records';
@@ -14,16 +14,33 @@ export default function LobbyPage() {
   const [startLevel, setStartLevel] = useState(1);
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction } = useConfig();
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (listeningAction) return;
+
+      if (e.code === keyConfig.quitToMenu) {
+        navigate('/menu');
+        return;
+      }
+      if (e.code === 'Enter' && mode !== 'CONFIG') {
+        navigate(`/play/${mode}?level=${startLevel}`);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction]);
+
   // Load records directly here just for viewing
   const records = JSON.parse(localStorage.getItem('tetris40LinesRecords') || '[]');
 
   const getModeLabel = () => {
     switch (mode) {
-      case 'MARATHON': return 'MARATHON (Endless Survival)';
-      case '40_LINES': return '40 LINES (Time Attack)';
-      case '4_WIDE': return '4-WIDE (Practice)';
-      case 'ONLINE_1V1': return 'ONLINE 1v1 (Versus Battle)';
-      case 'CONFIG': return 'CONFIG (Global Settings)';
+      case 'MARATHON': return 'MARATHON';
+      case '40_LINES': return '40 LINES';
+      case '4_WIDE': return '4-WIDE';
+      case 'ONLINE_1V1': return 'ONLINE 1v1';
+      case 'CONFIG': return 'CONFIG';
       default: return 'UNKNOWN MODE';
     }
   };
@@ -51,7 +68,7 @@ export default function LobbyPage() {
             <button className="nav-btn" onClick={() => { logout(); navigate('/'); }}>Logout</button>
           </div>
         ) : (
-          <button className="nav-btn" onClick={() => navigate('/login')}>Login</button>
+          <button className="nav-btn" onClick={() => navigate(`/login?redirectTo=/lobby/${mode}`)}>Register / Login</button>
         )}
       </div>
 
@@ -74,9 +91,9 @@ export default function LobbyPage() {
             </div>
           )}
           
-          {mode === '40_LINES' && (
+          {mode === '40_LINES' && token && user && (
             <div className="panel records-panel">
-              <Records records={records} setAppState={() => {}} />
+              <Records records={records} />
             </div>
           )}
         </div>

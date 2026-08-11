@@ -203,7 +203,7 @@ const MenuPage = () => {
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef: useRef(null), setKeyConfig: () => {}, setListeningAction: () => {},
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame: () => {},
-    socketRef: useRef(null), setSocket: () => {}, setIsWaiting: () => {}, setDropTime, quitGame: () => {}
+    socketRef: useRef(null), setSocket: () => {}, setIsWaiting: () => {}, setDropTime, quitGame: () => navigate('/')
   });
 
   useEffect(() => {
@@ -222,7 +222,22 @@ const MenuPage = () => {
       fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1230px', marginBottom: '20px' }}>
-        <div style={{ width: '150px' }}></div>
+        <button 
+          onClick={() => navigate('/')}
+          style={{
+            width: '150px',
+            padding: '12px 0',
+            fontSize: '14px',
+            fontFamily: "'Press Start 2P', monospace",
+            backgroundColor: '#333',
+            color: 'white',
+            border: '4px solid white',
+            cursor: 'pointer',
+            boxShadow: '4px 4px 0px #000'
+          }}
+        >
+          ◀ TOP
+        </button>
         <h1 style={{ fontSize: '48px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>TETRIS</h1>
         <button 
           onClick={() => setDropTime(dropTime ? null : 1000)}

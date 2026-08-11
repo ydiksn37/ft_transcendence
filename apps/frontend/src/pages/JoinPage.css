@@ -8,6 +8,23 @@
   background-color: #000;
   color: #fff;
   font-family: 'Courier New', Courier, monospace;
+  position: relative;
+  overflow: hidden;
+}
+
+.background-tetris {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 0;
+}
+
+.background-tetris.left {
+  left: 5%;
+}
+
+.background-tetris.right {
+  right: 5%;
 }
 
 .join-content {
@@ -46,6 +63,11 @@
   0% { transform: scale(1); box-shadow: 0 0 10px rgba(255,255,255,0.2); }
   50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,255,255,0.6); }
   100% { transform: scale(1); box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+}
+
+.join-content, .loading-content {
+  position: relative;
+  z-index: 10;
 }
 
 .loading-content {
