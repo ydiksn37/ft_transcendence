@@ -23,7 +23,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
     g.drawRect(0, 60, width, 600);
     g.endFill();
 
-    g.lineStyle({ width: 1, color: 0x00f5ff, alpha: 0.2, native: true });
+    g.lineStyle({ width: 1, color: 0x00f5ff, alpha: 0.4, native: true });
     for (let x = 0; x <= width; x += CELL_SIZE) {
     g.moveTo(x, 60);
     g.lineTo(x, 660);
