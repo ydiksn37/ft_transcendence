@@ -23,7 +23,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
     g.drawRect(0, 60, width, 600);
     g.endFill();
 
-    g.lineStyle({ width: 1, color: 0x00f5ff, alpha: 0.4, native: true });
+    g.lineStyle({ width: 1, color: 0x5d5d5d, alpha: 0.4, native: true });
     for (let x = 0; x <= width; x += CELL_SIZE) {
     g.moveTo(x, 60);
     g.lineTo(x, 660);
@@ -51,7 +51,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
 
   const drawFrame = useCallback((g: PIXI.Graphics) => {
     g.clear();
-    g.lineStyle(3, 0x00f5ff, 0.8);
+    g.lineStyle(1.5, 0xF6F7F7, 0.8);
     g.drawRect(1.5, 61.5, width - 3, 597);
   }, [width]);
 
