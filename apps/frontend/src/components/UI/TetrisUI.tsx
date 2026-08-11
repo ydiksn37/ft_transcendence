@@ -8,6 +8,8 @@ import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 
+import bgImage from "../../assets/images/tetrisbg.jpeg"
+
 type TetrisUIProps = {
   stage: Cell[][];
   player: Player;
@@ -65,8 +67,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   }, [gameMode, appState]);
 
   const neonSurface: React.CSSProperties = {
-    backgroundColor: 'color-mix(in srgb, var(--color-neon-purple) 20%, #06000f)',
-    border: '1px solid rgba(0,245,255,0.14)',
+    backgroundColor: 'var(--color-surface)',
+    opacity: '0.6',
+    //border: '1.5px solid #0xF6F7F7',
     borderRadius: '4px',
   }
 
@@ -105,12 +108,18 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     const modeMeta = MODE_LABEL[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
   return (
-    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
+     }}>
       {appState !== 'MENU' && (
         <nav style={{
           flexShrink: 0,
           borderBottom: '1px solid rgba(0,245,255,0.14)',
-          backgroundColor: 'rgba(3,0,8,0.96)',
+          backgroundColor: 'rgba(3, 0, 8, 0.6)',
           backdropFilter: 'blur(8px)',
           padding: '12px 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -155,6 +164,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
+
           {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={boxStyle} /> : renderHoldBox()}
           {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
         </div>
