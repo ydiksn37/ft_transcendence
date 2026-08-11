@@ -82,6 +82,7 @@
   letter-spacing: 4px;
   color: white;
   animation: blink 1s infinite;
+  font-family: 'Press Start 2P', monospace;
 }
 
 @keyframes blink {

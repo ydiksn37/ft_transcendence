@@ -43,7 +43,7 @@ export const SprintLeaderboard = () => {
     fetchRecords();
   }, [token]);
 
-  if (loading) return <div className="text-neon-blue">Loading Records...</div>;
+  if (loading) return <div className="text-neon-blue" style={{ fontFamily: '"Press Start 2P", monospace', textAlign: 'center', padding: '20px' }}>LOADING RECORDS...</div>;
 
   const recordsToDisplay = tab === 'GLOBAL' ? globalRecords : personalRecords;
 

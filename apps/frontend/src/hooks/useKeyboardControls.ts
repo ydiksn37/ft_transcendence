@@ -145,6 +145,9 @@ export const useKeyboardControls = ({
       }
 
       if (code === 'Enter') {
+        if (document.activeElement?.tagName === 'BUTTON') {
+          return;
+        }
         if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') {
           startGame();
         }
@@ -152,6 +155,7 @@ export const useKeyboardControls = ({
       }
 
       if (code === conf.quitToMenu) {
+        if (gameOver) return;
         if (!e.repeat) {
           if (socketRef.current) {
             socketRef.current.disconnect();

@@ -40,13 +40,14 @@ type TetrisUIProps = {
   records: number[];
   createStage: (width?: number) => Cell[][];
   appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1';
+  restartGame: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, records, createStage, appState
+  formatTime, records, createStage, appState, restartGame
 }) => {
   const [scale, setScale] = useState(1);
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       // 700px width for solo mode, 1200px width for 1v1 mode.
       const vh = window.innerHeight;
       const vw = window.innerWidth;
-      const navH = appState === 'MENU' ? 0 : 53;
+      const navH = 0;
       const scaleY = (vh - navH) / 850;
       const scaleX = vw / (appState === 'MENU' ? 1200 : (gameMode === 'ONLINE_1V1' ? 1200 : 700));
       setScale(Math.min(1, scaleY, scaleX));
@@ -67,30 +68,38 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [gameMode, appState]);
 
-  const neonSurface: React.CSSProperties = {
-    backgroundColor: 'var(--color-surface)',
-    opacity: '0.6',
-    //border: '1.5px solid #0xF6F7F7',
-    borderRadius: '4px',
-  }
+  useEffect(() => {
+    if (!gameOver) return;
+    const handleGameOverKeys = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        navigate('/menu');
+      } else if (e.key === 'Escape') {
+        navigate('/');
+      }
+    };
+    window.addEventListener('keydown', handleGameOverKeys);
+    return () => window.removeEventListener('keydown', handleGameOverKeys);
+  }, [gameOver, navigate]);
 
-  const boxStyle: React.CSSProperties = {
-  ...neonSurface,
-    width: '80px', height: '80px',
+  const retroBoxStyle: React.CSSProperties = {
+    backgroundColor: '#000',
+    border: '4px solid #fff',
+    boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: 'inset 0 0 12px rgba(0,0,0,0.6)',
+    width: '80px', height: '80px',
   }
 
   const renderHoldBox = () => {
     if (!holdInfo.tetromino) {
-      return <div style={boxStyle}></div>;
+      return <div style={retroBoxStyle}></div>;
     }
 
     const shape = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
     const color = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].color;
 
     return (
-      <div style={boxStyle}>
+      <div style={retroBoxStyle}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '1px' }}>
           {shape.map((row, y) => row.map((cell, x) => (
             <div key={`${y}-${x}`} style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : `${color}`, borderRadius: '2px' }} />
@@ -116,38 +125,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       backgroundPosition: 'center',
       backgroundAttachment: 'fixed',
      }}>
-      {appState !== 'MENU' && (
-        <nav style={{
-          flexShrink: 0,
-          borderBottom: '1px solid rgba(0,245,255,0.14)',
-          backgroundColor: 'rgba(3, 0, 8, 0.6)',
-          backdropFilter: 'blur(8px)',
-          padding: '12px 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          position: 'sticky', top: 0, zIndex: 30,
-        }}>
-          {(appState === 'PLAYING' || appState === 'ONLINE_1V1') && (
-             <div style={{ minWidth: '120px' }}>
-              <Button variant="neon-red" size="sm" onClick={() => {
-                if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
-                setIsWaiting(false); setDropTime(null); 
-                navigate(`/lobby/${gameMode}`);
-              }}>
-                ← QUIT
-              </Button>
-            </div>
-          )}
-          <div style={{
-            fontSize: '16px', letterSpacing: '0.2em', fontWeight: 700,
-            textTransform: 'uppercase', color: modeMeta.color,
-            textShadow: `0 0 14px ${modeMeta.color}`, whiteSpace: 'nowrap',
-          }}>
-            {modeMeta.label}
-          </div>
-          <div style={{ minWidth: '120px' }} />
-        </nav>
-      )}
-      <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto', padding: '20px 0' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto', padding: '40px 0' }}>
       <div style={{ 
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         transform: `scale(${scale})`, transformOrigin: 'top center'
@@ -164,12 +142,43 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h3 style={{ margin: '0 0 10px 0' }}>HOLD</h3>
-          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={boxStyle} /> : renderHoldBox()}
-          {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '12px', marginTop: '5px' }}>Locked</span>}
+          <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
+
+          {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
+          {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '10px', marginTop: '10px', fontFamily: '"Press Start 2P", monospace' }}>LOCKED</span>}
+
+          {appState !== 'MENU' && (
+            <button
+              tabIndex={gameOver ? -1 : 0}
+              onClick={() => {
+                if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
+                setIsWaiting(false); setDropTime(null); 
+                navigate(`/lobby/${gameMode}`);
+              }}
+              style={{
+                marginTop: '40px', fontFamily: '"Press Start 2P", monospace', padding: '12px',
+                backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c',
+                boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', fontSize: '12px',
+                transition: 'transform 0.1s'
+              }}
+              onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+            >
+              QUIT
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {appState !== 'MENU' && (
+            <h2 style={{ 
+              margin: '0 0 20px 0', textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
+              color: modeMeta.color, textShadow: '4px 4px 0px #000', fontSize: '18px', letterSpacing: '2px'
+            }}>
+              {modeMeta.label}
+            </h2>
+          )}
           <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
           <div style={{ position: 'relative' }}>
             <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
@@ -228,60 +237,90 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               left: '50%',
               transform: 'translate(-50%, -50%)',
               textAlign: 'center',
-              backgroundColor: 'rgba(34, 34, 34, 0.95)',
-              padding: '25px',
-              borderRadius: '8px',
-              border: '2px solid red',
+              backgroundColor: '#111',
+              padding: '40px',
+              border: '6px solid #fff',
               zIndex: 50,
-              minWidth: '250px',
-              boxShadow: '0 0 20px rgba(255, 0, 0, 0.5)'
+              minWidth: '400px',
+              boxShadow: '15px 15px 0px rgba(0,0,0,0.8)'
             }}>
-              <h2 style={{ color: matchResult === 'WIN' ? 'gold' : 'red', margin: '0 0 15px 0', fontSize: '32px' }}>
+              <h2 style={{ color: matchResult === 'WIN' ? 'gold' : 'red', margin: '0 0 25px 0', fontSize: '32px', fontFamily: '"Press Start 2P", monospace', textShadow: '4px 4px 0px rgba(0,0,0,0.5)', lineHeight: '1.4' }}>
                 {gameMode === 'ONLINE_1V1' && matchResult
                   ? matchResult === 'WIN' ? 'YOU WIN!' : 'YOU LOSE'
                   : (lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER')
                 }
               </h2>
               {gameMode === '40_LINES' && finalTime && (
-                <div style={{ marginBottom: '15px' }}>
-                  <h3 style={{ margin: '5px 0' }}>Time: {formatTime(finalTime)}</h3>
+                <div style={{ marginBottom: '25px', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', lineHeight: '1.8' }}>
+                  <div style={{ color: '#aaa' }}>TIME: <span style={{ color: '#fff' }}>{formatTime(finalTime)}</span></div>
                   {records.indexOf(finalTime) !== -1 && records.indexOf(finalTime) < 10 && (
-                    <h3 style={{ color: 'gold', animation: 'pop 0.5s ease-out', margin: '5px 0' }}>
-                      New Record! Rank: {records.indexOf(finalTime) + 1}
-                    </h3>
+                    <div style={{ color: 'gold', animation: 'pop 0.5s ease-out', marginTop: '10px' }}>
+                      NEW RECORD! RANK {records.indexOf(finalTime) + 1}
+                    </div>
                   )}
                 </div>
               )}
               {gameMode === 'ONLINE_1V1' && matchResult && (
-                <div style={{ color: 'white', fontSize: '18px', display: 'flex', justifyContent: 'center', gap: '30px', margin: '15px 0' }}>
+                <div style={{ color: 'white', fontSize: '14px', fontFamily: '"Press Start 2P", monospace', display: 'flex', justifyContent: 'space-around', margin: '25px 0' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <strong style={{ color: '#aaa' }}>APM</strong><br/>
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{elapsedTime > 0 ? (attackLines / (elapsedTime / 60000)).toFixed(1) : '0.0'}</span>
+                    <span style={{ color: '#aaa', fontSize: '10px' }}>APM</span><br/><br/>
+                    <span>{elapsedTime > 0 ? (attackLines / (elapsedTime / 60000)).toFixed(1) : '0.0'}</span>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <strong style={{ color: '#aaa' }}>PPS</strong><br/>
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{elapsedTime > 0 ? (piecesPlaced / (elapsedTime / 1000)).toFixed(2) : '0.00'}</span>
+                    <span style={{ color: '#aaa', fontSize: '10px' }}>PPS</span><br/><br/>
+                    <span>{elapsedTime > 0 ? (piecesPlaced / (elapsedTime / 1000)).toFixed(2) : '0.00'}</span>
                   </div>
                 </div>
               )}
-              {gameMode === 'ONLINE_1V1' && (
-                 <button
-                   onClick={() => {
-                     if (socketRef.current) {
-                       socketRef.current.disconnect();
-                       setSocket(null);
-                     }
-                     navigate('/lobby/ONLINE_1V1');
-                   }}
-                   style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '8px' }}
-                 >
-                   Find New Match
-                 </button>
-              )}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: '20px'}}>
-                  <Button variant="neon" size="lg" onClick={() => navigate("/menu")} >MODE</Button>
-                  <Button variant="neon-red" size="lg" onClick={() => navigate("/dashboard")} >EXIT</Button>
-                </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+                {gameMode === 'ONLINE_1V1' ? (
+                  <button
+                    autoFocus
+                    onClick={() => {
+                      if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
+                      navigate('/lobby/ONLINE_1V1');
+                    }}
+                    style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                    onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                    onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                  >
+                    FIND NEW MATCH (ENTER)
+                  </button>
+                ) : (
+                  <button 
+                    autoFocus
+                    onClick={() => restartGame()}
+                    style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                    onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                    onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                  >
+                    RETRY (ENTER)
+                  </button>
+                )}
+                
+                <button 
+                  onClick={() => navigate('/menu')}
+                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                >
+                  MODE SELECT (SPACE)
+                </button>
+                
+                <button 
+                  onClick={() => navigate('/')}
+                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                >
+                  QUIT (ESC)
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -324,27 +363,27 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               )}
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: '0 0 10px 0' }}>NEXT</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
+            <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {(gameMode === 'ONLINE_1V1' && isWaiting) ? (
                 [1,2,3,4,5].map(i => (
-                  <div key={i} style={boxStyle} />
+                  <div key={i} style={retroBoxStyle} />
                 ))
               ) : (
                 nextPieceKeys?.map((key, idx) => {
                   const shape = TETROMINOS[key as keyof typeof TETROMINOS].shape;
                   const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
                   return (
-                    <div key={idx} style={boxStyle}>
-                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '0px' }}>
+                    <div key={idx} style={retroBoxStyle}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '1px' }}>
                         {shape.map((row, y) => row.map((cell, x) => (
                           <div
                             key={`${y}-${x}`}
                             style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : "#" + colorMap[color].toString(16).padStart(6,'0'), borderRadius: '2px', 
                               backgroundImage: cell === 0 ? undefined: 'linear-gradient(135deg, rgba(ffffff,0.22), rgba(255,255,255,0.04) 42%, rgba(0,0,0,0.05) 58%, rgba(0,0,0,0.28))',
                               boxShadow: cell === 0 ? undefined: 'inset 1px 1px 1px rgba(255,255,255,0.16), inset -1px -1px 1px rgba(0,0,0,0.22)',
-                             }} 
+                            }} 
                           />
                         )))}
                       </div>
@@ -356,11 +395,14 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           </div>
 
           <div style={{
-            ...neonSurface,
-            padding: '12px 16px',
+            backgroundColor: '#000',
+            border: '4px solid #fff',
+            boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
+            padding: '20px 16px',
             display: 'flex', 
             flexDirection: 'column',
-            gap: '12px'
+            gap: '20px',
+            fontFamily: '"Press Start 2P", monospace'
           }}>
             {[
               { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
@@ -368,10 +410,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
             ].map((s) => (
               <div key={s.label}>
-                <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)' }}>
+                <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
                   {s.label}
                 </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums',}}>
+                <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
                   {s.value}
                 </div>
               </div>
