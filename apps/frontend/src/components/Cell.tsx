@@ -62,8 +62,39 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
           g.drawRect(0, 0, size, size);
         } else {
           // Normal / merged piece: solid
+          // g.beginFill(hexColor);
+          // g.drawRect(0, 0, size, size);
+          // g.endFill();
+          const bevel = Math.max(2, size * 0.14);
+          const light = shade(hexColor, 55);
+          const lightSide = shade(hexColor, 28);
+          const dark = shade(hexColor, -70);
+          const darkSide = shade(hexColor, -40);
+
+          // base
           g.beginFill(hexColor);
           g.drawRect(0, 0, size, size);
+          g.endFill();
+
+          // top (lightest) + left (light) highlight
+          g.beginFill(light);
+          g.drawPolygon([0, 0, size, 0, size - bevel, bevel, bevel, bevel]);
+          g.endFill();
+          g.beginFill(lightSide);
+          g.drawPolygon([0, 0, bevel, bevel, bevel, size - bevel, 0, size]);
+          g.endFill();
+
+          // bottom (darkest) + right (dark) shade
+          g.beginFill(dark);
+          g.drawPolygon([0, size, bevel, size - bevel, size - bevel, size - bevel, size, size]);
+          g.endFill();
+          g.beginFill(darkSide);
+          g.drawPolygon([size, 0, size, size, size - bevel, size - bevel, size - bevel, bevel]);
+          g.endFill();
+
+          // faint top gloss
+          g.beginFill(0xffffff, 0.06);
+          g.drawRect(bevel, bevel, size - 2 * bevel, (size - 2 * bevel) * 0.5);
           g.endFill();
         }
       }

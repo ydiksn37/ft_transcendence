@@ -337,9 +337,15 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   const color = TETROMINOS[key as keyof typeof TETROMINOS].color;
                   return (
                     <div key={idx} style={boxStyle}>
-                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '1px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${shape[0].length}, 15px)`, gap: '0px' }}>
                         {shape.map((row, y) => row.map((cell, x) => (
-                          <div key={`${y}-${x}`} style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : "#" + colorMap[color].toString(16).padStart(6,'0'), borderRadius: '2px' }} />
+                          <div
+                            key={`${y}-${x}`}
+                            style={{ width: 15, height: 15, backgroundColor: cell === 0 ? 'transparent' : "#" + colorMap[color].toString(16).padStart(6,'0'), borderRadius: '2px', 
+                              backgroundImage: cell === 0 ? undefined: 'linear-gradient(135deg, rgba(ffffff,0.22), rgba(255,255,255,0.04) 42%, rgba(0,0,0,0.05) 58%, rgba(0,0,0,0.28))',
+                              boxShadow: cell === 0 ? undefined: 'inset 1px 1px 1px rgba(255,255,255,0.16), inset -1px -1px 1px rgba(0,0,0,0.22)',
+                             }} 
+                          />
                         )))}
                       </div>
                     </div>
