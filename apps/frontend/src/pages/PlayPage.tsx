@@ -187,7 +187,7 @@ const PlayPage = () => {
              
              setRecords(prevRecs => {
                const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
-               localStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
+               sessionStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
                return newRecs;
              });
              return newLines;

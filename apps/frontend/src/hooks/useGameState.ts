@@ -23,7 +23,7 @@ export const useGameState = () => {
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
   const [records, setRecords] = useState<number[]>(() => {
-    const saved = localStorage.getItem('tetris40LinesRecords');
+    const saved = sessionStorage.getItem('tetris40LinesRecords');
     return saved ? JSON.parse(saved) : [];
   });
 

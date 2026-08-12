@@ -32,7 +32,7 @@ export default function LobbyPage() {
   }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction]);
 
   // Load records directly here just for viewing
-  const records = JSON.parse(localStorage.getItem('tetris40LinesRecords') || '[]');
+  const records = JSON.parse(sessionStorage.getItem('tetris40LinesRecords') || '[]');
 
   const getModeLabel = () => {
     switch (mode) {
@@ -64,7 +64,8 @@ export default function LobbyPage() {
         </button>
         {token && user ? (
           <div className="user-controls">
-            <button className="nav-btn" onClick={() => navigate('/dashboard')}>Dashboard</button>
+            <button className="nav-btn" onClick={() => navigate(`/dashboard?mode=${mode}`)}>Dashboard</button>
+            <button className="nav-btn" onClick={() => navigate(`/profile?mode=${mode}`)}>Profile</button>
             <button className="nav-btn" onClick={() => { logout(); navigate('/'); }}>Logout</button>
           </div>
         ) : (

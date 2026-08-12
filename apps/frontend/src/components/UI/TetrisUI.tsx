@@ -6,7 +6,6 @@ import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../ui/button';
 
 import bgImage from "../../assets/images/tetrisbg.jpeg"
 import { colorMap } from "../Cell"
