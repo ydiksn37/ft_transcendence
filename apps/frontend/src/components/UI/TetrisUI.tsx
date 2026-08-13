@@ -56,12 +56,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   useEffect(() => {
     const handleResize = () => {
-      // 850px is approximately the required vertical height.
+      // 1200px is approximately the required vertical height.
       // 700px width for solo mode, 1200px width for 1v1 mode.
       const vh = window.innerHeight;
       const vw = window.innerWidth;
       const navH = 0;
-      const scaleY = (vh - navH) / 850;
+      const scaleY = (vh - navH) / 1200;
       const scaleX = vw / (appState === 'MENU' ? 1200 : (gameMode === 'ONLINE_1V1' ? 1200 : 700));
       setScale(Math.min(1, scaleY, scaleX));
     };
