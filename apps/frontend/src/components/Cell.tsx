@@ -12,16 +12,27 @@ type CellProps = {
   size: number;
 };
 
-const colorMap: Record<string, number> = {
+export const colorMap: Record<string, number> = {
   cyan: 0x00FFFF,
-  blue: 0x0000FF,
+  // blue: 0x0000FF,
+  blue: 0x0077D3,
   orange: 0xFFA500,
   yellow: 0xFFFF00,
   green: 0x008000,
-  purple: 0x800080,
+  // purple: 0x800080,  
+  purple: 0xDD0AB2,
   red: 0xFF0000,
   transparent: 0x000000,
   gray: 0x888888,
+  brown: 0x8E4833,
+};
+
+/** Lighten (amt>0) or darken (amt<0) a 0xRRGGBB color for bevel shading. */
+const shade = (color: number, amt: number): number => {
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 0xff) + amt));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) + amt));
+  const b = Math.max(0, Math.min(255, (color & 0xff) + amt));
+  return (r << 16) | (g << 8) | b;
 };
 
 const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
@@ -37,19 +48,62 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
       if (isFilled) {
         if (isGhost) {
           // Ghost piece: same color but semi-transparent (alpha 0.3)
-          g.beginFill(hexColor, 0.3);
+          g.beginFill(hexColor, 0.2);
           g.drawRect(0, 0, size, size);
           g.endFill();
+
+          g.lineStyle(6, hexColor, 0.06);
+          g.drawRect(3, 3, size - 6, size - 6);
+          g.lineStyle(4, hexColor, 0.10);
+          g.drawRect(2, 2, size - 4, size - 4);
+          g.lineStyle(2, hexColor, 0.16);
+          g.drawRect(1, 1, size - 2, size - 2);
+
+          g.lineStyle(1, hexColor, 0.75);
+          g.drawRect(0, 0, size, size);
         } else {
           // Normal / merged piece: solid
+          // g.beginFill(hexColor);
+          // g.drawRect(0, 0, size, size);
+          // g.endFill();
+          const bevel = Math.max(2, size * 0.14);
+          const light = shade(hexColor, 55);
+          const lightSide = shade(hexColor, 28);
+          const dark = shade(hexColor, -70);
+          const darkSide = shade(hexColor, -40);
+
+          // base
           g.beginFill(hexColor);
           g.drawRect(0, 0, size, size);
           g.endFill();
+
+          // top (lightest) + left (light) highlight
+          g.beginFill(light);
+          g.drawPolygon([0, 0, size, 0, size - bevel, bevel, bevel, bevel]);
+          g.endFill();
+          g.beginFill(lightSide);
+          g.drawPolygon([0, 0, bevel, bevel, bevel, size - bevel, 0, size]);
+          g.endFill();
+
+          // bottom (darkest) + right (dark) shade
+          g.beginFill(dark);
+          g.drawPolygon([0, size, bevel, size - bevel, size - bevel, size - bevel, size, size]);
+          g.endFill();
+          g.beginFill(darkSide);
+          g.drawPolygon([size, 0, size, size, size - bevel, size - bevel, size - bevel, bevel]);
+          g.endFill();
+
+          // faint top gloss
+          g.beginFill(0xffffff, 0.06);
+          g.drawRect(bevel, bevel, size - 2 * bevel, (size - 2 * bevel) * 0.5);
+          g.endFill();
         }
       }
-
-      g.lineStyle(1, 0x333333, 1);
-      g.drawRect(0, 0, size, size);
+      
+      if (isFilled) {
+        g.lineStyle(0.7, 0x000000, isGhost ? 0.15 : 0.25);
+        g.drawRect(0, 0, size, size);
+      }
     },
     [hexColor, size, isFilled, isGhost]
   );

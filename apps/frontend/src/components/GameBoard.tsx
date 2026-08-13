@@ -19,9 +19,20 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
 
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
-    g.beginFill(0x222222);
+    g.beginFill(0x000000, 0.8);
     g.drawRect(0, 60, width, 600);
     g.endFill();
+
+    g.lineStyle({ width: 1, color: 0x5d5d5d, alpha: 0.4, native: true });
+    for (let x = 0; x <= width; x += CELL_SIZE) {
+    g.moveTo(x, 60);
+    g.lineTo(x, 660);
+  }
+  for (let y = 60; y <= 660; y += CELL_SIZE) {
+    g.moveTo(0, y);
+    g.lineTo(width, y);
+  }
+
   }, [width]);
 
   const drawTargetLine = useCallback((g: PIXI.Graphics) => {
@@ -37,6 +48,12 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
       g.lineTo(Math.min(x + 5, width), yPos);
     }
   }, [targetLine, width]);
+
+  const drawFrame = useCallback((g: PIXI.Graphics) => {
+    g.clear();
+    g.lineStyle(1.5, 0xF6F7F7, 0.8);
+    g.drawRect(1.5, 61.5, width - 3, 597);
+  }, [width]);
 
   return (
     <Container y={0}>
@@ -92,6 +109,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
         })
       )}
       <Graphics draw={drawTargetLine} />
+      <Graphics draw={drawFrame} />
     </Container>
   );
 };

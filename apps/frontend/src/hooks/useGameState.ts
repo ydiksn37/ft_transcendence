@@ -22,7 +22,10 @@ export const useGameState = () => {
   const gameModeRef = useRef(gameMode);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
-
+  const [records, setRecords] = useState<number[]>(() => {
+    const saved = sessionStorage.getItem('tetris40LinesRecords');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const startTimeRef = useRef<number | null>(null);

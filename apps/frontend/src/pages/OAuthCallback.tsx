@@ -21,14 +21,24 @@ export const OAuthCallback: React.FC = () => {
         })
         .then((user) => {
           setAuth({ accessToken, refreshToken: refreshToken ?? undefined, user });
-          navigate('/', { replace: true });
+          
+          const stateRedirect = searchParams.get('redirectTo');
+          
+          const cookieMatch = document.cookie.match(/(?:^|; )oauth_redirect=([^;]*)/);
+          const cookieRedirect = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+          const redirectUrl = stateRedirect || localStorage.getItem('oauth_redirect') || cookieRedirect || '/menu';
+          
+          localStorage.removeItem('oauth_redirect');
+          document.cookie = 'oauth_redirect=; path=/; max-age=0';
+          
+          navigate(redirectUrl, { replace: true });
         })
         .catch((err) => {
           console.error(err);
-          navigate('/', { replace: true });
+          navigate('/login', { replace: true });
         });
     } else {
-      navigate('/', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [searchParams, navigate, setAuth]);
 

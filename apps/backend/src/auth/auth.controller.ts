@@ -61,12 +61,14 @@ export class AuthController {
     const oauthUser = req.user as any;
     const result = await this.authService.loginOrRegisterOauth(oauthUser);
 
-    const frontendUrl = process.env.VITE_API_BASE_URL?.replace('/api', '') ?? 'http://localhost:5173';
-
     const tokens = result as { accessToken: string; refreshToken: string; userId: string };
-    return res.redirect(
-      `${frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
-    );
+    
+    let redirectUrl = `/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`;
+    if (req.query.state && typeof req.query.state === 'string') {
+      redirectUrl += `&redirectTo=${encodeURIComponent(req.query.state)}`;
+    }
+    
+    return res.redirect(redirectUrl);
   }
 
   // ── Refresh Token ─────────────────────────────────────────

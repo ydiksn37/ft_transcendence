@@ -36,6 +36,20 @@ export const useConfig = () => {
   const listeningActionRef = useRef(listeningAction);
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
 
+  useEffect(() => {
+    if (!listeningAction) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const code = e.code;
+      setKeyConfig((prev: Record<string, string>) => ({ ...prev, [listeningAction]: code }));
+      setListeningAction(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [listeningAction]);
+
   return {
     tuning, setTuning, tuningRef,
     keyConfig, setKeyConfig, keyConfigRef,

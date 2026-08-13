@@ -4,20 +4,18 @@ import { useStage } from '../hooks/useStage';
 import { useInterval } from '../hooks/useInterval';
 import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { resetTetrominoBag, TETROMINOS, setRandomSeed } from '../utils/tetrominos';
-import { Menu } from '../components/UI/Menu';
-import { Records } from '../components/UI/Records';
-import { CustomRoomsList } from '../components/UI/CustomRoomsList';
-import { Config } from '../components/UI/Config';
 import { TetrisUI } from '../components/UI/TetrisUI';
 import { useConfig } from '../hooks/useConfig';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { useGameState } from '../hooks/useGameState';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
+/** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
-  if (level >= 15) return 0; // 20G (Instant drop)
-  return Math.pow(0.8 - ((level - 1) * 0.007), level - 1) * 1000;
+  const base = Math.max(0, 0.8 - ((level - 1) * 0.007));
+  return Math.pow(base, level - 1) * 1000;
 };
 
 const formatTime = (ms: number) => {
@@ -27,7 +25,14 @@ const formatTime = (ms: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
-const TetrisGame = () => {
+
+
+const PlayPage = () => {
+  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryParams = new URLSearchParams(location.search);
+  const initialLevel = parseInt(queryParams.get('level') || '1', 10);
   const {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
@@ -36,7 +41,8 @@ const TetrisGame = () => {
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
-    gameMode, setGameMode, gameModeRef,
+    gameModeRef, setGameMode,
+    records, setRecords,
     setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
     finalTime, setFinalTime,
@@ -77,11 +83,9 @@ const TetrisGame = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const {
-    tuning, setTuning, tuningRef,
-    keyConfig, setKeyConfig, keyConfigRef,
-    listeningAction, setListeningAction, listeningActionRef
-  } = useConfig();
+  const { keyConfig, setKeyConfig, keyConfigRef, tuning, setListeningAction } = useConfig();
+  const tuningRef = useRef(tuning);
+  const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
   const b2bRef = useRef(false);
@@ -91,6 +95,16 @@ const TetrisGame = () => {
   const [actionText, setActionText] = useState<string | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
+  const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
+  const joinOnlineRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (mode === 'ONLINE_1V1') {
+      joinOnlineRef.current?.();
+    } else {
+      startGameRef.current?.(mode);
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current) return;
@@ -201,7 +215,18 @@ const TetrisGame = () => {
              setFinalTime(timeTaken);
              setGameOver(true);
              setDropTime(null);
+             
+             setRecords(prevRecs => {
+               const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
+               sessionStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
+               return newRecs;
+             });
+             return newLines;
           }
+
+          const newLevel = Math.floor(newLines / 10) + initialLevel;
+          setLevel(newLevel);
+          setDropTime(levelDropTime(newLevel));
           return newLines;
        });
     }
@@ -500,7 +525,9 @@ const TetrisGame = () => {
     setCountdown('READY');
 
     const nextMode = mode || gameModeRef.current;
-    setGameMode(nextMode);
+    if (nextMode !== gameModeRef.current) {
+      setGameMode(nextMode);
+    }
     
     setStartTime(null);
     startTimeRef.current = null;
@@ -527,7 +554,7 @@ const TetrisGame = () => {
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
     setScore(0);
-    setLevel(1);
+    setLevel(initialLevel);
     setLines(0);
     setPiecesPlaced(0);
     setAttackLines(0);
@@ -546,7 +573,7 @@ const TetrisGame = () => {
       const now = Date.now();
       setStartTime(now);
       startTimeRef.current = now;
-      setDropTime(levelDropTime(1));
+      setDropTime(levelDropTime(initialLevel));
     }, 1000);
 
     const t2 = setTimeout(() => {
@@ -556,8 +583,8 @@ const TetrisGame = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
-  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
-    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  const { joinOnline } = useMultiplayer({
+    appState, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, socket, setSocket, isWaiting, setIsWaiting,
     setOpponentStage, setOpponentScore,
@@ -569,44 +596,23 @@ const TetrisGame = () => {
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, setAppState
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => navigate(`/lobby/${mode}`)
   });
 
   // Auto-drop (gravity)
   useInterval(drop, dropTime);
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
-  if (appState === 'MENU') {
-    return <Menu startGame={startGame} joinOnline={joinOnline} openCustomRooms={setupCustomRoomConnection} setAppState={setAppState} />;
-  }
 
-  if (appState === 'RECORDS') {
-    return <Records setAppState={setAppState} />;
-  }
-
-  if (appState === 'CUSTOM_ROOMS') {
-    return <CustomRoomsList socket={socket} setAppState={setAppState} />;
-  }
-
-  if (appState === 'CONFIG') {
-    return (
-      <Config
-        tuning={tuning}
-        setTuning={setTuning}
-        keyConfig={keyConfig}
-        listeningAction={listeningAction}
-        setListeningAction={setListeningAction as any}
-        setAppState={setAppState}
-      />
-    );
-  }
+  startGameRef.current = startGame;
+  joinOnlineRef.current = joinOnline;
 
   return (
     <TetrisUI
       stage={stage}
       player={player}
       gameOver={gameOver}
-      gameMode={gameMode}
+      gameMode={gameModeRef.current}
       score={score}
       level={level}
       lines={lines}
@@ -627,12 +633,12 @@ const TetrisGame = () => {
       setSocket={setSocket}
       setIsWaiting={setIsWaiting}
       setDropTime={setDropTime}
-      setAppState={setAppState}
-      joinOnline={joinOnline}
       formatTime={formatTime}
       createStage={createStage}
+      appState={appState}
+      restartGame={() => startGame()}
     />
   );
 };
 
-export default TetrisGame;
+export default PlayPage;
