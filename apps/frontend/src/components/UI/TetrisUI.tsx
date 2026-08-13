@@ -111,6 +111,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     );
   };
 
+  // これ消す
+  finalTime = 1;
+
   const MODE_LABEL: Record<string, { label: string; color: string }> = {
       MARATHON:   { label: 'MARATHON',      color: 'var(--color-neon-cyan)' },
       '40_LINES': { label: '40 LINES',      color: 'var(--color-neon-cyan)' },
@@ -146,6 +149,22 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {gameMode === '40_LINES' && (
+            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
+              <strong>TIME</strong><br />
+              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white', fontVariantNumeric: 'tabular-nums' }}>
+                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
+              </span>
+              {finalTime && (
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #444' }}>
+                  <strong>PPS</strong><br />
+                  <span style={{ color: 'white', fontSize: '16px', fontVariantNumeric: 'tabular-nums' }}>
+                    {(piecesPlaced / (finalTime / 1000)).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
 
           {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
@@ -351,22 +370,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
-          {gameMode === '40_LINES' && (
-            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
-              <strong>TIME</strong><br />
-              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white', fontVariantNumeric: 'tabular-nums' }}>
-                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
-              </span>
-              {finalTime && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #444' }}>
-                  <strong>PPS</strong><br />
-                  <span style={{ color: 'white', fontSize: '16px', fontVariantNumeric: 'tabular-nums' }}>
-                    {(piecesPlaced / (finalTime / 1000)).toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
             <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
