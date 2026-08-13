@@ -13,6 +13,19 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
     rotationIndex: 0,
     spawnCount: 0
   });
+
+  const [ fitScale, setFitScale ] = useState(0.8);
+  useEffect(() => {
+    const handleResize = () => {
+      const vh = window.innerHeight;
+      const margin = 0;
+      const s = (vh - margin) / 1200;
+      setFitScale(s);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const stageRef = useRef(stage);
   const playerRef = useRef(player);
@@ -92,7 +105,7 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
   }, []);
 
   return (
-    <div style={{ opacity: 0.6, transform: reversed ? 'scale(-0.8, 0.8)' : 'scale(0.8)', pointerEvents: 'none' }}>
+    <div style={{ opacity: 0.6, transform: reversed ? `scale(${-fitScale}, ${fitScale})` : `scale(${fitScale})`, pointerEvents: 'none' }}>
       <Stage width={10 * CELL_SIZE} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
         <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
       </Stage>
