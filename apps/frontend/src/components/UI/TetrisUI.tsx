@@ -6,7 +6,6 @@ import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../ui/button';
 
 import bg1 from "../../assets/images/tetrisbg_paris.jpeg"
 import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"

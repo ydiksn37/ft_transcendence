@@ -1,20 +1,34 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { WinRatePanel } from "@/components/dashboard/WinRatePanel"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
 import type { UserStats, GameRecordView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
+import { useConfig } from '../hooks/useConfig'
 import './Dashboard.css'
 import '../pages/JoinPage.css'
 import './LobbyPage.css' // Reuse back-btn
 
 export default function Dashboard() {
 	const navigate = useNavigate();
+	const location = useLocation();
+	const mode = new URLSearchParams(location.search).get('mode');
+	const { keyConfig } = useConfig();
 	const [stats, setStats] = useState<UserStats | null>(null);
 	const [games, setGames] = useState<GameRecordView[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
+
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.code === keyConfig.quitToMenu) {
+				navigate(mode ? `/lobby/${mode}` : '/menu');
+			}
+		};
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, [navigate, keyConfig.quitToMenu]);
 
 	useEffect(() => {
 		const pieces = 'IJLOSTZ';
@@ -77,7 +91,7 @@ export default function Dashboard() {
 			} finally {
 				setTimeout(() => {
 					setLoading(false);
-				}, 1500);
+				}, location.state?.skipLoading ? 0 : 1500);
 			}
 		}
 
@@ -123,8 +137,8 @@ export default function Dashboard() {
 	return (
 		<div className="dashboard-container">
 			<div className="dashboard-header">
-				<button className="back-btn" onClick={() => navigate('/menu')}>
-					◀ BACK TO MENU
+				<button className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
+					◀ BACK TO LOBBY
 				</button>
 			</div>
 
@@ -146,6 +160,28 @@ export default function Dashboard() {
 							<WinRatePanel stats={stats} />		
 						</>
 					)}
+
+					{/* ソーシャルボタン */}
+					<div style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'center', marginTop: '10px', marginBottom: '10px' }}>
+						<button 
+							onClick={() => navigate(`/chat?mode=${mode || ''}`)}
+							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#e91e63', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
+							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+							onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+						>
+							💬 GLOBAL CHAT
+						</button>
+						<button 
+							onClick={() => navigate(`/friends?mode=${mode || ''}`)}
+							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#3498db', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
+							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+							onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+						>
+							👥 FRIENDS LIST
+						</button>
+					</div>
 
 					{/* Recent Battles */}
 					<RecentBattles games={games} />

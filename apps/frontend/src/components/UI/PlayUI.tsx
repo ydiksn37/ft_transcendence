@@ -140,7 +140,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               <button onClick={() => setAppState('RECORDS')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#9b59b6', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Records</button>
               {token && user ? (
                 <>
-                  <button onClick={() => navigate('/dashboard')} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#00bcd4', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Dashboard</button>
+                  <button onClick={() => navigate(`/dashboard?mode=${gameMode}`)} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#00bcd4', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Dashboard</button>
+                  <button onClick={() => navigate(`/profile?mode=${gameMode}`)} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Profile</button>
                   <button onClick={() => { logout(); navigate('/'); }} style={{ padding: '8px 16px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#333', color: '#fff', border: 'none', borderRadius: '4px', width: '100%' }}>Logout</button>
                 </>
               ) : (

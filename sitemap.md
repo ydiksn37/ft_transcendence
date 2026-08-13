@@ -22,16 +22,15 @@ graph TD
     Lobby -- START GAME --> Play["/play/:mode"]
     
     %% 認証ユーザー専用画面
-    Join -- ログイン済み --> Dashboard["/dashboard"]
-    Lobby -- Dashboardクリック --> Dashboard
+    Join -- ログイン済み --> Menu
+    Lobby -- Dashboardクリック --> Dashboard["/dashboard"]
+    Lobby -- Profileクリック --> Profile["/profile"]
+    Dashboard -- BACK TO LOBBY --> Lobby
+    Profile -- BACK TO LOBBY --> Lobby
     
     %% AppShell (グローバルナビゲーション配下)
     Dashboard -. ナビゲーション .-> Chat["/chat"]
     Dashboard -. ナビゲーション .-> Friends["/friends"]
-    Dashboard -. ナビゲーション .-> Profile["/profile"]
-    
-    %% planned
-    Dashboard -. ナビゲーション .-> BattleSetup["/battle-setup"]
 ```
 
 ## 2. ルート一覧
@@ -44,11 +43,10 @@ graph TD
 | `/menu` | `MenuPage` | Public (Guest含む) | テトリスのモード（MARATHON, 40 LINES, ONLINE 1v1 など）を選択するメインメニュー。背景でテトリスが自動再生される。 |
 | `/lobby/:mode` | `LobbyPage` | Public (Guest含む) | 選択したモードの待機ロビー。開始レベルの調整、キーボード設定(CONFIG)、ローカル・グローバルランキングの確認が行える。 |
 | `/play/:mode` | `PlayPage` | Public (Guest含む) | 実際のテトリスプレイ画面。PixiJSによるゲームエンジンが動作する。 |
-| `/dashboard` | `Dashboard` | Authenticated | ログインユーザー専用のダッシュボード。自身のAPM、勝率、対戦履歴などの統計データ（予定）を表示。 |
+| `/dashboard` | `Dashboard` | Authenticated | ログインユーザー専用のダッシュボード。自身のAPM、勝率、対戦履歴などの統計データを表示。ロビーからアクセスし、ロビーへ戻る。 |
+| `/profile` | `Profile` | Authenticated | ユーザーのプロフィール表示・編集、アバター変更設定など。ロビーからアクセスし、ロビーへ戻る。 |
 | `/chat` | `Chat` | Authenticated | 【AppShell配下】リアルタイムチャット画面。グローバルチャットやダイレクトメッセージ（予定）。 |
 | `/friends` | `Friends` | Authenticated | 【AppShell配下】フレンドリスト画面。フレンドのオンライン状態や対戦申し込み（予定）。 |
-| `/profile` | `Profile` | Authenticated | 【AppShell配下】ユーザーのプロフィール編集、アバター変更設定など（予定）。 |
-| `/battle-setup` | `BattleSetup` | Authenticated | 【開発中】オンライン対戦のカスタムマッチ作成や招待設定などを行う画面。 |
 | `/*` | `Navigate to /` | Public | 存在しないURLにアクセスした場合のフォールバック。自動的にトップページへリダイレクト。 |
 
 ## 3. 今後の拡張予定

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BackgroundTetris } from '../components/BackgroundTetris';
 import { TETROMINOS } from '../utils/tetrominos';
@@ -57,14 +57,12 @@ export default function JoinPage() {
             <button 
               className="join-button" 
               onClick={handleGuest} 
-              style={{ fontSize: '16px', padding: '15px', animation: 'none' }}
             >
               PLAY AS GUEST
             </button>
             <button 
               className="join-button" 
               onClick={() => navigate('/login')} 
-              style={{ fontSize: '16px', padding: '15px', animation: 'none' }}
             >
               LOGIN / REGISTER
             </button>
