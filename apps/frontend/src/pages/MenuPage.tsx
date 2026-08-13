@@ -8,10 +8,12 @@ import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { useGameState } from '../hooks/useGameState';
 import { useNavigate } from 'react-router-dom';
 import { Stage } from '@pixi/react';
-import GameBoard from '../components/GameBoard';
+import GameBoard, { BOARD_PIXEL_HEIGHT, CELL_SIZE } from '../components/GameBoard';
+
+const STAGE_WIDTH = 41;
 
 const createMenuStage = (): Cell[][] => {
-  const width = 41;
+  const width = STAGE_WIDTH;
   const height = 22;
   const stage = Array.from(Array(height), () =>
     new Array(width).fill([0, 'clear']) as Cell[]
@@ -258,7 +260,7 @@ const MenuPage = () => {
       </div>
       
       <div style={{ position: 'relative' }}>
-        <Stage width={1230} height={660} options={{ backgroundAlpha: 0 }}>
+        <Stage width={CELL_SIZE * STAGE_WIDTH} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
           <GameBoard 
             stage={stage} 
             player={transitionMode ? { ...player, tetromino: [] } : player} 
@@ -269,12 +271,12 @@ const MenuPage = () => {
         <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
            <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white' }}>DROP TO SELECT MODE</h2>
         </div>
-        <div style={{ position: 'absolute', bottom: '150px', left: '15px', width: '1230px', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
-          <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>ONLINE 1v1</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
+        <div style={{ position: 'absolute', bottom: '150px', left: '25px', width: STAGE_WIDTH * CELL_SIZE, display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
+          <div style={{ width: 8 * CELL_SIZE, textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
+          <div style={{ width: 8 * CELL_SIZE, textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
+          <div style={{ width: 8 * CELL_SIZE, textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
+          <div style={{ width: 8 * CELL_SIZE, textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>ONLINE 1v1</div>
+          <div style={{ width: 8 * CELL_SIZE, textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
         </div>
 
         {transitionMode && (
