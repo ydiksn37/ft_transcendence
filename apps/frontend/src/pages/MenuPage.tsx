@@ -18,15 +18,15 @@ const createMenuStage = (): Cell[][] => {
   );
 
   for (let y = height - 5; y < height; y++) {
-    stage[y][0] = ['L', 'merged'];
-    stage[y][8] = ['L', 'merged'];
-    stage[y][16] = ['L', 'merged'];
-    stage[y][24] = ['L', 'merged'];
-    stage[y][32] = ['L', 'merged'];
-    stage[y][40] = ['L', 'merged'];
+    stage[y][0] = ['B', 'merged'];
+    stage[y][8] = ['B', 'merged'];
+    stage[y][16] = ['B', 'merged'];
+    stage[y][24] = ['B', 'merged'];
+    stage[y][32] = ['B', 'merged'];
+    stage[y][40] = ['B', 'merged'];
   }
   for (let x = 0; x < width; x++) {
-    stage[height - 1][x] = ['L', 'merged'];
+    stage[height - 1][x] = ['B', 'merged'];
   }
   return stage;
 };

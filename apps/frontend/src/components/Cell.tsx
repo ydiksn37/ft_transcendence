@@ -24,6 +24,7 @@ export const colorMap: Record<string, number> = {
   red: 0xFF0000,
   transparent: 0x000000,
   gray: 0x888888,
+  brown: 0x8E4833,
 };
 
 /** Lighten (amt>0) or darken (amt<0) a 0xRRGGBB color for bevel shading. */

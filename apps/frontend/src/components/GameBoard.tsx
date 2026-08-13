@@ -19,7 +19,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
 
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
-    g.beginFill(0x040010, 0.6);
+    g.beginFill(0x000000, 0.8);
     g.drawRect(0, 60, width, 600);
     g.endFill();
 
