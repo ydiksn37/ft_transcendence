@@ -8,7 +8,10 @@ import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 
-import bgImage from "../../assets/images/tetrisbg.jpeg"
+import bg1 from "../../assets/images/tetrisbg_paris.jpeg"
+import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
+const BG_IMAGES = [bg1, bg2];
+
 import { colorMap } from "../Cell"
 
 type TetrisUIProps = {
@@ -115,7 +118,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       '4_WIDE':   { label: '4 WIDE',        color: 'var(--color-neon-cyan)' },
       ONLINE_1V1: { label: '⚔ VS OPPONENT', color: 'var(--color-neon-magenta)' },
     };
-    const modeMeta = MODE_LABEL[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  const modeMeta = MODE_LABEL[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+
+  const [bgImage] = useState(() => BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)]);
 
   return (
     <div style={{
