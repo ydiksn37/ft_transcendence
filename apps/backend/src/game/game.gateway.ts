@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
-import { ClientEvent, ServerEvent, AiDifficulty } from '@transcendence/shared';
+import { ClientEvent, ServerEvent, AiDifficulty, Cell } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 
@@ -132,8 +132,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
 
-    const roomId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const roomName = data?.name?.trim() || `Room ${roomId.slice(-4)}`;
+    const roomId = Math.random().toString(36).slice(2, 6).toUpperCase();
+    
+    if (this.customRooms.has(roomId)) {
+      client.emit('error', { message: 'Failed to generate unique Room ID. Please try again.' });
+      return;
+    }
+
+    const roomName = data?.name?.trim() || `Room ${roomId}`;
     
     this.customRooms.set(roomId, {
       roomId,
@@ -144,6 +150,51 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     client.join(roomId);
     client.emit('custom_room_created', { roomId, name: roomName });
+    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+  }
+
+  @SubscribeMessage('game:update_custom_room_id')
+  handleUpdateCustomRoomId(@ConnectedSocket() client: Socket, @MessageBody() data: { newRoomId: string }) {
+    const newId = data.newRoomId.trim().toUpperCase();
+    if (!newId || newId.length === 0) {
+      client.emit('error', { message: 'Invalid Room ID' });
+      return;
+    }
+    
+    if (this.customRooms.has(newId)) {
+      client.emit('error', { message: 'Room ID already exists' });
+      return;
+    }
+
+    let oldRoomId: string | null = null;
+    let targetRoom: any = null;
+
+    for (const [rId, room] of this.customRooms.entries()) {
+      if (room.ownerSocket.id === client.id) {
+        oldRoomId = rId;
+        targetRoom = room;
+        break;
+      }
+    }
+
+    if (!oldRoomId || !targetRoom) {
+      client.emit('error', { message: 'You do not own a room' });
+      return;
+    }
+
+    this.customRooms.delete(oldRoomId);
+    targetRoom.roomId = newId;
+    // update room name if it was the default
+    if (targetRoom.name === `Room ${oldRoomId}`) {
+      targetRoom.name = `Room ${newId}`;
+    }
+    this.customRooms.set(newId, targetRoom);
+
+    // Swap socket rooms
+    client.leave(oldRoomId);
+    client.join(newId);
+
+    client.emit('custom_room_id_updated', { oldId: oldRoomId, newId });
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
 
@@ -262,6 +313,28 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!roomId) return;
     const room = this.rooms.get(roomId);
     room?.applyInput(socketId, event);
+  }
+
+  // ── P2P 通信 (フロントエンド主導の対戦用) ───────────────────
+  @SubscribeMessage('board_update')
+  handleBoardUpdate(@ConnectedSocket() client: Socket, @MessageBody() data: { stage: Cell[][]; score: number }) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    client.to(roomId).emit('opponent_board_update', data);
+  }
+
+  @SubscribeMessage('send_garbage')
+  handleSendGarbage(@ConnectedSocket() client: Socket, @MessageBody() data: { lines: number }) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    client.to(roomId).emit('receive_garbage', data);
+  }
+
+  @SubscribeMessage('game_over')
+  handleGameOverEvent(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    client.to(roomId).emit('opponent_game_over');
   }
 
   // ── 観戦 ─────────────────────────────────────────────────

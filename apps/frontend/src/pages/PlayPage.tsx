@@ -11,6 +11,7 @@ import { useMultiplayer } from '../hooks/useMultiplayer';
 import { useGameState } from '../hooks/useGameState';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { CustomRoomsList } from '../components/UI/CustomRoomsList';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -28,7 +29,7 @@ const formatTime = (ms: number) => {
 
 
 const PlayPage = () => {
-  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' }>();
+  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' }>();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -41,8 +42,7 @@ const PlayPage = () => {
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
-    gameModeRef, setGameMode,
-    records, setRecords,
+    gameMode, gameModeRef, setGameMode,
     setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
     finalTime, setFinalTime,
@@ -97,11 +97,14 @@ const PlayPage = () => {
   const lastProcessedEventIdRef = useRef(-1);
   const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
   const joinOnlineRef = useRef<(() => void) | null>(null);
+  const setupCustomRoomConnectionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (mode === 'ONLINE_1V1') {
       joinOnlineRef.current?.();
-    } else {
+    } else if (mode === 'CUSTOM_ROOMS') {
+      setupCustomRoomConnectionRef.current?.();
+    } else if (mode) {
       startGameRef.current?.(mode);
     }
   }, [mode]);
@@ -216,11 +219,6 @@ const PlayPage = () => {
              setGameOver(true);
              setDropTime(null);
              
-             setRecords(prevRecs => {
-               const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
-               sessionStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
-               return newRecs;
-             });
              return newLines;
           }
 
@@ -565,6 +563,7 @@ const PlayPage = () => {
     if (nextMode !== 'ONLINE_1V1') {
       setAppState('PLAYING');
     } else {
+      setAppState('ONLINE_1V1');
       setIsWaiting(false);
     }
 
@@ -583,10 +582,10 @@ const PlayPage = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
-  const { joinOnline } = useMultiplayer({
-    appState, setStage, stageRef, resetPlayer, resetHold,
+  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
+    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, isWaiting, setIsWaiting,
+    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting,
     setOpponentStage, setOpponentScore,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
   });
@@ -606,13 +605,23 @@ const PlayPage = () => {
 
   startGameRef.current = startGame;
   joinOnlineRef.current = joinOnline;
+  setupCustomRoomConnectionRef.current = setupCustomRoomConnection;
+
+  if (appState === 'CUSTOM_ROOMS') {
+    return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
+  }
+
+  // Prevent flashing the wrong mode's board on first render before useEffect triggers
+  if (appState === 'MENU') {
+    return <div style={{ backgroundColor: '#111', width: '100vw', height: '100vh' }} />;
+  }
 
   return (
     <TetrisUI
       stage={stage}
       player={player}
       gameOver={gameOver}
-      gameMode={gameModeRef.current}
+      gameMode={gameMode}
       score={score}
       level={level}
       lines={lines}
@@ -637,6 +646,7 @@ const PlayPage = () => {
       createStage={createStage}
       appState={appState}
       restartGame={() => startGame()}
+      joinOnline={joinOnline}
     />
   );
 };

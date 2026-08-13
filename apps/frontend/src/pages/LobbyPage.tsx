@@ -15,6 +15,12 @@ export default function LobbyPage() {
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction } = useConfig();
 
   useEffect(() => {
+    if (mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS') {
+      navigate('/lobby/MULTI_PLAY', { replace: true });
+    }
+  }, [mode, navigate]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (listeningAction) return;
 
@@ -40,6 +46,7 @@ export default function LobbyPage() {
       case '40_LINES': return '40 LINES';
       case '4_WIDE': return '4-WIDE';
       case 'ONLINE_1V1': return 'ONLINE 1v1';
+      case 'MULTI_PLAY': return 'MULTI PLAY';
       case 'CONFIG': return 'CONFIG';
       default: return 'UNKNOWN MODE';
     }
@@ -51,6 +58,7 @@ export default function LobbyPage() {
       case '40_LINES': return '#ff9800';
       case '4_WIDE': return '#3498db';
       case 'ONLINE_1V1': return '#e74c3c';
+      case 'MULTI_PLAY': return '#e74c3c';
       case 'CONFIG': return '#9b59b6';
       default: return '#fff';
     }
@@ -113,7 +121,26 @@ export default function LobbyPage() {
           </div>
         )}
 
-        {mode !== 'CONFIG' && (
+        {mode === 'MULTI_PLAY' && (
+          <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+            <button 
+              className="start-game-btn" 
+              onClick={() => navigate(`/play/ONLINE_1V1`)}
+              style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c` }}
+            >
+              RANDOM MATCH
+            </button>
+            <button 
+              className="start-game-btn" 
+              onClick={() => navigate(`/play/CUSTOM_ROOMS`)}
+              style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400' }}
+            >
+              CUSTOM ROOMS
+            </button>
+          </div>
+        )}
+
+        {mode !== 'CONFIG' && mode !== 'MULTI_PLAY' && (
           <button 
             className="start-game-btn" 
             onClick={() => navigate(`/play/${mode}?level=${startLevel}`)}
