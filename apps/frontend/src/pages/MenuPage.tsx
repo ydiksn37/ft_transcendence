@@ -35,6 +35,26 @@ const createMenuStage = (): Cell[][] => {
 
 const MenuPage = () => {
   const navigate = useNavigate();
+
+  const [ scale, setScale ] = useState(1);
+  useEffect(() => {
+    const handleResize = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const contentW = CELL_SIZE * STAGE_WIDTH;
+      const contentH = BOARD_PIXEL_HEIGHT + 140;
+      const padX = 40;
+
+      const scaleX = (vw - padX) / contentW;
+      const scaleY = vh / contentH;
+      setScale(Math.min(1, scaleX, scaleY));
+    }
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const {
     appStateRef,
     dropTime, setDropTime,
@@ -258,7 +278,11 @@ const MenuPage = () => {
           {dropTime ? 'STOP' : 'RESUME'}
         </button>
       </div>
-      
+
+      <div style={{
+        transform: `scale(${scale})`,
+        transformOrigin: `top center`,
+      }}>
       <div style={{ position: 'relative' }}>
         <Stage width={CELL_SIZE * STAGE_WIDTH} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
           <GameBoard 
@@ -306,6 +330,7 @@ const MenuPage = () => {
             </h1>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
