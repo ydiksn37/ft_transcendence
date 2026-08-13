@@ -12,7 +12,11 @@ type GameBoardProps = {
   targetLine?: number;
 };
 
-const CELL_SIZE = 30; 
+export const CELL_SIZE = 30; 
+const TOP_OFFSET = 2 * CELL_SIZE;
+const BOARD_HEIGHT = 20 * CELL_SIZE;
+const BOARD_BOTTOM = TOP_OFFSET + BOARD_HEIGHT;
+export const BOARD_PIXEL_HEIGHT = 22 * CELL_SIZE;
 
 const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine }) => {
   const width = stage.length > 0 ? stage[0].length * CELL_SIZE : 300;
@@ -20,15 +24,15 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
     g.beginFill(0x040010, 0.6);
-    g.drawRect(0, 60, width, 600);
+    g.drawRect(0, TOP_OFFSET, width, BOARD_HEIGHT);
     g.endFill();
 
     g.lineStyle({ width: 1, color: 0x5d5d5d, alpha: 0.4, native: true });
     for (let x = 0; x <= width; x += CELL_SIZE) {
-    g.moveTo(x, 60);
-    g.lineTo(x, 660);
+    g.moveTo(x, TOP_OFFSET);
+    g.lineTo(x, BOARD_BOTTOM);
   }
-  for (let y = 60; y <= 660; y += CELL_SIZE) {
+  for (let y = TOP_OFFSET; y <= BOARD_BOTTOM; y += CELL_SIZE) {
     g.moveTo(0, y);
     g.lineTo(width, y);
   }
@@ -39,7 +43,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
     g.clear();
     if (targetLine === undefined) return;
     
-    const yPos = targetLine * CELL_SIZE;
+    // const yPos = targetLine * CELL_SIZE;
+    const yPos = TOP_OFFSET + targetLine * CELL_SIZE;
     
     // Draw a dashed red line
     g.lineStyle(2, 0xff3333, 0.8);
@@ -52,7 +57,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
   const drawFrame = useCallback((g: PIXI.Graphics) => {
     g.clear();
     g.lineStyle(1.5, 0xF6F7F7, 0.8);
-    g.drawRect(1.5, 61.5, width - 3, 597);
+    g.drawRect(1.5, TOP_OFFSET + 1.5, width - 3, BOARD_HEIGHT - 3);
   }, [width]);
 
   return (

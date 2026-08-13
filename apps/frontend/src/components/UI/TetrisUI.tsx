@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Stage } from '@pixi/react';
-import GameBoard from '../GameBoard';
+import GameBoard, { CELL_SIZE, BOARD_PIXEL_HEIGHT } from '../GameBoard';
 import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
 import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
@@ -111,9 +111,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     );
   };
 
-  // これ消す
-  finalTime = 1;
-
   const MODE_LABEL: Record<string, { label: string; color: string }> = {
       MARATHON:   { label: 'MARATHON',      color: 'var(--color-neon-cyan)' },
       '40_LINES': { label: '40 LINES',      color: 'var(--color-neon-cyan)' },
@@ -204,7 +201,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
           <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
           <div style={{ position: 'relative' }}>
-            <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
+            <Stage width={stage.length > 0 ? stage[0].length * CELL_SIZE : 10 * CELL_SIZE} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
             <GameBoard 
               stage={stage} 
               player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
@@ -434,7 +431,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           <div style={{ position: 'relative', marginLeft: '40px' }}>
             <h3 style={{ textAlign: 'center', color: '#ff4444', margin: '0 0 10px 0' }}>OPPONENT</h3>
             <div style={{ position: 'relative' }}>
-              <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
+              <Stage width={10 * CELL_SIZE} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
                 <GameBoard 
                   stage={opponentStage || createStage(10)} 
                   player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
