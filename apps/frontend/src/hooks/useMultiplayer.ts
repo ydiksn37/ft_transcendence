@@ -11,7 +11,7 @@ type UseMultiplayerProps = {
   setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
   stageRef: MutableRefObject<Cell[][]>;
-  resetPlayer: (w: number) => void;
+  resetPlayer: (w: number, stage?: Cell[][]) => void;
   resetHold: () => void;
   setScore: Dispatch<SetStateAction<number>>;
   setLevel: Dispatch<SetStateAction<number>>;
@@ -62,7 +62,7 @@ export const useMultiplayer = ({
     const newStage = createStage(10);
     setStage(newStage);
     stageRef.current = newStage;
-    resetPlayer(10);
+    resetPlayer(10, newStage);
     resetHold();
     setScore(0);
     setLevel(1);
@@ -122,7 +122,7 @@ export const useMultiplayer = ({
     const newStage = createStage(10);
     setStage(newStage);
     stageRef.current = newStage;
-    resetPlayer(10);
+    resetPlayer(10, newStage);
     resetHold();
     setScore(0);
     setLevel(1);

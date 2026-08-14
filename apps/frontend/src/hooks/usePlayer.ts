@@ -80,17 +80,23 @@ export const usePlayer = () => {
     });
   }, []);
 
-  const resetPlayer = useCallback((width: number = STAGE_WIDTH) => {
+  const resetPlayer = useCallback((width: number = STAGE_WIDTH, stage?: Cell[][]) => {
     const nextTetromino = randomTetromino().shape;
-    setPlayer(prev => ({
-      pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 18 },
-      tetromino: nextTetromino,
-      collided: false,
-      rotationIndex: 0,
-      spawnCount: prev.spawnCount + 1,
-      lastAction: 'spawn',
-      kickIndex: 0,
-    }));
+    setPlayer(prev => {
+      const newPlayer = {
+        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 17 },
+        tetromino: nextTetromino,
+        collided: false,
+        rotationIndex: 0 as 0 | 1 | 2 | 3,
+        spawnCount: prev.spawnCount + 1,
+        lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+        kickIndex: 0,
+      };
+      if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+        newPlayer.pos.y = 18;
+      }
+      return newPlayer;
+    });
     setNextPieceKeys(peekNextTetrominoKeys(5)); // peek at new next pieces
     setHoldInfo(prev => ({ ...prev, hasHeld: false }));
   }, []);
@@ -99,7 +105,7 @@ export const usePlayer = () => {
     setHoldInfo({ tetromino: null, hasHeld: false });
   }, []);
 
-  const playerHold = useCallback((width: number = STAGE_WIDTH) => {
+  const playerHold = useCallback((width: number = STAGE_WIDTH, stage?: Cell[][]) => {
     if (holdInfo.hasHeld) return;
 
     const currentType = player.tetromino.flat().find(cell => cell !== 0) as string;
@@ -108,27 +114,39 @@ export const usePlayer = () => {
     if (holdInfo.tetromino) {
       // Swap with existing hold — does NOT consume next piece
       const heldTetromino = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
-      setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 18 },
-        tetromino: heldTetromino,
-        collided: false,
-        rotationIndex: 0,
-        spawnCount: prev.spawnCount + 1,
-        lastAction: 'spawn',
-        kickIndex: 0,
-      }));
+      setPlayer(prev => {
+        const newPlayer = {
+          pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 17 },
+          tetromino: heldTetromino,
+          collided: false,
+          rotationIndex: 0 as 0 | 1 | 2 | 3,
+          spawnCount: prev.spawnCount + 1,
+          lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+          kickIndex: 0,
+        };
+        if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+          newPlayer.pos.y = 18;
+        }
+        return newPlayer;
+      });
     } else {
       // No hold piece yet — consume next piece from bag
       const nextTetromino = randomTetromino().shape;
-      setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 18 },
-        tetromino: nextTetromino,
-        collided: false,
-        rotationIndex: 0,
-        spawnCount: prev.spawnCount + 1,
-        lastAction: 'spawn',
-        kickIndex: 0,
-      }));
+      setPlayer(prev => {
+        const newPlayer = {
+          pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 17 },
+          tetromino: nextTetromino,
+          collided: false,
+          rotationIndex: 0 as 0 | 1 | 2 | 3,
+          spawnCount: prev.spawnCount + 1,
+          lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+          kickIndex: 0,
+        };
+        if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+          newPlayer.pos.y = 18;
+        }
+        return newPlayer;
+      });
       setNextPieceKeys(peekNextTetrominoKeys(5));
     }
 

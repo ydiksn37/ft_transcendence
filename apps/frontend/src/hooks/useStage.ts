@@ -13,7 +13,7 @@ export type LockEvent = {
 
 export const useStage = (
   player: Player,
-  resetPlayer: (width?: number) => void,
+  resetPlayer: (width?: number, stage?: Cell[][]) => void,
   checkGameOver: (stage: Cell[][], isLockOut?: boolean) => boolean,
   disableSweep: boolean = false
 ) => {
@@ -122,7 +122,7 @@ export const useStage = (
       });
       
       if (!checkGameOver(swept, isLockOut)) {
-        resetPlayer(newStage[0].length);
+        resetPlayer(newStage[0].length, swept);
       }
     } else {
       stageRef.current = newStage;

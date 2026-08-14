@@ -54,7 +54,7 @@ const MenuPage = () => {
     const menuStage = createMenuStage();
     setStage(menuStage);
     stageRef.current = menuStage;
-    resetPlayer(41);
+    resetPlayer(41, menuStage);
     setDropTime(1000);
   }, [setStage, resetPlayer, setDropTime, stageRef]);
 
@@ -82,7 +82,7 @@ const MenuPage = () => {
         const menuStage = createMenuStage();
         setStage(menuStage);
         stageRef.current = menuStage;
-        resetPlayer(41);
+        resetPlayer(41, menuStage);
         setTransitionMode(null);
         setDropTime(1000);
       }, 1500);

@@ -225,13 +225,11 @@ export class GameInstance {
     const prev = player.holdMino;
     player.holdMino = player.activeMino;
     player.activeMino = prev ?? this.bag.next();
-    player.activeX = 3;
-    player.activeY = 18;
-    player.activeRotation = 0;
     player.canHold = false;
-    player.lastMoveWasRotation = false;
-
-    this.broadcastState(socketId, player);
+    this.spawnPiece(socketId, player);
+    if (!player.isGameOver) {
+      this.broadcastState(socketId, player);
+    }
   }
 
   /** ピースをロック（固定） */
@@ -296,19 +294,30 @@ export class GameInstance {
 
     // 次のミノを取得
     player.activeMino = this.bag.next();
-    player.activeX = 3;
-    player.activeY = 18;
-    player.activeRotation = 0;
     player.canHold = true;
+    this.spawnPiece(socketId, player);
+    if (!player.isGameOver) {
+      this.broadcastState(socketId, player);
+    }
+  }
+
+  /** ミノをスポーンさせる (TETR.IO仕様: 1マス上にスポーン後、即時落下可能なら落下) */
+  private spawnPiece(socketId: string, player: PlayerState): void {
+    player.activeX = 3;
+    player.activeY = 17; // 1マス上にスポーン
+    player.activeRotation = 0;
     player.lastMoveWasRotation = false;
 
-    // ゲームオーバー判定
+    // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
     if (!isValidPosition(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation)) {
       this.handleGameOver(socketId);
       return;
     }
 
-    this.broadcastState(socketId, player);
+    // もし y=18 が空いていれば、即座に重力を適用して1マス下げる
+    if (isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation)) {
+      player.activeY += 1;
+    }
   }
 
   /** ロック遅延タイマー */

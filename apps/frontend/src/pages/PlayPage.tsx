@@ -73,7 +73,7 @@ const PlayPage = () => {
      if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
      const nextPiece = TETROMINOS[nextPieceKeys[0] as keyof typeof TETROMINOS].shape;
      const dummyPlayer = {
-       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 18 },
+       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 17 }, // 1マス上にスポーンテスト
        tetromino: nextPiece,
        collided: false,
        rotationIndex: 0,
@@ -309,11 +309,6 @@ const PlayPage = () => {
            
            stageRef.current = newStage;
            setStage(newStage);
-           
-           setPlayer(p => {
-             const newY = Math.max(0, p.pos.y - linesToAdd);
-             return { ...p, pos: { ...p.pos, y: newY } };
-           });
            
            remainingAttacks = [];
            
@@ -554,7 +549,7 @@ const PlayPage = () => {
       setRandomSeed(null);
     }
     resetTetrominoBag();
-    resetPlayer(nextMode === '4_WIDE' ? 4 : 10);
+    resetPlayer(nextMode === '4_WIDE' ? 4 : 10, stageRef.current);
     resetHold();
     setGameOver(false);
     setMatchResult(null);

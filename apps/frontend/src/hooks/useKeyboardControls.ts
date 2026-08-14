@@ -20,7 +20,7 @@ type UseKeyboardControlsProps = {
   softDrop: () => void;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
-  playerHold: (width: number) => void;
+  playerHold: (width: number, stage?: Cell[][]) => void;
   startGame: (mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   socketRef: MutableRefObject<Socket | null>;
   setSocket: (s: Socket | null) => void;
@@ -202,7 +202,7 @@ export const useKeyboardControls = ({
           if (!e.repeat) playerRotate(stageRef.current, 2);
           break;
         case conf.hold:
-          if (!e.repeat) playerHold(stageRef.current[0].length);
+          if (!e.repeat) playerHold(stageRef.current[0].length, stageRef.current);
           break;
       }
     },
