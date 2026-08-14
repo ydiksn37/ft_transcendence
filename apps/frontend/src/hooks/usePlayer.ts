@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { checkCollision, STAGE_WIDTH, type Cell } from '../utils/gameHelpers';
 import { randomTetromino, peekNextTetrominoKeys, TETROMINOS } from '../utils/tetrominos';
+import { WALL_KICKS_NORMAL, WALL_KICKS_I } from '@transcendence/shared';
 
 export type Player = {
   pos: { x: number; y: number };
@@ -10,30 +11,6 @@ export type Player = {
   spawnCount: number;
   lastAction?: 'move' | 'rotate' | 'drop' | 'spawn';
   kickIndex?: number;
-};
-
-// SRS wall-kick data (normal pieces)
-const WALL_KICKS_NORMAL: Record<string, number[][]> = {
-  '0->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-  '1->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-  '1->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-  '2->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-  '2->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-  '3->2': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-  '3->0': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-  '0->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-};
-
-// SRS wall-kick data (I piece)
-const WALL_KICKS_I: Record<string, number[][]> = {
-  '0->1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
-  '1->0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
-  '1->2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
-  '2->1': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
-  '2->3': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
-  '3->2': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
-  '3->0': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
-  '0->3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
 };
 
 const rotate = (matrix: (string | number)[][], dir: number): (string | number)[][] => {
@@ -162,8 +139,10 @@ export const usePlayer = () => {
     setPlayer(prev => {
       const clonedPlayer: Player = JSON.parse(JSON.stringify(prev));
 
-      // O-piece (2×2): no rotation
-      if (clonedPlayer.tetromino.length === 2) return prev;
+      // O-piece (2×2): no rotation, but still trigger 'rotate' action for lock delay reset
+      if (clonedPlayer.tetromino.length === 2) {
+        return { ...prev, lastAction: 'rotate' };
+      }
 
       const currentIdx = clonedPlayer.rotationIndex;
       const nextIdx = (currentIdx + dir + 4) % 4;

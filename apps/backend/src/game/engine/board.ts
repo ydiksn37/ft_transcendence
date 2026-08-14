@@ -1,27 +1,4 @@
-import { TetrominoType, TETROMINO_SHAPES, Board, Cell } from '@transcendence/shared';
-
-/** SRS（Super Rotation System）壁蹴りオフセットテーブル */
-const WALL_KICK_JLSTZ: Record<string, [number, number][]> = {
-  '0->1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-  '1->0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-  '1->2': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-  '2->1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-  '2->3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-  '3->2': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-  '3->0': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-  '0->3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-};
-
-const WALL_KICK_I: Record<string, [number, number][]> = {
-  '0->1': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-  '1->0': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-  '1->2': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-  '2->1': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-  '2->3': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-  '3->2': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-  '3->0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-  '0->3': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-};
+import { TetrominoType, TETROMINO_SHAPES, Board, Cell, WALL_KICKS_NORMAL, WALL_KICKS_I } from '@transcendence/shared';
 
 export const BOARD_ROWS = 20;
 export const BOARD_COLS = 10;
@@ -140,13 +117,13 @@ export function tryRotate(
   else if (direction === 'CCW') newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
   else newRotation = ((currentRotation + 2) % 4) as 0 | 1 | 2 | 3;
 
-  const kickTable = type === 'I' ? WALL_KICK_I : WALL_KICK_JLSTZ;
+  const kickTable = type === 'I' ? WALL_KICKS_I : WALL_KICKS_NORMAL;
   const kickKey = `${currentRotation}->${newRotation}`;
   const kicks = kickTable[kickKey] ?? [[0, 0]];
 
-  for (const [dr, dc] of kicks) {
-    const newX = x + dc;
-    const newY = y + dr;
+  for (const [dx, dy] of kicks) {
+    const newX = x + dx;
+    const newY = y + dy;
     if (isValidPosition(board, type, newX, newY, newRotation)) {
       return { x: newX, y: newY, rotation: newRotation };
     }
