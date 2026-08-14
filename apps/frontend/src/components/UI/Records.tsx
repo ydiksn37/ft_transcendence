@@ -13,15 +13,25 @@ const formatTime = (ms: number) => {
 
 export const Records: React.FC<RecordsProps> = ({ records }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-      <h1>40 Lines Top 10</h1>
-      <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '20px', minWidth: '300px', backgroundColor: '#222', padding: '20px', borderRadius: '8px' }}>
-        {records.length === 0 ? <p style={{ textAlign: 'center' }}>No records yet.</p> : records.map((time, idx) => (
-          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? '#cd7f32' : 'white' }}>
-            <span>{idx + 1}.</span>
-            <span>{formatTime(time)}</span>
-          </div>
-        ))}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+      <h2 style={{ margin: '0 0 20px 0', color: '#ff9800', textShadow: '2px 2px 0 #000' }}>40 LINES TOP 10</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '18px', width: '100%', maxWidth: '400px' }}>
+        {records.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#888' }}>No records yet.</p>
+        ) : (
+          records.slice(0, 10).map((time, idx) => (
+            <div key={idx} style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              color: idx === 0 ? '#ffd700' : idx === 1 ? '#c0c0c0' : idx === 2 ? '#cd7f32' : 'white',
+              borderBottom: '2px dashed #444',
+              paddingBottom: '8px'
+            }}>
+              <span>{idx + 1}.</span>
+              <span>{formatTime(time)}</span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

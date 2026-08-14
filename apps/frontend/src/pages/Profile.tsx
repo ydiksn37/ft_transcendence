@@ -88,7 +88,7 @@ export default function Profile() {
 			} finally {
 				setTimeout(() => {
 					setLoading(false);
-				}, 1500);
+				}, 1000);
 			}
 		}
 

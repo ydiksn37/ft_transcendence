@@ -56,7 +56,7 @@
   box-shadow: 6px 6px 0px rgba(255, 255, 255, 0.3);
 }
 
-.join-button:hover {
+.join-button:hover, .join-button.selected {
   background-color: #222;
   color: #fff;
 }

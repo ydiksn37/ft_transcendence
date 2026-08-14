@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useConfig } from '../hooks/useConfig';
 import './Login.css';
 
 export default function Login() {
@@ -15,6 +16,18 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/menu';
+  const cancelTo = searchParams.get('cancelTo') || '/';
+  const { keyConfig } = useConfig();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === keyConfig.quitToMenu) {
+        navigate(cancelTo);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [keyConfig.quitToMenu, navigate, cancelTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
