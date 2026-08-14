@@ -60,11 +60,20 @@ const PlayPage = () => {
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
-  const checkGameOver = useCallback((newStage: Cell[][]) => {
+  const checkGameOver = useCallback((newStage: Cell[][], isLockOut: boolean = false) => {
+     if (isLockOut) {
+       setGameOver(true);
+       setDropTime(null);
+       if (gameModeRef.current === 'ONLINE_1V1') {
+         setMatchResult('LOSE');
+       }
+       return true;
+     }
+
      if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
      const nextPiece = TETROMINOS[nextPieceKeys[0] as keyof typeof TETROMINOS].shape;
      const dummyPlayer = {
-       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 0 },
+       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 18 },
        tetromino: nextPiece,
        collided: false,
        rotationIndex: 0,
@@ -308,7 +317,7 @@ const PlayPage = () => {
            
            remainingAttacks = [];
            
-           if (isPushedOut || newStage[0].some(cell => cell[1] === 'merged')) {
+           if (isPushedOut) {
              setGameOver(true);
              if (gameModeRef.current === 'ONLINE_1V1') {
                setMatchResult('LOSE');

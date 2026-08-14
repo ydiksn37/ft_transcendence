@@ -216,19 +216,21 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             ) : (
               <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
             )}
-          <div style={{ position: 'relative' }}>
-            <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
-            <GameBoard 
-              stage={stage} 
-              player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-              ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
-              targetLine={
-                gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                  ? 22 - (40 - lines) 
-                  : undefined
-              }
-            />
-          </Stage>
+          <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+              <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
+                <GameBoard 
+                  stage={stage} 
+                  player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
+                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
+                  targetLine={
+                    gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                      ? 22 - (40 - lines) 
+                      : undefined
+                  }
+                />
+              </Stage>
+            </div>
 
 
           {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
@@ -461,14 +463,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
           <div style={{ position: 'relative', marginLeft: '20px' }}>
             <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>OPPONENT</h3>
-            <div style={{ position: 'relative' }}>
-              <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={opponentStage || createStage(10)} 
-                  player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
-                  ghostY={0} 
-                />
-              </Stage>
+            <div style={{ position: 'relative', width: 300, height: 660 }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                  <GameBoard 
+                    stage={opponentStage || createStage(10)} 
+                    player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
+                    ghostY={0} 
+                  />
+                </Stage>
+              </div>
               
               {isWaiting && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>

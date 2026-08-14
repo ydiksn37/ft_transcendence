@@ -1,6 +1,6 @@
 import { TetrominoType, TETROMINO_SHAPES, Board, Cell, WALL_KICKS_NORMAL, WALL_KICKS_I } from '@transcendence/shared';
 
-export const BOARD_ROWS = 20;
+export const BOARD_ROWS = 40;
 export const BOARD_COLS = 10;
 
 /** 空の盤面を生成 */
@@ -33,8 +33,8 @@ export function isValidPosition(
 ): boolean {
   const cells = getMinoCells(type, x, y, rotation);
   for (const [row, col] of cells) {
-    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return false;
-    if (board[row][col] !== null) return false;
+    if (row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return false;
+    if (row >= 0 && board[row][col] !== null) return false;
   }
   return true;
 }

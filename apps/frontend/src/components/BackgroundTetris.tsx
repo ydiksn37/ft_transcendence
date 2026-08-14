@@ -93,9 +93,13 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
 
   return (
     <div style={{ opacity: 0.6, transform: reversed ? 'scale(-0.8, 0.8)' : 'scale(0.8)', pointerEvents: 'none' }}>
-      <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
-        <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
-      </Stage>
+      <div style={{ position: 'relative', width: 300, height: 660 }}>
+        <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+          <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+            <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
+          </Stage>
+        </div>
+      </div>
     </div>
   );
 };

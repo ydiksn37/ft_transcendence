@@ -8,6 +8,7 @@ import {
 } from '@transcendence/shared';
 import { BagGenerator } from './engine/bag-generator';
 import {
+  getMinoCells,
   createEmptyBoard,
   isValidPosition,
   lockMino,
@@ -75,7 +76,7 @@ export class GameInstance {
       board: createEmptyBoard(),
       activeMino: firstMino,
       activeX: 3,
-      activeY: 0,
+      activeY: 18,
       activeRotation: 0,
       holdMino: null,
       canHold: true,
@@ -225,7 +226,7 @@ export class GameInstance {
     player.holdMino = player.activeMino;
     player.activeMino = prev ?? this.bag.next();
     player.activeX = 3;
-    player.activeY = 0;
+    player.activeY = 18;
     player.activeRotation = 0;
     player.canHold = false;
     player.lastMoveWasRotation = false;
@@ -244,9 +245,22 @@ export class GameInstance {
       player.activeRotation, player.lastMoveWasRotation,
     );
 
+    // Lock Out 判定用 (Vanish Zoneで完全に固定されたか)
+    const cells = getMinoCells(player.activeMino, player.activeX, player.activeY, player.activeRotation);
+    let maxLockY = -1;
+    for (const [r, c] of cells) {
+      maxLockY = Math.max(maxLockY, r);
+    }
+
     // ピースを固定
     player.board = lockMino(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation);
     const { board: clearedBoard, linesCleared } = clearLines(player.board);
+
+    // Clutch ルール：ラインを消せなかった場合、かつピースが完全にVanish Zone(y < 20)に固定されたらLock Out
+    if (linesCleared === 0 && maxLockY < 20) {
+      this.handleGameOver(socketId);
+      return;
+    }
     player.board = clearedBoard;
     player.piecesPlaced++;
 
@@ -283,7 +297,7 @@ export class GameInstance {
     // 次のミノを取得
     player.activeMino = this.bag.next();
     player.activeX = 3;
-    player.activeY = 0;
+    player.activeY = 18;
     player.activeRotation = 0;
     player.canHold = true;
     player.lastMoveWasRotation = false;

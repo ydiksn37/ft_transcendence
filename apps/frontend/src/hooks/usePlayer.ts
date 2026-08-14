@@ -24,7 +24,7 @@ const rotate = (matrix: (string | number)[][], dir: number): (string | number)[]
 
 export const usePlayer = () => {
   const [player, setPlayer] = useState<Player>({
-    pos: { x: 0, y: 0 },
+    pos: { x: 0, y: 18 },
     tetromino: TETROMINOS[0].shape,
     collided: false,
     rotationIndex: 0,
@@ -83,7 +83,7 @@ export const usePlayer = () => {
   const resetPlayer = useCallback((width: number = STAGE_WIDTH) => {
     const nextTetromino = randomTetromino().shape;
     setPlayer(prev => ({
-      pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
+      pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 18 },
       tetromino: nextTetromino,
       collided: false,
       rotationIndex: 0,
@@ -109,7 +109,7 @@ export const usePlayer = () => {
       // Swap with existing hold — does NOT consume next piece
       const heldTetromino = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
       setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 0 },
+        pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 18 },
         tetromino: heldTetromino,
         collided: false,
         rotationIndex: 0,
@@ -121,7 +121,7 @@ export const usePlayer = () => {
       // No hold piece yet — consume next piece from bag
       const nextTetromino = randomTetromino().shape;
       setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
+        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 18 },
         tetromino: nextTetromino,
         collided: false,
         rotationIndex: 0,

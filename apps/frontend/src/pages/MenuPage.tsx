@@ -12,7 +12,7 @@ import GameBoard from '../components/GameBoard';
 
 const createMenuStage = (): Cell[][] => {
   const width = 41;
-  const height = 22;
+  const height = 40;
   const stage = Array.from(Array(height), () =>
     new Array(width).fill([0, 'clear']) as Cell[]
   );
@@ -257,14 +257,16 @@ const MenuPage = () => {
         </button>
       </div>
       
-      <div style={{ position: 'relative' }}>
-        <Stage width={1230} height={660} options={{ backgroundAlpha: 0 }}>
-          <GameBoard 
-            stage={stage} 
-            player={transitionMode ? { ...player, tetromino: [] } : player} 
-            ghostY={calculateGhostY(player, stage)} 
-          />
-        </Stage>
+      <div style={{ position: 'relative', width: 1230, height: 660 }}>
+        <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+          <Stage width={1230} height={1200} options={{ backgroundAlpha: 0 }}>
+            <GameBoard 
+              stage={stage} 
+              player={transitionMode ? { ...player, tetromino: [] } : player} 
+              ghostY={calculateGhostY(player, stage)} 
+            />
+          </Stage>
+        </div>
 
         <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
            <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white' }}>DROP TO SELECT MODE</h2>
