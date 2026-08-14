@@ -63,7 +63,7 @@ install: ## 依存パッケージをすべてインストールする
 AI_BUILD_DIR := build/ai-agent
 model ?= easy
 games ?= 1
-seed ?= 42
+seed ?= $(shell od -An -N4 -tu4 /dev/urandom | tr -d ' ')
 max_pieces ?= 5000
 jobs ?= 1
 preview ?= 1
