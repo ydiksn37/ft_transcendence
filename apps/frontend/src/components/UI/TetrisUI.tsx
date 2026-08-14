@@ -73,11 +73,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   useEffect(() => {
     if (!gameOver) return;
     const handleGameOverKeys = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
+      if (e.key === 'Escape') {
         navigate('/menu');
-      } else if (e.key === 'Escape') {
-        navigate('/');
       }
     };
     window.addEventListener('keydown', handleGameOverKeys);
@@ -307,16 +304,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 
                 <button 
                   onClick={() => navigate('/menu')}
-                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                >
-                  MODE SELECT (SPACE)
-                </button>
-                
-                <button 
-                  onClick={() => navigate('/')}
                   style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                   onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                   onMouseUp={(e) => e.currentTarget.style.transform = 'none'}

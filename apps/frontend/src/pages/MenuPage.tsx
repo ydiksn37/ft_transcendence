@@ -9,6 +9,7 @@ import { useGameState } from '../hooks/useGameState';
 import { useNavigate } from 'react-router-dom';
 import { Stage } from '@pixi/react';
 import GameBoard from '../components/GameBoard';
+import { useAuth } from '../hooks/useAuth';
 
 const createMenuStage = (): Cell[][] => {
   const width = 41;
@@ -33,6 +34,7 @@ const createMenuStage = (): Cell[][] => {
 
 const MenuPage = () => {
   const navigate = useNavigate();
+  const { token, user, logout } = useAuth();
   const {
     appStateRef,
     dropTime, setDropTime,
@@ -91,9 +93,9 @@ const MenuPage = () => {
 
     const { lockedX } = lockEvent;
     let mode = 'MARATHON';
-    if (lockedX < 8) mode = 'MARATHON';
+    if (lockedX < 8) mode = '4_WIDE';
     else if (lockedX >= 8 && lockedX < 16) mode = '40_LINES';
-    else if (lockedX >= 16 && lockedX < 24) mode = '4_WIDE';
+    else if (lockedX >= 16 && lockedX < 24) mode = 'MARATHON';
     else if (lockedX >= 24 && lockedX < 32) mode = 'ONLINE_1V1';
     else if (lockedX >= 32) mode = 'CONFIG';
     
@@ -215,6 +217,16 @@ const MenuPage = () => {
 
   useInterval(drop, dropTime);
 
+  const handleMouseSelect = (colIndex: number) => {
+    if (transitionMode) return;
+    const modes = ['4_WIDE', '40_LINES', 'MARATHON', 'ONLINE_1V1', 'CONFIG'];
+    const selectedMode = modes[colIndex];
+    setTransitionMode(selectedMode);
+    setTimeout(() => {
+      navigate(selectedMode === 'CONFIG' ? '/lobby/CONFIG' : `/lobby/${selectedMode}`);
+    }, 500);
+  };
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -239,22 +251,75 @@ const MenuPage = () => {
           ◀ TOP
         </button>
         <h1 style={{ fontSize: '48px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>TETRIS</h1>
-        <button 
-          onClick={() => setDropTime(dropTime ? null : 1000)}
-          style={{
-            width: '150px',
-            padding: '12px 0',
-            fontSize: '14px',
-            fontFamily: "'Press Start 2P', monospace",
-            backgroundColor: dropTime ? '#e74c3c' : '#4caf50',
-            color: 'white',
-            border: '4px solid white',
-            cursor: 'pointer',
-            boxShadow: '4px 4px 0px #333'
-          }}
-        >
-          {dropTime ? 'STOP' : 'RESUME'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => setDropTime(dropTime ? null : 1000)}
+            style={{
+              width: '150px',
+              padding: '12px 0',
+              fontSize: '14px',
+              fontFamily: "'Press Start 2P', monospace",
+              backgroundColor: dropTime ? '#e74c3c' : '#4caf50',
+              color: 'white',
+              border: '4px solid white',
+              cursor: 'pointer',
+              boxShadow: '4px 4px 0px #333'
+            }}
+          >
+            {dropTime ? 'STOP' : 'RESUME'}
+          </button>
+          
+          {token && user ? (
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => navigate('/dashboard')}
+                style={{
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontFamily: "'Press Start 2P', monospace",
+                  backgroundColor: '#3498db',
+                  color: 'white',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  boxShadow: '4px 4px 0px #333'
+                }}
+              >
+                DASHBOARD
+              </button>
+              <button 
+                onClick={() => { logout(); navigate('/'); }}
+                style={{
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontFamily: "'Press Start 2P', monospace",
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  boxShadow: '4px 4px 0px #333'
+                }}
+              >
+                LOGOUT
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => navigate('/login?redirectTo=/menu&cancelTo=/menu')}
+              style={{
+                padding: '12px 20px',
+                fontSize: '14px',
+                fontFamily: "'Press Start 2P', monospace",
+                backgroundColor: '#9b59b6',
+                color: 'white',
+                border: '4px solid white',
+                cursor: 'pointer',
+                boxShadow: '4px 4px 0px #333'
+              }}
+            >
+              LOGIN / REGISTER
+            </button>
+          )}
+        </div>
       </div>
       
       <div style={{ position: 'relative' }}>
@@ -266,13 +331,35 @@ const MenuPage = () => {
           />
         </Stage>
 
-        <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
-           <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white' }}>DROP TO SELECT MODE</h2>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '1230px', height: '660px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>
+          {['4_WIDE', '40_LINES', 'MARATHON', 'ONLINE_1V1', 'CONFIG'].map((mode, index) => (
+            <div 
+              key={mode}
+              onClick={() => handleMouseSelect(index)}
+              style={{ width: '246px', height: '100%', cursor: 'pointer', pointerEvents: 'auto' }}
+              title={`Click to select ${mode}`}
+            />
+          ))}
+        </div>
+
+        <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none', zIndex: 20 }}>
+           <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
+           
+           <div style={{ position: 'absolute', top: 0, left: '50%', marginLeft: '320px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px 20px', border: '2px solid white', color: '#ccc', fontSize: '10px', textAlign: 'left', lineHeight: '1.6' }}>
+             <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
+             <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
+               <div style={{color: '#4caf50'}}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+               <div style={{color: '#4caf50'}}>RIGHT:</div><div>{keyConfig.right?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+               <div style={{color: '#4caf50'}}>ROTATE:</div><div>{keyConfig.rotateCW?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+               <div style={{color: '#4caf50'}}>H-DROP:</div><div>{keyConfig.hardDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+               <div style={{color: '#4caf50'}}>S-DROP:</div><div>{keyConfig.softDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+             </div>
+           </div>
         </div>
         <div style={{ position: 'absolute', bottom: '150px', left: '15px', width: '1230px', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
-          <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
+          <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
+          <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>ONLINE 1v1</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
         </div>

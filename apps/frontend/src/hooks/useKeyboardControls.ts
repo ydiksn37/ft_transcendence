@@ -144,16 +144,6 @@ export const useKeyboardControls = ({
         return;
       }
 
-      if (code === 'Enter') {
-        if (document.activeElement?.tagName === 'BUTTON') {
-          return;
-        }
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') {
-          startGame();
-        }
-        return;
-      }
-
       if (code === conf.quitToMenu) {
         if (gameOver) return;
         if (!e.repeat) {
