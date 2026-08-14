@@ -22,17 +22,27 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 add_library(ai_engine
+  src/agent.cpp
+  src/bag.cpp
   src/board.cpp
   src/easy_agent.cpp
+  src/game_simulator.cpp
 )
 target_include_directories(ai_engine PUBLIC include)
 
 add_executable(ai_agent src/main.cpp)
 target_link_libraries(ai_agent PRIVATE ai_engine nlohmann_json::nlohmann_json)
 
+find_package(Threads REQUIRED)
+add_executable(ai_benchmark src/benchmark_main.cpp)
+target_link_libraries(
+  ai_benchmark PRIVATE ai_engine nlohmann_json::nlohmann_json Threads::Threads
+)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(ai_engine PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(ai_agent PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(ai_benchmark PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 include(CTest)
@@ -43,4 +53,9 @@ if(BUILD_TESTING)
     target_compile_options(ai_engine_tests PRIVATE -Wall -Wextra -Wpedantic)
   endif()
   add_test(NAME ai_engine_tests COMMAND ai_engine_tests)
+  add_test(
+    NAME ai_benchmark_smoke
+    COMMAND ai_benchmark --model easy --games 1 --seed 42 --max-pieces 10
+            --format json
+  )
 endif()

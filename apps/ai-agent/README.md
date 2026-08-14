@@ -6,7 +6,7 @@ board rules and an Easy agent that performs a one-piece greedy search.
 The board behavior mirrors the TypeScript backend:
 
 - 20 rows x 10 columns
-- the same four tetromino shapes
+- the same seven tetromino shapes
 - SRS wall kicks (180-degree rotation has no kicks)
 - collision, ghost, lock and line-clear rules
 - three-corner T-Spin detection
@@ -22,6 +22,58 @@ cmake -S apps/ai-agent -B build/ai-agent -DCMAKE_BUILD_TYPE=Release
 cmake --build build/ai-agent --parallel
 ctest --test-dir build/ai-agent --output-on-failure
 ```
+
+## Benchmark AI models
+
+`ai_benchmark` runs complete games without the browser or backend. Every game
+uses the backend-compatible seeded 7-bag, so different models can be compared
+with exactly the same piece sequences.
+
+```sh
+# Human-readable result for seeds 42..61
+./build/ai-agent/ai_benchmark \
+  --model easy --games 20 --seed 42 --max-pieces 5000 --jobs 4
+
+# Machine-readable output for later comparison
+./build/ai-agent/ai_benchmark \
+  --model easy --games 100 --seed 42 --max-pieces 10000 \
+  --jobs 4 --format csv > easy.csv
+
+./build/ai-agent/ai_benchmark \
+  --model easy --games 10 --seed 42 --max-pieces 5000 \
+  --format json > easy.json
+```
+
+The result contains, for each seed:
+
+- cleared lines, score, and placed pieces;
+- Single/Double/Triple/Tetris, T-Spin, and Perfect Clear counts;
+- game-over, piece-cap, and invalid-decision status;
+- total and per-decision execution time.
+
+The table and JSON formats also report mean, median, min, max, standard
+deviation, and p95. `CAPPED` means that the model survived the requested
+`--max-pieces`; its line and score values are lower bounds, not game-over
+results. Use the same `--seed`, `--games`, and `--max-pieces` for fair model
+comparisons. Timing comparisons should normally use `--jobs 1` to avoid CPU
+contention.
+
+Scoring follows the authoritative backend implementation in
+`apps/backend/src/game/engine/garbage.ts`. The current frontend has a separate
+score calculation with B2B and a different Perfect Clear bonus, so its displayed
+score can differ even when the board and cleared-line count are identical.
+
+Useful commands:
+
+```sh
+./build/ai-agent/ai_benchmark --list-models
+./build/ai-agent/ai_benchmark --help
+```
+
+To add a model, implement the `tetris::Agent` interface in
+`include/tetris/agent.hpp`, then register its name in `src/agent.cpp`. The
+benchmark creates a fresh agent instance for each game, which makes parallel
+runs safe as long as a model does not use shared mutable global state.
 
 ## JSON Lines protocol
 

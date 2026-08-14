@@ -1,10 +1,14 @@
+#include <array>
 #include <cmath>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
+#include "tetris/agent.hpp"
+#include "tetris/bag.hpp"
 #include "tetris/easy_agent.hpp"
+#include "tetris/game_simulator.hpp"
 
 namespace {
 
@@ -110,6 +114,40 @@ void testEasyAgentReportsBlockedSpawn() {
          "blocked spawn must produce no decision");
 }
 
+void testSeededBagIsDeterministicAndUsesAllPieces() {
+  tetris::BagGenerator first(42);
+  tetris::BagGenerator second(42);
+  for (int bagIndex = 0; bagIndex < 2; ++bagIndex) {
+    std::array<int, 7> counts{};
+    for (int index = 0; index < 7; ++index) {
+      const auto firstPiece = first.next();
+      const auto secondPiece = second.next();
+      expect(firstPiece == secondPiece, "same seed must produce the same bag");
+      ++counts[static_cast<std::size_t>(firstPiece)];
+    }
+    for (const int count : counts) {
+      expect(count == 1, "each 7-bag must contain every piece exactly once");
+    }
+  }
+}
+
+void testSimulatorIsDeterministic() {
+  tetris::EasyAgent firstAgent;
+  tetris::EasyAgent secondAgent;
+  const auto first = tetris::simulateGame(firstAgent, 1234, 25);
+  const auto second = tetris::simulateGame(secondAgent, 1234, 25);
+  expect(first.piecesPlaced == 25 && first.reachedPieceLimit,
+         "easy agent must reach the test piece limit");
+  expect(first.linesCleared == second.linesCleared,
+         "same benchmark seed must reproduce cleared lines");
+  expect(first.score == second.score,
+         "same benchmark seed must reproduce score");
+  expect(first.piecesPlaced == second.piecesPlaced,
+         "same benchmark seed must reproduce placed pieces");
+  expect(!first.invalidDecision && !second.invalidDecision,
+         "easy agent decisions must replay legally");
+}
+
 }  // namespace
 
 int main() {
@@ -122,6 +160,8 @@ int main() {
     testEvaluationMatchesTypeScript();
     testEasyAgentClearsAvailableLine();
     testEasyAgentReportsBlockedSpawn();
+    testSeededBagIsDeterministicAndUsesAllPieces();
+    testSimulatorIsDeterministic();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

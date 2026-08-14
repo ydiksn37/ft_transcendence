@@ -25,12 +25,14 @@ struct BoardEvaluation {
   double score;
 };
 
-struct EasyDecision {
+struct AgentDecision {
   ActivePiece placement;
   std::vector<Action> actions;
   double score;
   int linesCleared;
 };
+
+using EasyDecision = AgentDecision;
 
 [[nodiscard]] std::string_view toString(Action action) noexcept;
 [[nodiscard]] BoardEvaluation evaluateBoard(const Board& board) noexcept;
