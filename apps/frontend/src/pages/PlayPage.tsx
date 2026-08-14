@@ -345,7 +345,7 @@ const PlayPage = () => {
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
       if (token) {
-        fetch('/api/sprint', {
+        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -359,7 +359,7 @@ const PlayPage = () => {
         }).catch(err => console.error('Failed to save sprint record:', err));
       }
     }
-  }, [gameOver, finalTime, token]);
+  }, [gameOver, finalTime, token, piecesPlaced]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
