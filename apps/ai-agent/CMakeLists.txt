@@ -34,7 +34,11 @@ add_executable(ai_agent src/main.cpp)
 target_link_libraries(ai_agent PRIVATE ai_engine nlohmann_json::nlohmann_json)
 
 find_package(Threads REQUIRED)
-add_executable(ai_benchmark src/benchmark_main.cpp)
+add_executable(
+  ai_benchmark
+  src/benchmark_main.cpp
+  src/terminal_renderer.cpp
+)
 target_link_libraries(
   ai_benchmark PRIVATE ai_engine nlohmann_json::nlohmann_json Threads::Threads
 )
@@ -57,5 +61,10 @@ if(BUILD_TESTING)
     NAME ai_benchmark_smoke
     COMMAND ai_benchmark --model easy --games 1 --seed 42 --max-pieces 10
             --format json
+  )
+  add_test(
+    NAME ai_benchmark_preview_smoke
+    COMMAND ai_benchmark --model easy --games 1 --seed 42 --max-pieces 3
+            --preview --delay-ms 0
   )
 endif()

@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <stdexcept>
@@ -19,6 +20,7 @@
 
 #include "tetris/agent.hpp"
 #include "tetris/game_simulator.hpp"
+#include "tetris/terminal_renderer.hpp"
 
 namespace {
 
@@ -29,6 +31,8 @@ struct Options {
   std::size_t maxPieces = 5000;
   std::size_t jobs = 1;
   std::string format = "table";
+  bool preview = false;
+  std::uint64_t delayMs = 100;
 };
 
 struct Statistics {
@@ -48,6 +52,8 @@ void printUsage(std::ostream& output) {
             "  --max-pieces N       Per-game safety limit (default: 5000)\n"
             "  --jobs N             Parallel games (default: 1)\n"
             "  --format table|json|csv\n"
+            "  --preview            Color terminal preview (requires jobs=1)\n"
+            "  --delay-ms N         Preview delay per piece (default: 100)\n"
             "  --list-models\n"
             "  --help\n";
 }
@@ -81,6 +87,10 @@ Options parseOptions(int argc, char** argv) {
       }
       std::exit(0);
     }
+    if (argument == "--preview") {
+      options.preview = true;
+      continue;
+    }
     if (index + 1 >= argc) {
       throw std::invalid_argument("missing value for " + argument);
     }
@@ -101,6 +111,8 @@ Options parseOptions(int argc, char** argv) {
       options.jobs = parseUnsigned(value, argument);
     } else if (argument == "--format") {
       options.format = value;
+    } else if (argument == "--delay-ms") {
+      options.delayMs = parseUnsigned(value, argument);
     } else {
       throw std::invalid_argument("unknown option: " + argument);
     }
@@ -114,6 +126,12 @@ Options parseOptions(int argc, char** argv) {
   if (options.format != "table" && options.format != "json" &&
       options.format != "csv") {
     throw std::invalid_argument("--format must be table, json, or csv");
+  }
+  if (options.preview && options.jobs != 1) {
+    throw std::invalid_argument("--preview requires --jobs 1");
+  }
+  if (options.preview && options.format != "table") {
+    throw std::invalid_argument("--preview requires --format table");
   }
   (void)tetris::createAgent(options.model);
   return options;
@@ -184,7 +202,8 @@ nlohmann::json gameJson(const tetris::GameResult& game) {
   };
 }
 
-std::vector<tetris::GameResult> runGames(const Options& options) {
+std::vector<tetris::GameResult> runGames(
+    const Options& options, tetris::TerminalRenderer* renderer) {
   std::vector<tetris::GameResult> results(options.games);
   std::atomic<std::size_t> nextGame{0};
   const std::size_t workerCount = std::min(options.jobs, options.games);
@@ -202,8 +221,18 @@ std::vector<tetris::GameResult> runGames(const Options& options) {
           auto agent = tetris::createAgent(options.model);
           const std::uint32_t gameSeed =
               options.seed + static_cast<std::uint32_t>(gameIndex);
-          results[gameIndex] =
-              tetris::simulateGame(*agent, gameSeed, options.maxPieces);
+          tetris::FrameCallback onFrame;
+          if (renderer) {
+            onFrame = [&, gameIndex](const tetris::Board& board,
+                                     const tetris::GameResult& result,
+                                     tetris::PieceType placedPiece,
+                                     int clearedThisMove) {
+              renderer->render(gameIndex + 1, options.model, board, result,
+                               placedPiece, clearedThisMove);
+            };
+          }
+          results[gameIndex] = tetris::simulateGame(
+              *agent, gameSeed, options.maxPieces, onFrame);
         }
       } catch (...) {
         nextGame.store(options.games);
@@ -324,7 +353,12 @@ void printCsv(const std::string& model,
 int main(int argc, char** argv) {
   try {
     const Options options = parseOptions(argc, argv);
-    const auto games = runGames(options);
+    std::unique_ptr<tetris::TerminalRenderer> renderer;
+    if (options.preview) {
+      renderer = std::make_unique<tetris::TerminalRenderer>(options.delayMs);
+    }
+    const auto games = runGames(options, renderer.get());
+    if (renderer) renderer->finish();
     if (options.format == "json") {
       printJson(options, games);
     } else if (options.format == "csv") {

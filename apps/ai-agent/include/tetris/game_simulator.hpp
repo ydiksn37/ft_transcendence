@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "tetris/agent.hpp"
 
@@ -28,7 +29,11 @@ struct GameResult {
   [[nodiscard]] double averageDecisionMs() const noexcept;
 };
 
+using FrameCallback = std::function<void(const Board&, const GameResult&,
+                                         PieceType, int)>;
+
 [[nodiscard]] GameResult simulateGame(Agent& agent, std::uint32_t seed,
-                                      std::size_t maxPieces);
+                                      std::size_t maxPieces,
+                                      const FrameCallback& onFrame = {});
 
 }  // namespace tetris

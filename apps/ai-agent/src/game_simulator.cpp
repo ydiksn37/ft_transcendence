@@ -181,7 +181,8 @@ double GameResult::averageDecisionMs() const noexcept {
 }
 
 GameResult simulateGame(Agent& agent, std::uint32_t seed,
-                        std::size_t maxPieces) {
+                        std::size_t maxPieces,
+                        const FrameCallback& onFrame) {
   GameResult result;
   result.seed = seed;
   Board board;
@@ -244,6 +245,9 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
     // B2B does not change score in the current TypeScript backend. Keep the
     // state here so future garbage/versus benchmarks can reuse the simulator.
     (void)backToBack;
+    if (onFrame) {
+      onFrame(board, result, activeType, cleared.linesCleared);
+    }
     activeType = bag.next();
   }
 

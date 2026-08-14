@@ -44,6 +44,18 @@ with exactly the same piece sequences.
   --format json > easy.json
 ```
 
+For a color terminal preview, run one worker and choose the delay applied after
+each placed piece. A zero delay renders as fast as the model can decide.
+
+```sh
+./build/ai-agent/ai_benchmark \
+  --model easy --games 1 --seed 42 --max-pieces 5000 \
+  --jobs 1 --preview --delay-ms 100
+```
+
+Preview output is intentionally limited to the table format because ANSI color
+codes would corrupt JSON or CSV output.
+
 The result contains, for each seed:
 
 - cleared lines, score, and placed pieces;

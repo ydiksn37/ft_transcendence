@@ -59,6 +59,30 @@ install: ## 依存パッケージをすべてインストールする
 	npm install
 	npm run build --workspace=@transcendence/shared
 
+# --- C++ AI ---
+AI_BUILD_DIR := build/ai-agent
+model ?= easy
+games ?= 1
+seed ?= 42
+max_pieces ?= 5000
+jobs ?= 1
+preview ?= 1
+delay_ms ?= 100
+
+ai-build: ## C++ AIをReleaseモードで設定・ビルドする
+	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	cmake --build $(AI_BUILD_DIR) --parallel
+
+ai-run: ai-build ## C++ AIを実行する (例: make ai-run model=easy)
+	./$(AI_BUILD_DIR)/ai_benchmark \
+		--model "$(model)" \
+		--games "$(games)" \
+		--seed "$(seed)" \
+		--max-pieces "$(max_pieces)" \
+		--jobs "$(jobs)" \
+		$(if $(filter 1 true yes,$(preview)),--preview) \
+		--delay-ms "$(delay_ms)"
+
 # --- テスト ---
 test: ## 全ての単体テストを実行する
 	npm run test
@@ -99,4 +123,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install ai-build ai-run test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
