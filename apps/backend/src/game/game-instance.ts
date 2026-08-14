@@ -61,10 +61,18 @@ export class GameInstance {
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
 
-  constructor(roomId: string, server: Server, seed: number) {
+  private onGameOver?: (roomId: string, winnerId: string | null) => void;
+
+  constructor(
+    roomId: string,
+    server: Server,
+    seed: number,
+    onGameOver?: (roomId: string, winnerId: string | null) => void
+  ) {
     this.roomId = roomId;
     this.server = server;
     this.bag = new BagGenerator(seed);
+    this.onGameOver = onGameOver;
   }
 
   /** プレイヤーを追加 */
@@ -410,6 +418,9 @@ export class GameInstance {
     });
 
     if (winner || survivors.length === 0) {
+      if (this.onGameOver) {
+        this.onGameOver(this.roomId, winner?.socketId ?? null);
+      }
       this.stop();
     }
   }

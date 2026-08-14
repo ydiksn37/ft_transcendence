@@ -538,8 +538,8 @@ const PlayPage = () => {
     
     const newStage = createStage(nextMode === '4_WIDE' ? 4 : 10);
     if (nextMode === '4_WIDE') {
-      // Board width is 4. Place 3 blocks on the bottom row (row 21).
-      for (let x = 0; x < 3; x++) newStage[21][x] = ['X', 'merged'];
+      // Board width is 4. Place 3 blocks on the bottom row (y=39).
+      for (let x = 0; x < 3; x++) newStage[39][x] = ['X', 'merged'];
     }
     setStage(newStage);
     stageRef.current = newStage;
@@ -599,7 +599,13 @@ const PlayPage = () => {
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => navigate(`/lobby/${mode}`)
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        setAppState('CUSTOM_ROOMS');
+      } else {
+        navigate(`/lobby/${mode}`);
+      }
+    }
   });
 
   // Auto-drop (gravity)

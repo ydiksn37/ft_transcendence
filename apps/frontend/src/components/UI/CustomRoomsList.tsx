@@ -18,19 +18,45 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const [newRoomName, setNewRoomName] = useState('');
   const [customRoomId, setCustomRoomId] = useState('');
   const [inRoom, setInRoom] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [opponentJoined, setOpponentJoined] = useState(false);
+  const [ownerWins, setOwnerWins] = useState(0);
+  const [guestWins, setGuestWins] = useState(0);
 
   useEffect(() => {
     if (!socket) return;
 
     socket.emit('game:get_custom_rooms');
+    socket.emit('game:request_custom_room_state');
 
     const handleRoomsUpdated = (updatedRooms: Room[]) => {
       setRooms(updatedRooms);
     };
 
+    const handleRoomState = (data: any) => {
+      if (data.inRoom) {
+        setInRoom(data.roomId);
+        setCustomRoomId(data.roomId);
+        setIsOwner(data.isOwner);
+        setOpponentJoined(data.opponentJoined);
+        setOwnerWins(data.ownerWins);
+        setGuestWins(data.guestWins);
+      }
+    };
+
     const handleRoomCreated = (data: { roomId: string; name: string }) => {
       setInRoom(data.roomId);
       setCustomRoomId(data.roomId);
+      setIsOwner(true);
+      setOpponentJoined(false);
+    };
+
+    const handleOpponentJoined = (data?: { ownerWins: number; guestWins: number }) => {
+      setOpponentJoined(true);
+      if (data) {
+        setOwnerWins(data.ownerWins);
+        setGuestWins(data.guestWins);
+      }
     };
 
     const handleMatchFound = () => {
@@ -39,6 +65,9 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
     const handleError = (err: { message: string }) => {
       alert(err.message);
+      setInRoom(null);
+      setIsOwner(false);
+      setOpponentJoined(false);
     };
 
     const handleRoomUpdated = (data: { oldId: string; newId: string }) => {
@@ -49,6 +78,8 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     socket.on('custom_rooms_updated', handleRoomsUpdated);
     socket.on('custom_room_created', handleRoomCreated);
     socket.on('custom_room_id_updated', handleRoomUpdated);
+    socket.on('custom_room_state', handleRoomState);
+    socket.on('custom_room_opponent_joined', handleOpponentJoined);
     socket.on('match:found', handleMatchFound);
     socket.on('error', handleError);
 
@@ -56,6 +87,8 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       socket.off('custom_rooms_updated', handleRoomsUpdated);
       socket.off('custom_room_created', handleRoomCreated);
       socket.off('custom_room_id_updated', handleRoomUpdated);
+      socket.off('custom_room_state', handleRoomState);
+      socket.off('custom_room_opponent_joined', handleOpponentJoined);
       socket.off('match:found', handleMatchFound);
       socket.off('error', handleError);
     };
@@ -76,6 +109,9 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const handleJoinRoom = (roomId: string) => {
     if (socket) {
       socket.emit('game:join_custom_room', { roomId });
+      setInRoom(roomId);
+      setCustomRoomId(roomId);
+      setIsOwner(false);
     }
   };
 
@@ -125,22 +161,44 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         </>
       ) : (
         <div style={{ marginTop: '50px', textAlign: 'center' }}>
-          <h2>Waiting for opponent...</h2>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
-            <span>Room ID:</span>
-            <input
-              type="text"
-              value={customRoomId}
-              onChange={(e) => setCustomRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase())}
-              style={{ width: '80px', padding: '5px', fontSize: '18px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
-            />
-            <button
-              onClick={handleUpdateRoomId}
-              style={{ padding: '6px 12px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}
+          <h2>
+            {!opponentJoined 
+              ? "Waiting for opponent..." 
+              : (isOwner ? "Opponent joined!" : "Waiting for owner to start...")}
+          </h2>
+          {opponentJoined && (
+            <div style={{ marginTop: '20px', fontSize: '24px', fontWeight: 'bold', display: 'flex', gap: '30px', justifyContent: 'center' }}>
+              <div style={{ color: isOwner ? '#f1c40f' : '#ccc' }}>Owner Wins: {ownerWins}</div>
+              <div style={{ color: !isOwner ? '#f1c40f' : '#ccc' }}>Guest Wins: {guestWins}</div>
+            </div>
+          )}
+          
+          {isOwner && opponentJoined && (
+            <button 
+              onClick={() => socket?.emit('game:start_custom_room')}
+              style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
             >
-              Update ID
+              START GAME
             </button>
-          </div>
+          )}
+
+          {isOwner && !opponentJoined && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
+              <span>Room ID:</span>
+              <input
+                type="text"
+                value={customRoomId}
+                onChange={(e) => setCustomRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase())}
+                style={{ width: '80px', padding: '5px', fontSize: '18px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
+              />
+              <button
+                onClick={handleUpdateRoomId}
+                style={{ padding: '6px 12px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}
+              >
+                Update ID
+              </button>
+            </div>
+          )}
         </div>
       )}
 
