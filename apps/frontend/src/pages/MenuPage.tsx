@@ -60,6 +60,16 @@ const MenuPage = () => {
     setDropTime(1000);
   }, [setStage, resetPlayer, setDropTime, stageRef]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.code === keyConfig.quitToMenu) {
+        navigate('/');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate, keyConfig.quitToMenu]);
+
   const [transitionMode, setTransitionMode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -233,7 +243,7 @@ const MenuPage = () => {
       padding: '20px', backgroundColor: '#111', color: 'white',
       fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1230px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1230px', marginBottom: '20px', position: 'relative', zIndex: 50 }}>
         <button 
           onClick={() => navigate('/')}
           style={{
@@ -333,7 +343,7 @@ const MenuPage = () => {
           </Stage>
         </div>
 
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '1230px', height: '660px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '1230px', height: '250px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>
           {['4_WIDE', '40_LINES', 'MARATHON', 'ONLINE_1V1', 'CONFIG'].map((mode, index) => (
             <div 
               key={mode}
@@ -362,7 +372,7 @@ const MenuPage = () => {
           <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>ONLINE 1v1</div>
+          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>multi play</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
         </div>
 

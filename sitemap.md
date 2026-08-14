@@ -40,7 +40,7 @@ graph TD
 | `/` | `JoinPage` | Public | トップページ。「PLAY AS GUEST（ゲストプレイ）」または「LOGIN / REGISTER」を選択する入り口。 |
 | `/login` | `Login` | Public | フォームログイン・新規登録、および 42 OAuth 認証を行う画面。 |
 | `/auth/callback` | `OAuthCallback` | Public | 42 OAuth 認証完了後のコールバック処理（トークン保存＆リダイレクト）を担当。UIは持たない。 |
-| `/menu` | `MenuPage` | Public (Guest含む) | テトリスのモード（MARATHON, 40 LINES, ONLINE 1v1 など）を選択するメインメニュー。背景でテトリスが自動再生される。 |
+| `/menu` | `MenuPage` | Public (Guest含む) | テトリスのモード（MARATHON, 40 LINES, multi play など）を選択するメインメニュー。背景でテトリスが自動再生される。 |
 | `/lobby/:mode` | `LobbyPage` | Public (Guest含む) | 選択したモードの待機ロビー。開始レベルの調整、キーボード設定(CONFIG)、ローカル・グローバルランキングの確認が行える。 |
 | `/play/:mode` | `PlayPage` | Public (Guest含む) | 実際のテトリスプレイ画面。PixiJSによるゲームエンジンが動作する。 |
 | `/dashboard` | `Dashboard` | Authenticated | ログインユーザー専用のダッシュボード。自身のAPM、勝率、対戦履歴などの統計データを表示。ロビーからアクセスし、ロビーへ戻る。 |
