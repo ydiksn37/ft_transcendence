@@ -30,25 +30,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private customRooms = new Map<string, {
     roomId: string;
     name: string;
-    ownerId: string;
-    ownerSocket: Socket;
-  }>();
-
-  private activeCustomRooms = new Map<string, {
-    roomId: string;
-    name: string;
-    ownerSocket: Socket;
-    ownerId: string;
-    guestSocket: Socket;
-    guestId: string;
-    ownerWins: number;
-    guestWins: number;
+    ownerSocketId: string;
+    players: {
+      socket: Socket;
+      userId: string | null;
+      wins: number;
+    }[];
+    isPlaying: boolean;
   }>();
 
   constructor(private readonly gameService: GameService) {}
 
   handleConnection(client: Socket) {
-    this.logger.log(`接続: ${client.id}`);
+    const userId = client.handshake?.auth?.userId;
+    if (userId) {
+      client.data = client.data || {};
+      client.data.userId = userId;
+    }
+    this.logger.log(`接続: ${client.id} (User: ${userId || 'anonymous'})`);
   }
 
   handleDisconnect(client: Socket) {
@@ -66,24 +65,40 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         room.stop();
         this.rooms.delete(roomId);
       }
-      this.activeCustomRooms.delete(roomId);
+      
+      const activeRoom = this.customRooms.get(roomId);
+      if (activeRoom) {
+        activeRoom.players = activeRoom.players.filter(p => p.socket.id !== client.id);
+        if (activeRoom.players.length === 0) {
+          this.customRooms.delete(roomId);
+        } else {
+          if (activeRoom.ownerSocketId === client.id) {
+            activeRoom.ownerSocketId = activeRoom.players[0].socket.id;
+          }
+          activeRoom.players.forEach(p => {
+            p.socket.emit('custom_room_state', {
+              inRoom: true,
+              roomId: activeRoom.roomId,
+              name: activeRoom.name,
+              isOwner: activeRoom.ownerSocketId === p.socket.id,
+              players: activeRoom.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+              isPlaying: activeRoom.isPlaying
+            });
+          });
+        }
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      }
       this.clientRoom.delete(client.id);
     }
 
-    // カスタムルームのオーナーだった場合ルーム削除
-    for (const [cRoomId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
-        this.customRooms.delete(cRoomId);
-        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
-      }
-    }
+    // カスタムルームのクリーンアップは上記で処理されるため省略
   }
 
   private getCustomRoomsList() {
     return Array.from(this.customRooms.values()).map(r => ({
       roomId: r.roomId,
       name: r.name,
-      ownerId: r.ownerId
+ownerId: r.ownerSocketId
     }));
   }
 
@@ -139,7 +154,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleCreateCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { name?: string }) {
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         this.customRooms.delete(rId);
       }
     }
@@ -156,12 +171,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.customRooms.set(roomId, {
       roomId,
       name: roomName,
-      ownerId: (client.data?.userId as string) || client.id,
-      ownerSocket: client
+      ownerSocketId: client.id,
+      players: [{ socket: client, userId: (client.data?.userId as string) || null, wins: 0 }],
+      isPlaying: false
     });
 
     client.join(roomId);
-    client.emit('custom_room_created', { roomId, name: roomName });
+    this.clientRoom.set(client.id, roomId);
+    client.emit('custom_room_created', { 
+      roomId, 
+      name: roomName,
+      players: [{ socketId: client.id, userId: (client.data?.userId as string) || null, wins: 0 }] 
+    });
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
 
@@ -182,7 +203,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     let targetRoom: any = null;
 
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         oldRoomId = rId;
         targetRoom = room;
         break;
@@ -219,31 +240,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleRequestCustomRoomState(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (activeRoom) {
-      const isOwner = activeRoom.ownerSocket.id === client.id;
+    const room = this.customRooms.get(roomId);
+    if (room) {
       client.emit('custom_room_state', {
         inRoom: true,
-        roomId: activeRoom.roomId,
-        name: activeRoom.name,
-        isOwner,
-        opponentJoined: true,
-        ownerWins: activeRoom.ownerWins,
-        guestWins: activeRoom.guestWins,
+        roomId: room.roomId,
+        name: room.name,
+        isOwner: room.ownerSocketId === client.id,
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+        isPlaying: room.isPlaying
       });
-    } else {
-      const room = this.customRooms.get(roomId);
-      if (room && room.ownerSocket.id === client.id) {
-        client.emit('custom_room_state', {
-          inRoom: true,
-          roomId: room.roomId,
-          name: room.name,
-          isOwner: true,
-          opponentJoined: false,
-          ownerWins: 0,
-          guestWins: 0,
-        });
-      }
     }
   }
 
@@ -254,37 +260,29 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-
-    if (room.ownerSocket.id === client.id) {
-      client.emit('error', { message: '自分のルームには参加できません' });
+    if (room.isPlaying) {
+      client.emit('error', { message: 'すでにゲームが進行中です' });
+      return;
+    }
+    if (room.players.find(p => p.socket.id === client.id)) {
+      client.emit('error', { message: 'すでにルームに参加しています' });
       return;
     }
 
-    // マッチ成立（まだゲームは開始しない、activeCustomRooms に移動）
-    const opponent = room.ownerSocket;
-    const activeRoom = {
-      roomId: room.roomId,
-      name: room.name,
-      ownerSocket: opponent,
-      ownerId: (opponent.data?.userId as string) ?? null,
-      guestSocket: client,
-      guestId: (client.data?.userId as string) ?? null,
-      ownerWins: 0,
-      guestWins: 0,
-    };
-    this.activeCustomRooms.set(room.roomId, activeRoom);
+    room.players.push({
+      socket: client,
+      userId: (client.data?.userId as string) ?? null,
+      wins: 0
+    });
 
     client.join(room.roomId);
-    this.clientRoom.set(opponent.id, room.roomId);
     this.clientRoom.set(client.id, room.roomId);
-
-    this.customRooms.delete(room.roomId); // 募集終了
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
 
-    // 部屋にいる全員に相手が参加したことと、現在のスコアを通知
-    this.server.to(room.roomId).emit('custom_room_opponent_joined', {
-      ownerWins: activeRoom.ownerWins,
-      guestWins: activeRoom.guestWins,
+    room.players.forEach(p => {
+      p.socket.emit('custom_room_players_updated', {
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins }))
+      });
     });
   }
 
@@ -292,37 +290,33 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleStartCustomRoom(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (!activeRoom) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || room.players.length < 2) return;
 
     if (this.rooms.has(roomId)) {
       client.emit('error', { message: 'Game already running' });
       return;
     }
 
+    room.isPlaying = true;
     const seed = Math.floor(Math.random() * 2147483647);
     
     const onGameOver = (rId: string, winnerId: string | null) => {
-      const room = this.activeCustomRooms.get(rId);
-      if (room) {
-        if (winnerId === room.ownerSocket.id) room.ownerWins++;
-        else if (winnerId === room.guestSocket.id) room.guestWins++;
-
-        // ゲーム終了後、結果を保存してルーム状態に戻す
+      const r = this.customRooms.get(rId);
+      if (r) {
+        if (winnerId) {
+          const winner = r.players.find(p => p.socket.id === winnerId);
+          if (winner) winner.wins++;
+        }
+        r.isPlaying = false;
         this.rooms.delete(rId);
-        
-        // クライアントへロビーに戻るように通知
-        this.server.to(rId).emit('custom_room_returned', {
-          ownerWins: room.ownerWins,
-          guestWins: room.guestWins,
-        });
       }
     };
 
     const instance = new GameInstance(roomId, this.server, seed, onGameOver);
-    instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
-    instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
+    room.players.forEach(p => {
+      instance.addPlayer(p.socket.id, p.userId);
+    });
     
     this.rooms.set(roomId, instance);
 
@@ -331,7 +325,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       seed,
     });
 
-    setTimeout(() => instance.start(), 3000); // 3秒後にスタート
+    setTimeout(() => instance.start(), 3000);
   }
 
   // ── AI 対戦開始 ───────────────────────────────────────────
@@ -423,7 +417,15 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleGameOverEvent(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
+    
+    // Always emit opponent_game_over to the other player so they see the WIN screen
     client.to(roomId).emit('opponent_game_over');
+    
+    // Trigger the server-side game over logic to clean up the room
+    const instance = this.rooms.get(roomId);
+    if (instance) {
+      instance.handleGameOver(client.id);
+    }
   }
 
   // ── 観戦 ─────────────────────────────────────────────────

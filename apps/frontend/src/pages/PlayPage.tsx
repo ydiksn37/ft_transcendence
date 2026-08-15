@@ -553,6 +553,8 @@ const PlayPage = () => {
     resetHold();
     setGameOver(false);
     setMatchResult(null);
+    setOpponentStage(null);
+    setOpponentScore(0);
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
     setScore(0);
@@ -594,18 +596,20 @@ const PlayPage = () => {
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
   });
 
+  const quitGame = useCallback(() => {
+    if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+      setAppState('CUSTOM_ROOMS');
+    } else {
+      navigate(`/lobby/${mode}`);
+    }
+  }, [mode, navigate, setAppState]);
+
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
-      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-        setAppState('CUSTOM_ROOMS');
-      } else {
-        navigate(`/lobby/${mode}`);
-      }
-    }
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
   // Auto-drop (gravity)
@@ -657,6 +661,8 @@ const PlayPage = () => {
       appState={appState}
       restartGame={() => startGame()}
       joinOnline={joinOnline}
+      isCustomRoom={mode === 'CUSTOM_ROOMS'}
+      quitGame={quitGame}
     />
   );
 };

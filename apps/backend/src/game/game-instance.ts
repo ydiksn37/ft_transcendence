@@ -404,9 +404,10 @@ export class GameInstance {
   }
 
   /** ゲームオーバー処理 */
-  private handleGameOver(socketId: string): void {
+  public handleGameOver(socketId: string): void {
     const player = this.players.get(socketId);
-    if (!player) return;
+    if (!player || player.isGameOver) return;
+    
     player.isGameOver = true;
 
     const survivors = [...this.players.values()].filter((p) => !p.isGameOver);

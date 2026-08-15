@@ -40,16 +40,19 @@ type TetrisUIProps = {
   setDropTime: React.Dispatch<React.SetStateAction<number | null>>;
   formatTime: (ms: number) => string;
   createStage: (width?: number) => Cell[][];
-  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1';
+  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1' | 'CUSTOM_ROOMS';
   restartGame: () => void;
   joinOnline?: () => void;
+  isCustomRoom?: boolean;
+  quitGame?: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
-  countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, createStage, appState, restartGame, joinOnline
+  countdown, finalTime, elapsedTime, piecesPlaced, attackLines,
+  socketRef, setSocket, setIsWaiting, setDropTime, formatTime, createStage, appState,
+  restartGame, joinOnline, isCustomRoom, quitGame
 }) => {
   const [scale, setScale] = useState(1);
   const navigate = useNavigate();
@@ -75,11 +78,20 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     const handleGameOverKeys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         navigate('/menu');
+      } else if (e.key === 'Enter') {
+        if (isCustomRoom) {
+          if (quitGame) quitGame();
+        } else if (gameMode === 'ONLINE_1V1') {
+          if (joinOnline) joinOnline();
+          else navigate('/lobby/MULTI_PLAY');
+        } else {
+          restartGame();
+        }
       }
     };
     window.addEventListener('keydown', handleGameOverKeys);
     return () => window.removeEventListener('keydown', handleGameOverKeys);
-  }, [gameOver, navigate]);
+  }, [gameOver, navigate, isCustomRoom, quitGame, gameMode, joinOnline, restartGame]);
 
   const retroBoxStyle: React.CSSProperties = {
     backgroundColor: '#000',
@@ -305,45 +317,60 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               )}
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
-                {gameMode === 'ONLINE_1V1' ? (
+                {isCustomRoom ? (
                   <button
                     autoFocus
-                    onClick={() => {
-                      if (joinOnline) {
-                        joinOnline();
-                      } else {
-                        navigate('/lobby/MULTI_PLAY');
-                      }
-                    }}
+                    onClick={() => quitGame && quitGame()}
                     style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                     onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                   >
-                    FIND NEW MATCH (ENTER)
+                    RETURN TO ROOM (ENTER)
                   </button>
                 ) : (
-                  <button 
-                    autoFocus
-                    onClick={() => restartGame()}
-                    style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                    onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                    onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                  >
-                    RETRY (ENTER)
-                  </button>
+                  <>
+                    {gameMode === 'ONLINE_1V1' ? (
+                      <button
+                        autoFocus
+                        onClick={() => {
+                          if (joinOnline) {
+                            joinOnline();
+                          } else {
+                            navigate('/lobby/MULTI_PLAY');
+                          }
+                        }}
+                        style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                        onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                      >
+                        FIND NEW MATCH (ENTER)
+                      </button>
+                    ) : (
+                      <button 
+                        autoFocus
+                        onClick={() => restartGame()}
+                        style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                        onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                      >
+                        RETRY (ENTER)
+                      </button>
+                    )}
+                    
+                    <button 
+                      onClick={() => quitGame ? quitGame() : navigate('/menu')}
+                      style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                      onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                      onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                    >
+                      QUIT (ESC)
+                    </button>
+                  </>
                 )}
-                
-                <button 
-                  onClick={() => navigate('/menu')}
-                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                >
-                  QUIT (ESC)
-                </button>
               </div>
             </div>
           )}

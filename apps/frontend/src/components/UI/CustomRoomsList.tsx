@@ -19,9 +19,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const [customRoomId, setCustomRoomId] = useState('');
   const [inRoom, setInRoom] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
-  const [opponentJoined, setOpponentJoined] = useState(false);
-  const [ownerWins, setOwnerWins] = useState(0);
-  const [guestWins, setGuestWins] = useState(0);
+  const [players, setPlayers] = useState<{ socketId: string; userId: string | null; wins: number }[]>([]);
 
   useEffect(() => {
     if (!socket) return;
@@ -38,25 +36,19 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         setInRoom(data.roomId);
         setCustomRoomId(data.roomId);
         setIsOwner(data.isOwner);
-        setOpponentJoined(data.opponentJoined);
-        setOwnerWins(data.ownerWins);
-        setGuestWins(data.guestWins);
+        setPlayers(data.players || []);
       }
     };
 
-    const handleRoomCreated = (data: { roomId: string; name: string }) => {
+    const handleRoomCreated = (data: { roomId: string; name: string, players: any[] }) => {
       setInRoom(data.roomId);
       setCustomRoomId(data.roomId);
       setIsOwner(true);
-      setOpponentJoined(false);
+      setPlayers(data.players || []);
     };
 
-    const handleOpponentJoined = (data?: { ownerWins: number; guestWins: number }) => {
-      setOpponentJoined(true);
-      if (data) {
-        setOwnerWins(data.ownerWins);
-        setGuestWins(data.guestWins);
-      }
+    const handleRoomUpdate = (data: { players: any[] }) => {
+      setPlayers(data.players || []);
     };
 
     const handleMatchFound = () => {
@@ -65,9 +57,12 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
     const handleError = (err: { message: string }) => {
       alert(err.message);
+      if (err.message === 'Invalid Room ID' || err.message === 'Room ID already exists') {
+        return; // Do not exit the room on update errors
+      }
       setInRoom(null);
       setIsOwner(false);
-      setOpponentJoined(false);
+      setPlayers([]);
     };
 
     const handleRoomUpdated = (data: { oldId: string; newId: string }) => {
@@ -79,7 +74,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     socket.on('custom_room_created', handleRoomCreated);
     socket.on('custom_room_id_updated', handleRoomUpdated);
     socket.on('custom_room_state', handleRoomState);
-    socket.on('custom_room_opponent_joined', handleOpponentJoined);
+    socket.on('custom_room_players_updated', handleRoomUpdate);
     socket.on('match:found', handleMatchFound);
     socket.on('error', handleError);
 
@@ -88,7 +83,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       socket.off('custom_room_created', handleRoomCreated);
       socket.off('custom_room_id_updated', handleRoomUpdated);
       socket.off('custom_room_state', handleRoomState);
-      socket.off('custom_room_opponent_joined', handleOpponentJoined);
+      socket.off('custom_room_players_updated', handleRoomUpdate);
       socket.off('match:found', handleMatchFound);
       socket.off('error', handleError);
     };
@@ -162,18 +157,28 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       ) : (
         <div style={{ marginTop: '50px', textAlign: 'center' }}>
           <h2>
-            {!opponentJoined 
-              ? "Waiting for opponent..." 
-              : (isOwner ? "Opponent joined!" : "Waiting for owner to start...")}
+            {players.length < 2 
+              ? "Waiting for players..." 
+              : (isOwner ? "Ready to start!" : "Waiting for owner to start...")}
           </h2>
-          {opponentJoined && (
-            <div style={{ marginTop: '20px', fontSize: '24px', fontWeight: 'bold', display: 'flex', gap: '30px', justifyContent: 'center' }}>
-              <div style={{ color: isOwner ? '#f1c40f' : '#ccc' }}>Owner Wins: {ownerWins}</div>
-              <div style={{ color: !isOwner ? '#f1c40f' : '#ccc' }}>Guest Wins: {guestWins}</div>
-            </div>
-          )}
+          <div style={{ marginTop: '20px', fontSize: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+            {players.map((p, idx) => {
+              const isMe = p.socketId === socket?.id;
+              const displayName = p.userId ? p.userId : `Player ${idx + 1}`;
+              const roles = [];
+              if (idx === 0) roles.push('Owner');
+              if (isMe) roles.push('You');
+              const roleText = roles.length > 0 ? ` (${roles.join(', ')})` : '';
+
+              return (
+                <div key={p.socketId} style={{ color: idx === 0 ? '#f1c40f' : '#ccc', fontWeight: isMe ? 'bold' : 'normal' }}>
+                  {displayName}{roleText} - Wins: {p.wins}
+                </div>
+              );
+            })}
+          </div>
           
-          {isOwner && opponentJoined && (
+          {isOwner && players.length >= 2 && (
             <button 
               onClick={() => socket?.emit('game:start_custom_room')}
               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
@@ -182,7 +187,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             </button>
           )}
 
-          {isOwner && !opponentJoined && (
+          {isOwner && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
               <span>Room ID:</span>
               <input

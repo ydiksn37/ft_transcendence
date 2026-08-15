@@ -70,7 +70,20 @@ export const useMultiplayer = ({
     setGameOver(false);
     setMatchResult(null);
 
-    const newSocket = io('/', { forceNew: true });
+    const userStr = localStorage.getItem('user');
+    let userId = null;
+    if (userStr && userStr !== 'undefined') {
+      try {
+        const user = JSON.parse(userStr);
+        userId = user.username || user.displayName || user.id;
+      } catch (e) {}
+    }
+    const token = localStorage.getItem('token');
+
+    const newSocket = io('/', { 
+      forceNew: true,
+      auth: { token, userId }
+    });
     setSocket(newSocket);
     socketRef.current = newSocket;
 
@@ -80,7 +93,7 @@ export const useMultiplayer = ({
 
     newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
       setRandomSeed(data.seed);
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
+      startGame('ONLINE_1V1');
     });
 
     newSocket.on('waiting_for_match', () => {
@@ -130,7 +143,20 @@ export const useMultiplayer = ({
     setGameOver(false);
     setMatchResult(null);
 
-    const newSocket = io('/', { forceNew: true });
+    const userStr = localStorage.getItem('user');
+    let userId = null;
+    if (userStr && userStr !== 'undefined') {
+      try {
+        const user = JSON.parse(userStr);
+        userId = user.username || user.displayName || user.id;
+      } catch (e) {}
+    }
+    const token = localStorage.getItem('token');
+
+    const newSocket = io('/', { 
+      forceNew: true,
+      auth: { token, userId }
+    });
     setSocket(newSocket);
     socketRef.current = newSocket;
 
@@ -138,7 +164,7 @@ export const useMultiplayer = ({
       setRandomSeed(data.seed);
       setAppState('ONLINE_1V1');
       setIsWaiting(false);
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
+      startGame('ONLINE_1V1');
     });
 
     newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
