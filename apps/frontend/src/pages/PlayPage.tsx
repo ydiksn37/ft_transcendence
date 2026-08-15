@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePlayer } from '../hooks/usePlayer';
-import { useStage } from '../hooks/useStage';
-import { useInterval } from '../hooks/useInterval';
-import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
-import { resetTetrominoBag, TETROMINOS, setRandomSeed } from '../utils/tetrominos';
-import { TetrisUI } from '../components/UI/TetrisUI';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { CustomRoomsList } from '../components/UI/CustomRoomsList';
+import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
+import { useGameState } from '../hooks/useGameState';
+import { useInterval } from '../hooks/useInterval';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { useMultiplayer } from '../hooks/useMultiplayer';
-import { useGameState } from '../hooks/useGameState';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { CustomRoomsList } from '../components/UI/CustomRoomsList';
+import { usePlayer } from '../hooks/usePlayer';
+import { useStage } from '../hooks/useStage';
+import { calculateGhostY, checkCollision, createStage } from '../utils/gameHelpers';
+import type { Cell } from '../utils/gameHelpers';
+import { soundManager } from '../utils/soundManager';
+import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
+import { TetrisUI } from '../components/UI/TetrisUI';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -128,6 +130,11 @@ const PlayPage = () => {
     
     if (lines > 0) {
       comboRef.current += 1;
+      if (lines === 4) {
+        soundManager.playSe('tetris');
+      } else {
+        soundManager.playSe('clear');
+      }
     } else {
       comboRef.current = -1;
     }
@@ -585,6 +592,26 @@ const PlayPage = () => {
 
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
+
+  // Handle Game Over sound and stop BGM
+  useEffect(() => {
+    if (gameOver) {
+      soundManager.playSe('gameover');
+      soundManager.stopBgm();
+    }
+  }, [gameOver]);
+
+  // Handle BGM starting
+  useEffect(() => {
+    if (appState === 'PLAYING' || appState === 'ONLINE_1V1') {
+      if (!gameOver && countdown === null) {
+        soundManager.playBgm('/bgm.mp3'); // Fallback placeholder path
+      }
+    }
+    return () => {
+      soundManager.stopBgm();
+    };
+  }, [appState, gameOver, countdown]);
 
   const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,

@@ -33,6 +33,16 @@ export class UsersService {
     return this.sanitizeUser(user);
   }
 
+  // ── アカウント削除（ソフトデリート） ───────────────────
+  async deleteMe(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { deletedAt: new Date() },
+    });
+    return { message: 'アカウントを削除しました' };
+  }
+
+
   // ── アバター更新 ───────────────────────────────────────────
   async updateAvatar(userId: string, avatarUrl: string) {
     const user = await this.prisma.user.update({

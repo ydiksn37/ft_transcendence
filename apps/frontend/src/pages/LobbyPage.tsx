@@ -13,7 +13,7 @@ export default function LobbyPage() {
   
   const [startLevel, setStartLevel] = useState(1);
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
-  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction } = useConfig();
+  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume } = useConfig();
 
   useEffect(() => {
     if (mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS') {
@@ -172,6 +172,8 @@ export default function LobbyPage() {
               <Config
                 tuning={tuning}
                 setTuning={setTuning}
+                volume={volume}
+                setVolume={setVolume}
                 keyConfig={keyConfig}
                 listeningAction={listeningAction}
                 setListeningAction={setListeningAction as any}

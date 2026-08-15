@@ -14,6 +14,19 @@ export const useConfig = () => {
     tuningRef.current = tuning;
   }, [tuning]);
 
+  const [volume, setVolume] = useState(() => {
+    const saved = localStorage.getItem('tetrisVolume');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { se: 0.5, bgm: 0.5 };
+  });
+  const volumeRef = useRef(volume);
+  useEffect(() => {
+    localStorage.setItem('tetrisVolume', JSON.stringify(volume));
+    volumeRef.current = volume;
+  }, [volume]);
+
   const [keyConfig, setKeyConfig] = useState(() => {
     const defaultConf = {
       left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
@@ -53,6 +66,7 @@ export const useConfig = () => {
   return {
     tuning, setTuning, tuningRef,
     keyConfig, setKeyConfig, keyConfigRef,
-    listeningAction, setListeningAction, listeningActionRef
+    listeningAction, setListeningAction, listeningActionRef,
+    volume, setVolume, volumeRef
   };
 };

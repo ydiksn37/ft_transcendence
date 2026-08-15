@@ -17,7 +17,12 @@
 }
 
 .back-btn, .nav-btn {
-  padding: 8px 16px;
+  padding: 0 16px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   font-size: 14px;
   cursor: pointer;
   background-color: #333;

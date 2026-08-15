@@ -20,6 +20,11 @@ export class UpdateUserDto {
   @IsOptional()
   @MaxLength(200)
   bio?: string;
+
+  @ApiPropertyOptional({ example: 'preset:2' })
+  @IsString()
+  @IsOptional()
+  avatarUrl?: string | null;
 }
 
 export class SearchUsersDto {

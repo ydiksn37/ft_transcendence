@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import {
   ApiTags,
   ApiOperation,
@@ -48,13 +48,19 @@ export class UsersController {
     return this.usersService.updateMe(user.id, dto);
   }
 
+  @Delete('me')
+  @ApiOperation({ summary: 'アカウント削除（ソフトデリート）' })
+  deleteMe(@CurrentUser() user: any) {
+    return this.usersService.deleteMe(user.id);
+  }
+
   @Post('me/avatar')
   @ApiOperation({ summary: 'アバター画像をアップロード' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: process.env.UPLOAD_DIR ?? '/tmp/uploads',
+        destination: process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads'),
         filename: (_req, file, cb) => {
           const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `avatar-${unique}${extname(file.originalname)}`);

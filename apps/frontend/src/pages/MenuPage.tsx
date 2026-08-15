@@ -48,7 +48,7 @@ const MenuPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver, true);
 
-  const { keyConfig, keyConfigRef, tuningRef } = useConfig();
+  const { tuning, setTuning, tuningRef, keyConfig, setKeyConfig, keyConfigRef, listeningAction, setListeningAction, volume, setVolume } = useConfig();
 
   const lastProcessedEventIdRef = useRef(-1);
 
@@ -287,14 +287,29 @@ const MenuPage = () => {
                   padding: '12px 20px',
                   fontSize: '14px',
                   fontFamily: "'Press Start 2P', monospace",
-                  backgroundColor: '#3498db',
+                  backgroundColor: '#333',
                   color: 'white',
                   border: '4px solid white',
                   cursor: 'pointer',
-                  boxShadow: '4px 4px 0px #333'
+                  boxShadow: '4px 4px 0px #000'
                 }}
               >
                 DASHBOARD
+              </button>
+              <button 
+                onClick={() => navigate('/profile')}
+                style={{
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontFamily: "'Press Start 2P', monospace",
+                  backgroundColor: '#333',
+                  color: 'white',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  boxShadow: '4px 4px 0px #000'
+                }}
+              >
+                PROFILE
               </button>
               <button 
                 onClick={() => { logout(); navigate('/'); }}
@@ -302,11 +317,11 @@ const MenuPage = () => {
                   padding: '12px 20px',
                   fontSize: '14px',
                   fontFamily: "'Press Start 2P', monospace",
-                  backgroundColor: '#e74c3c',
+                  backgroundColor: '#333',
                   color: 'white',
                   border: '4px solid white',
                   cursor: 'pointer',
-                  boxShadow: '4px 4px 0px #333'
+                  boxShadow: '4px 4px 0px #000'
                 }}
               >
                 LOGOUT
@@ -319,11 +334,11 @@ const MenuPage = () => {
                 padding: '12px 20px',
                 fontSize: '14px',
                 fontFamily: "'Press Start 2P', monospace",
-                backgroundColor: '#9b59b6',
+                backgroundColor: '#333',
                 color: 'white',
                 border: '4px solid white',
                 cursor: 'pointer',
-                boxShadow: '4px 4px 0px #333'
+                boxShadow: '4px 4px 0px #000'
               }}
             >
               LOGIN / REGISTER

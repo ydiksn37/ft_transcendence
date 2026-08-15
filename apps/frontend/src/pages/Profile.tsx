@@ -6,9 +6,11 @@ import { useConfig } from '../hooks/useConfig'
 import { TETROMINOS } from '../utils/tetrominos'
 import { AVATAR_PRESETS, getAvatarPreset } from "@/lib/avatarPresets"
 import { AvatarIcon } from "@/components/UI/AvatarIcon"
+import Cropper from 'react-easy-crop'
+import { getCroppedImg } from '../utils/cropImage'
 import '../pages/Dashboard.css'
 import '../pages/JoinPage.css'
-import './LobbyPage.css' // Reuse back-btn
+import './LobbyPage.css'
 
 export default function Profile() {
 	const navigate = useNavigate();
@@ -20,6 +22,13 @@ export default function Profile() {
 	const [user, setUser] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
+	const [selectedIndex, setSelectedIndex] = useState(0); // 0: BACK, 1: SETTINGS
+
+	// Cropper states
+	const [imageSrc, setImageSrc] = useState<string | null>(null);
+	const [crop, setCrop] = useState({ x: 0, y: 0 });
+	const [zoom, setZoom] = useState(1);
+	const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
 	useEffect(() => {
 		const pieces = 'IJLOSTZ';
@@ -32,10 +41,22 @@ export default function Profile() {
 			if (e.code === keyConfig.quitToMenu) {
 				navigate(mode ? `/lobby/${mode}` : '/menu');
 			}
+			
+			if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+				setSelectedIndex(0);
+			} else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+				setSelectedIndex(1);
+			} else if (e.code === 'Enter') {
+				if (selectedIndex === 0) {
+					navigate(mode ? `/lobby/${mode}` : '/menu');
+				} else if (selectedIndex === 1) {
+					navigate(mode ? `/settings?mode=${mode}` : '/settings');
+				}
+			}
 		};
 		window.addEventListener('keydown', handleKeyDown);
 		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [navigate, keyConfig.quitToMenu]);
+	}, [navigate, keyConfig.quitToMenu, mode, selectedIndex]);
 
 	useEffect(() => {
 		const token = localStorage.getItem('token');
@@ -86,14 +107,67 @@ export default function Profile() {
 			} catch (error) {
 				console.error(error);
 			} finally {
-				setTimeout(() => {
-					setLoading(false);
-				}, 1000);
+				setLoading(false);
 			}
 		}
 
 		fetchData();
 	}, [navigate]);
+
+	const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+		if (event.target.files && event.target.files.length > 0) {
+			const file = event.target.files[0];
+			const reader = new FileReader();
+			reader.addEventListener('load', () => setImageSrc(reader.result?.toString() || null));
+			reader.readAsDataURL(file);
+		}
+		// Reset input value so the same file can be selected again
+		event.target.value = '';
+	};
+
+	const onCropComplete = (croppedArea: any, croppedAreaPixels: any) => {
+		setCroppedAreaPixels(croppedAreaPixels);
+	};
+
+	const uploadCroppedImage = async () => {
+		if (!imageSrc || !croppedAreaPixels) return;
+		try {
+			setLoading(true);
+			const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
+			
+			const formData = new FormData();
+			formData.append('avatar', croppedImageBlob, 'avatar.jpg');
+
+			const token = localStorage.getItem('token');
+			const res = await fetch('/api/users/me/avatar', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${token}` },
+				body: formData
+			});
+
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.message || 'Failed to upload avatar');
+			}
+
+			// Refetch user data
+			const meRes = await fetch('/api/users/me', {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (meRes.ok) {
+				const me = await meRes.json();
+				setUser(me);
+			}
+			
+			// Close cropper modal
+			setImageSrc(null);
+		} catch (error: any) {
+			console.error(error);
+			alert(error.message);
+		} finally {
+			setLoading(false);
+		}
+	};
 
 	if (loading || !user || !stats) {
 		return (
@@ -131,13 +205,31 @@ export default function Profile() {
 		)
 	}
 
-	const preset = getAvatarPreset(user.avatarId || 0);
+	const isPreset = user.avatarUrl?.startsWith('preset:');
+	const presetIndex = isPreset ? parseInt(user.avatarUrl.split(':')[1]) : 0;
+	const preset = getAvatarPreset(presetIndex);
+	const photoUrl = (!isPreset && user.avatarUrl) ? user.avatarUrl : undefined;
 
 	return (
 		<div className="dashboard-container">
 			<div className="dashboard-header">
-				<button className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
+				<button 
+					className={`back-btn ${selectedIndex === 0 ? 'selected' : ''}`} 
+					onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}
+					onMouseEnter={() => setSelectedIndex(0)}
+					onMouseLeave={() => setSelectedIndex(-1)}
+					style={selectedIndex === 0 ? { backgroundColor: '#555' } : {}}
+				>
 					◀ BACK TO LOBBY
+				</button>
+				<button 
+					className={`nav-btn ${selectedIndex === 1 ? 'selected' : ''}`} 
+					onClick={() => navigate(mode ? `/settings?mode=${mode}` : '/settings')} 
+					onMouseEnter={() => setSelectedIndex(1)}
+					onMouseLeave={() => setSelectedIndex(-1)}
+					style={{ marginLeft: '10px', ...(selectedIndex === 1 ? { backgroundColor: '#555' } : {}) }}
+				>
+					{selectedIndex === 1 ? '▶ SETTINGS' : 'SETTINGS'}
 				</button>
 			</div>
 
@@ -150,7 +242,7 @@ export default function Profile() {
 						
 						{/* プロフィール情報 */}
 						<div className="arcade-panel" style={{ flex: '1 1 300px', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-							<AvatarIcon color={preset.color} symbol={preset.symbol} photo={user.avatarUrl} size={96} />
+							<AvatarIcon color={preset.color} symbol={preset.symbol} photo={photoUrl} size={96} />
 							<div style={{ textAlign: 'center' }}>
 								<div style={{ fontSize: '24px', fontWeight: 'bold' }}>{user.displayName || user.username}</div>
 								<div style={{ fontSize: '12px', color: '#888', marginTop: '10px' }}>@{user.username}</div>
@@ -184,15 +276,52 @@ export default function Profile() {
 						{/* アバターピッカー */}
 						<div className="arcade-panel" style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
 							<div style={{ fontSize: '14px', color: 'white', borderBottom: '4px solid #444', paddingBottom: '10px' }}>AVATAR</div>
+							
+							<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+								<label style={{ 
+									cursor: 'pointer', backgroundColor: '#3498db', color: 'white', 
+									padding: '10px', textAlign: 'center', borderRadius: '4px',
+									fontFamily: "'Press Start 2P', monospace", fontSize: '10px',
+									border: '2px solid white', boxShadow: '2px 2px 0px #000'
+								}}>
+									UPLOAD CUSTOM IMAGE
+									<input 
+										type="file" 
+										accept="image/png, image/jpeg, image/gif, image/webp" 
+										style={{ display: 'none' }} 
+										onChange={handleAvatarUpload}
+									/>
+								</label>
+								<div style={{ fontSize: '10px', color: '#888', textAlign: 'center' }}>
+									Max: 2MB (JPG/PNG/GIF/WebP)
+								</div>
+							</div>
+
+							<div style={{ marginTop: '10px', fontSize: '12px', color: '#ccc' }}>Or choose a preset:</div>
 							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
 								{AVATAR_PRESETS.map((p, i) => {
-									const selected = (user.avatarId || 0) === i;
+									const selected = isPreset ? presetIndex === i : (!photoUrl && i === 0);
 									return (
 										<div key={i} style={{ 
 											display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
 											padding: '10px', backgroundColor: selected ? 'rgba(255,255,255,0.1)' : '#111',
 											border: `2px solid ${selected ? p.color : '#333'}`,
 											cursor: 'pointer'
+										}} onClick={async () => {
+											try {
+												const token = localStorage.getItem('token');
+												await fetch('/api/users/me', {
+													method: 'PATCH',
+													headers: { 
+														'Content-Type': 'application/json',
+														Authorization: `Bearer ${token}` 
+													},
+													body: JSON.stringify({ avatarUrl: `preset:${i}` })
+												});
+												setUser((prev: any) => ({ ...prev, avatarUrl: `preset:${i}` }));
+											} catch (e) {
+												console.error(e);
+											}
 										}}>
 											<AvatarIcon color={p.color} symbol={p.symbol} size={32} />
 										</div>
@@ -206,6 +335,65 @@ export default function Profile() {
 					<RecentBattles games={games} />
 				</div>
 			</div>
+
+			{/* Cropper Modal */}
+			{imageSrc && (
+				<div style={{
+					position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+					backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999,
+					display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+				}}>
+					<div style={{ position: 'relative', width: '80%', height: '60%', backgroundColor: '#333', border: '4px solid #555' }}>
+						<Cropper
+							image={imageSrc}
+							crop={crop}
+							zoom={zoom}
+							aspect={1}
+							onCropChange={setCrop}
+							onCropComplete={onCropComplete}
+							onZoomChange={setZoom}
+						/>
+					</div>
+					<div style={{ marginTop: '20px', width: '80%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+							<span style={{ color: 'white', fontSize: '12px', fontFamily: "'Press Start 2P', monospace" }}>ZOOM</span>
+							<input
+								type="range"
+								value={zoom}
+								min={1}
+								max={3}
+								step={0.1}
+								aria-labelledby="Zoom"
+								onChange={(e) => setZoom(Number(e.target.value))}
+								style={{ flex: 1 }}
+							/>
+						</div>
+						<div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+							<button 
+								onClick={() => setImageSrc(null)}
+								style={{ 
+									flex: 1, padding: '15px', backgroundColor: '#e74c3c', color: 'white', 
+									fontFamily: "'Press Start 2P', monospace", border: '2px solid white', 
+									cursor: 'pointer', boxShadow: '4px 4px 0px #000' 
+								}}
+							>
+								CANCEL
+							</button>
+							<button 
+								onClick={uploadCroppedImage}
+								disabled={loading}
+								style={{ 
+									flex: 1, padding: '15px', backgroundColor: '#4caf50', color: 'white', 
+									fontFamily: "'Press Start 2P', monospace", border: '2px solid white', 
+									cursor: 'pointer', boxShadow: '4px 4px 0px #000' 
+								}}
+							>
+								{loading ? 'UPLOADING...' : 'CROP & UPLOAD'}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }
