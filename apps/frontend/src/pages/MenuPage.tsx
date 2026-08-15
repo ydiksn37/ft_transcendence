@@ -106,7 +106,7 @@ const MenuPage = () => {
     if (lockedX < 8) mode = '4_WIDE';
     else if (lockedX >= 8 && lockedX < 16) mode = '40_LINES';
     else if (lockedX >= 16 && lockedX < 24) mode = 'MARATHON';
-    else if (lockedX >= 24 && lockedX < 32) mode = 'ONLINE_1V1';
+    else if (lockedX >= 24 && lockedX < 32) mode = 'MULTI_PLAY';
     else if (lockedX >= 32) mode = 'CONFIG';
     
     setTransitionMode(mode);
@@ -229,7 +229,7 @@ const MenuPage = () => {
 
   const handleMouseSelect = (colIndex: number) => {
     if (transitionMode) return;
-    const modes = ['4_WIDE', '40_LINES', 'MARATHON', 'ONLINE_1V1', 'CONFIG'];
+    const modes = ['4_WIDE', '40_LINES', 'MARATHON', 'MULTI_PLAY', 'CONFIG'];
     const selectedMode = modes[colIndex];
     setTransitionMode(selectedMode);
     setTimeout(() => {
@@ -344,7 +344,7 @@ const MenuPage = () => {
         </div>
 
         <div style={{ position: 'absolute', bottom: 0, left: 0, width: '1230px', height: '250px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>
-          {['4_WIDE', '40_LINES', 'MARATHON', 'ONLINE_1V1', 'CONFIG'].map((mode, index) => (
+          {['4_WIDE', '40_LINES', 'MARATHON', 'MULTI_PLAY', 'CONFIG'].map((mode, index) => (
             <div 
               key={mode}
               onClick={() => handleMouseSelect(index)}
@@ -372,7 +372,7 @@ const MenuPage = () => {
           <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>multi play</div>
+          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MULTI PLAY</div>
           <div style={{ width: '240px', textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
         </div>
 

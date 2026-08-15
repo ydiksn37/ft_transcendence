@@ -95,7 +95,7 @@ export default function LobbyPage() {
       case 'MARATHON': return 'MARATHON';
       case '40_LINES': return '40 LINES';
       case '4_WIDE': return '4-WIDE';
-      case 'ONLINE_1V1': return 'multi play';
+      case 'ONLINE_1V1': return 'MULTI PLAY';
       case 'MULTI_PLAY': return 'MULTI PLAY';
       case 'CONFIG': return 'CONFIG';
       default: return 'UNKNOWN MODE';

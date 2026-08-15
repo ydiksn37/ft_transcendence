@@ -178,7 +178,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>MARATHON</div>
                 <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>40 LINES</div>
                 <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>4-WIDE</div>
-                <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>multi play</div>
+                <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>MULTI PLAY</div>
               </div>
             </>
           )}
