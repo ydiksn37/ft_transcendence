@@ -6,6 +6,7 @@ import { useConfig } from '../hooks/useConfig';
 import { useGameState } from '../hooks/useGameState';
 import { useInterval } from '../hooks/useInterval';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
+import { useTouchControls } from '../hooks/useTouchControls';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { usePlayer } from '../hooks/usePlayer';
 import { useStage } from '../hooks/useStage';
@@ -657,6 +658,18 @@ const PlayPage = () => {
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        setAppState('CUSTOM_ROOMS');
+      } else {
+        navigate(`/lobby/${mode}`);
+      }
+    }
+  });
+
+  useTouchControls({
+    stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
+    startGame, quitGame: () => {
       if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
         setAppState('CUSTOM_ROOMS');
       } else {

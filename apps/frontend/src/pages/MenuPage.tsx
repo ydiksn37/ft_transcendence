@@ -5,6 +5,7 @@ import { useInterval } from '../hooks/useInterval';
 import { checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { useConfig } from '../hooks/useConfig';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
+import { useTouchControls } from '../hooks/useTouchControls';
 import { useGameState } from '../hooks/useGameState';
 import { useNavigate } from 'react-router-dom';
 import { Stage } from '@pixi/react';
@@ -232,6 +233,12 @@ const MenuPage = () => {
     countdownRef, listeningActionRef: useRef(null), setKeyConfig: () => { }, setListeningAction: () => { },
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame: () => { },
     socketRef: useRef(null), setSocket: () => { }, setIsWaiting: () => { }, setDropTime, quitGame: () => navigate('/')
+  });
+
+  useTouchControls({
+    stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
+    startGame: () => { }, quitGame: () => navigate('/')
   });
 
   useEffect(() => {

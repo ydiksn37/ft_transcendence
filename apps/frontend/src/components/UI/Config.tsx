@@ -2,8 +2,8 @@ import React, { useEffect } from 'react';
 import { soundManager } from '../../utils/soundManager';
 
 type ConfigProps = {
-  tuning: { arr: number; das: number; dcd: number; sdf: number };
-  setTuning: React.Dispatch<React.SetStateAction<{ arr: number; das: number; dcd: number; sdf: number }>>;
+  tuning: { arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean };
+  setTuning: React.Dispatch<React.SetStateAction<{ arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean }>>;
   volume: { se: number; bgm: number };
   setVolume: React.Dispatch<React.SetStateAction<{ se: number; bgm: number }>>;
   keyConfig: Record<string, string>;
@@ -36,6 +36,10 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
           <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <label style={{ fontSize: '12px', color: 'gray' }}>Touch Flick</label>
+          <input type="checkbox" checked={tuning.touchFlick ?? true} onChange={e => setTuning(p => ({...p, touchFlick: e.target.checked}))} style={{ width: '24px', height: '24px', cursor: 'pointer' }} />
         </div>
       </div>
 

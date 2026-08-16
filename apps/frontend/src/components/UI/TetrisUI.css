@@ -7,6 +7,7 @@
   background-position: center;
   background-attachment: fixed;
   overflow: hidden;
+  touch-action: none;
 }
 
 .tetris-ui-content {
@@ -25,12 +26,14 @@
   align-items: flex-start;
   gap: 20px;
   transition: transform 0.2s ease;
+  position: relative;
 }
 
 .tetris-side-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 40px;
 }
 
 .tetris-board-container {
@@ -48,47 +51,53 @@
 @media (max-width: 768px) {
   .tetris-ui-content {
     align-items: flex-start;
-    padding-top: 20px;
-    overflow-y: auto;
+    padding-top: 10px;
+    overflow-y: hidden;
   }
   
   .tetris-ui-layout {
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-    /* Disable scale transform on small screens so layout isn't tiny */
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 10px;
     transform: none !important;
+    width: 100%;
+    max-width: 400px;
   }
 
   .tetris-side-panel {
-    flex-direction: row;
-    justify-content: space-between;
-    width: 100%;
-    max-width: 300px;
+    display: none;
   }
   
   .tetris-right-panel {
-    flex-direction: row;
-    width: 100%;
-    max-width: 300px;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column;
+    order: 2;
+    width: auto;
+    align-items: center;
+  }
+
+  .tetris-board-container {
+    order: 1;
+    width: auto;
+    display: flex;
+    justify-content: center;
   }
   
-  /* Next piece container adjustments */
   .next-pieces-container {
-    flex-direction: row !important;
-    flex-wrap: wrap;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
     gap: 5px !important;
   }
 
-  /* Score container adjustments */
   .score-container {
-    flex-direction: row !important;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px !important;
-    padding: 10px !important;
+    order: 2; /* Score below next pieces */
+    margin-top: 0px;
+    flex-direction: column !important;
+    width: auto;
+    align-items: center;
+    gap: 5px !important;
+    padding: 5px !important;
   }
   
   .score-item {
