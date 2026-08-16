@@ -7,9 +7,9 @@ import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 
-import bg1 from "../../assets/images/tetrisbg_paris.jpeg"
-import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
-const BG_IMAGES = [bg1, bg2];
+// import bg1 from "../../assets/images/tetrisbg_paris.jpeg"
+// import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
+// const BG_IMAGES = [bg1, bg2];
 
 import { colorMap } from "../Cell"
 import './TetrisUI.css';
@@ -116,7 +116,17 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
   }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
-  const [bgImage] = useState(() => BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)]);
+  const modules = import.meta.glob<string>(
+    "../../assets/images/tetrisbg_*.{jpg,jpeg,png,webp,avif}",
+    { import: "default" }
+  );
+
+  const [ bgImage, setBgImage ] = useState<string | null>(null);
+  useEffect(() => {
+    const loaders = Object.values(modules);
+    const randomLoader = loaders[Math.floor(Math.random() * loaders.length)];
+    randomLoader().then(setBgImage);
+  }, []);
 
   if (gameMode === 'ONLINE_1V1' && isWaiting) {
     return (
