@@ -14,14 +14,14 @@ type UseTouchControlsProps = {
   softDrop: () => void;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
-  playerHold: (width: number, stage?: Cell[][]) => void;
-  startGame: () => void;
-  quitGame: () => void;
+  playerHold?: (width: number, stage?: Cell[][]) => void;
+  startGame?: () => void;
+  quitGame?: () => void;
 };
 
 export const useTouchControls = ({
   stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
-  movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame, quitGame
+  movePlayerHorizontal, softDrop, hardDrop, playerRotate
 }: UseTouchControlsProps) => {
   const touchStartRef = useRef<{ x: number, y: number, time: number, fingers: number } | null>(null);
   const touchLastMoveRef = useRef<{ x: number, y: number } | null>(null);
@@ -35,7 +35,7 @@ export const useTouchControls = ({
 
       if (e.target instanceof Node) {
         const el = e.target.nodeType === Node.TEXT_NODE ? e.target.parentElement : (e.target as Element);
-        if (el && (el.closest('button') || el.closest('a'))) {
+        if (el && (el.closest('button') || el.closest('a') || el.closest('.hold-button'))) {
           return; // Don't block button taps
         }
       }
@@ -91,38 +91,26 @@ export const useTouchControls = ({
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      const fingers = touchStartRef.current.fingers || 1;
-
       if (duration < 300) {
         if (absX < 15 && absY < 15) {
-          // Tap
-          if (fingers === 3) {
-            quitGame(); // 3-finger tap: Quit
-          } else if (fingers === 2) {
-            playerRotate(stageRef.current, 2); // 2-finger tap: Rotate 180
-            soundManager.playSe('rotate');
+          // Tap (1-finger tap)
+          const screenHalf = window.innerWidth / 2;
+          if (endX > screenHalf) {
+            playerRotate(stageRef.current, 1); // Right half: Rotate CW
           } else {
-            // 1-finger tap: Check screen half
-            const screenHalf = window.innerWidth / 2;
-            if (endX > screenHalf) {
-              playerRotate(stageRef.current, 1); // Right half: Rotate CW
-            } else {
-              playerRotate(stageRef.current, -1); // Left half: Rotate CCW
-            }
-            soundManager.playSe('rotate');
+            playerRotate(stageRef.current, -1); // Left half: Rotate CCW
           }
+          soundManager.playSe('rotate');
         } else if (absY > 30 && absY > absX) {
           // Flick Up or Down
-          if (fingers === 2 && deltaY > 30) {
-             startGame(); // 2-finger flick down: Restart
-          } else if (deltaY < -30) {
-            // Flick Up (Hold)
-            playerHold(stageRef.current[0].length, stageRef.current);
-            soundManager.playSe('hold');
-          } else if (deltaY > 30) {
+          if (deltaY > 30) {
             // Flick Down (Hard Drop)
             hardDrop();
             soundManager.playSe('drop');
+          } else if (deltaY < -30) {
+            // Flick Up (180 Rotate)
+            playerRotate(stageRef.current, 2);
+            soundManager.playSe('rotate');
           }
         }
       }
@@ -139,5 +127,5 @@ export const useTouchControls = ({
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [gameOver, dropTime, appStateRef, countdownRef, movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, stageRef, tuningRef]);
+  }, [gameOver, dropTime, appStateRef, countdownRef, movePlayerHorizontal, softDrop, hardDrop, playerRotate, stageRef, tuningRef]);
 };

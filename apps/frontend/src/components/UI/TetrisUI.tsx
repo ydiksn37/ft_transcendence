@@ -12,6 +12,7 @@ import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
 const BG_IMAGES = [bg1, bg2];
 
 import { colorMap } from "../Cell"
+import { soundManager } from '../../utils/soundManager';
 import './TetrisUI.css';
 
 type TetrisUIProps = {
@@ -44,13 +45,14 @@ type TetrisUIProps = {
   appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1';
   restartGame: () => void;
   joinOnline?: () => void;
+  onHold: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, createStage, appState, restartGame, joinOnline
+  formatTime, createStage, appState, restartGame, joinOnline, onHold
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
@@ -157,10 +159,15 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   }
 
   const holdBlock = (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div 
+      className="hold-button"
+      onClick={() => { onHold(); soundManager.playSe('hold'); }}
+      onTouchEnd={(e) => { e.preventDefault(); onHold(); soundManager.playSe('hold'); }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}
+    >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
-      {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && <span style={{ color: 'gray', fontSize: '10px', marginTop: '10px', fontFamily: '"Press Start 2P", monospace' }}>LOCKED</span>}
+      {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && !isMobileView && <span style={{ color: 'gray', fontSize: '10px', marginTop: '10px', fontFamily: '"Press Start 2P", monospace' }}>LOCKED</span>}
     </div>
   );
 

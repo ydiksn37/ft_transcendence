@@ -727,6 +727,7 @@ const PlayPage = () => {
       appState={appState}
       restartGame={() => startGame()}
       joinOnline={joinOnline}
+      onHold={() => playerHold(stage[0].length, stage)}
     />
   );
 };
