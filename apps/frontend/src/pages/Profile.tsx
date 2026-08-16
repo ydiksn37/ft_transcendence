@@ -227,7 +227,7 @@ export default function Profile() {
 					onClick={() => navigate(mode ? `/settings?mode=${mode}` : '/settings')} 
 					onMouseEnter={() => setSelectedIndex(1)}
 					onMouseLeave={() => setSelectedIndex(-1)}
-					style={{ marginLeft: '10px', ...(selectedIndex === 1 ? { backgroundColor: '#555' } : {}) }}
+					style={selectedIndex === 1 ? { backgroundColor: '#555' } : {}}
 				>
 					{selectedIndex === 1 ? '▶ SETTINGS' : 'SETTINGS'}
 				</button>

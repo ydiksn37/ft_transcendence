@@ -5,6 +5,7 @@ import { useInterval } from '../hooks/useInterval';
 import { checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { useConfig } from '../hooks/useConfig';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
+import { useTouchControls } from '../hooks/useTouchControls';
 import { useGameState } from '../hooks/useGameState';
 import { useNavigate } from 'react-router-dom';
 import { Stage } from '@pixi/react';
@@ -36,10 +37,12 @@ const createMenuStage = (): Cell[][] => {
 const MenuPage = () => {
   const navigate = useNavigate();
   const [scale, setScale] = useState(1);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   useEffect(() => {
     const handleResize = () => {
       const vh = window.innerHeight;
       const vw = window.innerWidth;
+      setIsMobile(vw <= 768);
       const scaleY = (vh - 40) / 800;
       const scaleX = (vw - 40) / 1230;
       setScale(Math.min(1.5, scaleY, scaleX));
@@ -87,7 +90,7 @@ const MenuPage = () => {
   const [transitionMode, setTransitionMode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current || transitionMode) return;
+    if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current || transitionMode || isMobile) return;
     lastProcessedEventIdRef.current = lockEvent.id;
 
     const p = playerRef.current;
@@ -129,7 +132,7 @@ const MenuPage = () => {
     setTimeout(() => {
       navigate(`/lobby/${mode}`);
     }, 1500);
-  }, [lockEvent, navigate, transitionMode, setDropTime, setStage, stageRef, resetPlayer]);
+  }, [lockEvent, navigate, transitionMode, setDropTime, setStage, stageRef, resetPlayer, isMobile]);
 
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerRef = useRef(player);
@@ -232,6 +235,12 @@ const MenuPage = () => {
     socketRef: useRef(null), setSocket: () => { }, setIsWaiting: () => { }, setDropTime, quitGame: () => navigate('/')
   });
 
+  useTouchControls({
+    stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
+    startGame: () => { }, quitGame: () => navigate('/')
+  });
+
   useEffect(() => {
     if (gameOver || !dropTime) return;
     if (heldKeys.current?.has(keyConfig.softDrop)) softDrop();
@@ -239,7 +248,7 @@ const MenuPage = () => {
 
 
 
-  useInterval(drop, dropTime);
+  useInterval(drop, isMobile ? null : dropTime);
 
   const handleMouseSelect = (colIndex: number) => {
     if (transitionMode) return;
@@ -255,8 +264,9 @@ const MenuPage = () => {
     <div className="menu-page-container">
       <div className="menu-page-scaling-container" style={{ transform: `scale(${scale})` }}>
       <div className="menu-page-header">
-        <button
-          onClick={() => navigate('/')}
+        {!isMobile && (
+          <button
+            onClick={() => navigate('/')}
           style={{
             width: '150px',
             padding: '12px 0',
@@ -271,9 +281,11 @@ const MenuPage = () => {
         >
           ◀ TOP
         </button>
+        )}
         <div className="menu-page-controls-group">
-          <button
-            onClick={() => setDropTime(dropTime ? null : 1000)}
+          {!isMobile && (
+            <button
+              onClick={() => setDropTime(dropTime ? null : 1000)}
             style={{
               width: '150px',
               padding: '12px 0',
@@ -288,6 +300,7 @@ const MenuPage = () => {
           >
             {dropTime ? 'STOP' : 'RESUME'}
           </button>
+          )}
 
           {token && user ? (
             <div className="menu-page-auth-group">
@@ -429,6 +442,16 @@ const MenuPage = () => {
           </div>
         )}
       </div>
+
+      {isMobile && (
+        <div className="mobile-menu-container">
+          <button className="mobile-menu-button" style={{ color: '#3498db', borderColor: '#3498db' }} onClick={() => handleMouseSelect(0)}>4-WIDE</button>
+          <button className="mobile-menu-button" style={{ color: '#ff9800', borderColor: '#ff9800' }} onClick={() => handleMouseSelect(1)}>40 LINES</button>
+          <button className="mobile-menu-button" style={{ color: '#4caf50', borderColor: '#4caf50' }} onClick={() => handleMouseSelect(2)}>MARATHON</button>
+          <button className="mobile-menu-button" style={{ color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleMouseSelect(3)}>MULTI PLAY</button>
+          <button className="mobile-menu-button" style={{ color: '#9b59b6', borderColor: '#9b59b6' }} onClick={() => handleMouseSelect(4)}>CONFIG</button>
+        </div>
+      )}
       </div>
     </div>
   );

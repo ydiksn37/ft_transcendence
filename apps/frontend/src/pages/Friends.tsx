@@ -168,7 +168,7 @@ export default function Friends() {
 
 				<div className="dashboard-panels" style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
 					
-					<div className="arcade-panel" style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+					<div className="arcade-panel" style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
 						<input
 							type="text"
 							value={search}
@@ -176,7 +176,7 @@ export default function Friends() {
 							placeholder="SEARCH FRIENDS..."
 							style={{ 
 								width: '100%', padding: '15px', backgroundColor: '#000', color: '#fff',
-								border: '4px solid #333', fontSize: '14px', fontFamily: "'Press Start 2P', monospace"
+								border: '4px solid #333', fontSize: '14px', fontFamily: "'Press Start 2P', monospace", boxSizing: 'border-box'
 							}}
 						/>
 						
@@ -185,13 +185,13 @@ export default function Friends() {
 							{filteredFriends.map(f => {
 								const preset = getAvatarPreset(f.avatarId || f.id?.charCodeAt(0) % 8 || 0);
 								return (
-									<div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: '#1a1a1a', border: '2px solid #333' }}>
+									<div key={f.id} className="friend-item" style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: '#1a1a1a', border: '2px solid #333' }}>
 										<AvatarIcon color={preset.color} symbol={preset.symbol} photo={f.avatarUrl} size={48} />
-										<div style={{ flex: 1 }}>
+										<div style={{ flex: 1, minWidth: '120px' }}>
 											<div style={{ fontSize: '16px', fontWeight: 'bold' }}>{f.displayName || f.username}</div>
 											<div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>@{f.username}</div>
 										</div>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+										<div className="friend-actions" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
 											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 												<div style={{ width: '10px', height: '10px', backgroundColor: f.isOnline ? '#4caf50' : '#555', borderRadius: '50%', boxShadow: f.isOnline ? '0 0 10px #4caf50' : 'none' }} />
 												<span style={{ fontSize: '10px', color: f.isOnline ? '#4caf50' : '#888' }}>{f.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
@@ -208,24 +208,25 @@ export default function Friends() {
 						</div>
 					</div>
 
-					<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '30px' }}>
+					<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '30px', minWidth: 0 }}>
 						
-						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', minWidth: 0 }}>
 							<div style={{ fontSize: '14px', color: '#3498db', borderBottom: '4px solid #444', paddingBottom: '10px' }}>ADD FRIEND</div>
-							<div style={{ display: 'flex', gap: '10px' }}>
+							<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
 								<input
 									type="text"
 									value={addFriendInput}
 									onChange={(e) => setAddFriendInput(e.target.value)}
 									placeholder="@USERNAME"
 									style={{ 
-										flex: 1, padding: '10px', backgroundColor: '#000', color: '#fff',
+										flex: '1 1 150px', padding: '10px', backgroundColor: '#000', color: '#fff',
 										border: '2px solid #333', fontSize: '12px', fontFamily: "'Press Start 2P', monospace", minWidth: 0
 									}}
 								/>
 								<button 
 									onClick={handleAddFriend}
 									style={{ 
+										flex: '1 1 auto',
 										padding: '10px 15px', backgroundColor: '#3498db', color: '#fff',
 										border: '2px solid #fff', fontSize: '12px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace"
 									}}
@@ -235,16 +236,16 @@ export default function Friends() {
 							</div>
 						</div>
 
-						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', minWidth: 0 }}>
 							<div style={{ fontSize: '14px', color: '#f1c40f', borderBottom: '4px solid #444', paddingBottom: '10px' }}>PENDING ({pendingRequests.length})</div>
 							{pendingRequests.length === 0 && <div style={{ color: '#555', fontSize: '12px', textAlign: 'center' }}>NONE</div>}
 							<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 								{pendingRequests.map(r => (
-									<div key={r.friendshipId} style={{ padding: '10px', backgroundColor: '#1a1a1a', border: '2px solid #333', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+									<div key={r.friendshipId} style={{ padding: '10px', backgroundColor: '#1a1a1a', border: '2px solid #333', display: 'flex', flexDirection: 'column', gap: '10px', boxSizing: 'border-box' }}>
 										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-											<span style={{ fontSize: '12px' }}>@{r.username}</span>
+											<span style={{ fontSize: '12px', wordBreak: 'break-all' }}>@{r.username}</span>
 										</div>
-										<div style={{ display: 'flex', gap: '10px' }}>
+										<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
 											<button onClick={() => handleAccept(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>ACCEPT</button>
 											<button onClick={() => handleDecline(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>DECLINE</button>
 										</div>

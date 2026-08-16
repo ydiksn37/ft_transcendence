@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 
 export const useConfig = () => {
   const [tuning, setTuning] = useState(() => {
+    const defaultTuning = { das: 133, arr: 33, dcd: 1, sdf: 6, touchFlick: true };
     const saved = localStorage.getItem('tetrisTuning');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return { ...defaultTuning, ...JSON.parse(saved) }; } catch (e) {}
     }
-    return { das: 133, arr: 33, dcd: 1, sdf: 6 };
+    return defaultTuning;
   });
   const tuningRef = useRef(tuning);
 
@@ -54,7 +55,7 @@ export const useConfig = () => {
           if (user.gameSettings) {
             const gs = user.gameSettings;
             if (gs.keyBindings) setKeyConfig(gs.keyBindings);
-            setTuning({ das: gs.das, arr: gs.arr, dcd: gs.dcd, sdf: gs.sdf });
+            setTuning({ das: gs.das, arr: gs.arr, dcd: gs.dcd, sdf: gs.sdf, touchFlick: gs.touchFlick ?? true });
             setVolume({ se: gs.sfxEnabled ? gs.volume / 100 : 0, bgm: gs.musicEnabled ? gs.volume / 100 : 0 });
           }
         }
@@ -94,6 +95,7 @@ export const useConfig = () => {
             arr: tuning.arr,
             dcd: tuning.dcd,
             sdf: tuning.sdf,
+            touchFlick: tuning.touchFlick,
             keyBindings: keyConfig,
             volume: Math.max(volume.se, volume.bgm) * 100,
             sfxEnabled: volume.se > 0,

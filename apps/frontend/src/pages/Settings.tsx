@@ -172,17 +172,19 @@ export default function Settings() {
     border: '4px solid #555',
     padding: '20px',
     marginBottom: '20px',
-    boxShadow: '8px 8px 0px #000'
+    boxShadow: '8px 8px 0px #000',
+    boxSizing: 'border-box' as const
   };
 
   return (
-    <div style={{
+    <div className="settings-container" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       padding: '20px', backgroundColor: '#111', color: 'white',
-      fontFamily: "'Press Start 2P', monospace", minHeight: '100vh', width: '100vw', boxSizing: 'border-box',
+      fontFamily: "'Press Start 2P', monospace", minHeight: '100vh', width: '100%', boxSizing: 'border-box',
+      overflowX: 'hidden',
       overflowY: 'auto'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '900px', marginBottom: '40px', position: 'relative', zIndex: 10 }}>
+      <div className="settings-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '900px', marginBottom: '40px', position: 'relative', zIndex: 10 }}>
         <button 
           className={`back-btn ${selectedIndex === 0 ? 'selected' : ''}`}
           onClick={() => navigate(mode ? `/profile?mode=${mode}` : '/profile')}
@@ -192,8 +194,8 @@ export default function Settings() {
         >
           ◀ PROFILE
         </button>
-        <h1 style={{ fontSize: '32px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>SETTINGS</h1>
-        <div style={{ width: '150px' }}></div> {/* Spacer to balance the header */}
+        <h1 className="settings-title" style={{ fontSize: '32px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>SETTINGS</h1>
+        <div className="settings-header-spacer" style={{ width: '150px' }}></div> {/* Spacer to balance the header */}
       </div>
 
       <div style={{ width: '100%', maxWidth: '900px' }}>
@@ -202,7 +204,7 @@ export default function Settings() {
         <div style={panelStyle}>
           <h2 style={{ fontSize: '16px', color: '#3498db', marginBottom: '20px', borderBottom: '2px solid #444', paddingBottom: '10px' }}>PUBLIC API KEYS</h2>
           
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <div className="api-key-form" style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <input 
               type="text" 
               placeholder="KEY LABEL" 
@@ -290,8 +292,8 @@ export default function Settings() {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
+            <div className="gdpr-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
                 <span style={{ color: '#fff' }}>EXPORT YOUR DATA</span><br/><br/>
                 Download all your personal data, game history, and statistics in JSON format.
               </div>
@@ -303,8 +305,8 @@ export default function Settings() {
               </button>
             </div>
 
-            <div style={{ borderTop: '2px solid #444', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
+            <div className="gdpr-row" style={{ borderTop: '2px solid #444', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
                 <span style={{ color: '#e74c3c' }}>DANGER ZONE: DELETE ACCOUNT</span><br/><br/>
                 Permanently delete your account. This action cannot be undone.
               </div>
