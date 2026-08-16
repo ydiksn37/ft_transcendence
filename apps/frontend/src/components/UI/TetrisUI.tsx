@@ -183,9 +183,20 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   const holdBlock = (
     <div 
       className="hold-button"
-      onClick={() => { onHold(); soundManager.playSe('hold'); }}
-      onTouchEnd={(e) => { e.preventDefault(); onHold(); soundManager.playSe('hold'); }}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}
+      onClick={() => {
+        if (isMobileView) {
+          onHold();
+          soundManager.playSe('hold');
+        }
+      }}
+      onTouchEnd={(e) => {
+        if (isMobileView) {
+          e.preventDefault();
+          onHold();
+          soundManager.playSe('hold');
+        }
+      }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: isMobileView ? 'pointer' : 'default' }}
     >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
