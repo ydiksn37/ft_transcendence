@@ -108,10 +108,10 @@ const MenuPage = () => {
     else if (lockedX >= 16 && lockedX < 24) mode = 'MARATHON';
     else if (lockedX >= 24 && lockedX < 32) mode = 'MULTI_PLAY';
     else if (lockedX >= 32) mode = 'CONFIG';
-    
+
     setTransitionMode(mode);
     setDropTime(null);
-    
+
     setTimeout(() => {
       navigate(`/lobby/${mode}`);
     }, 1500);
@@ -213,9 +213,9 @@ const MenuPage = () => {
 
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
-    countdownRef, listeningActionRef: useRef(null), setKeyConfig: () => {}, setListeningAction: () => {},
-    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame: () => {},
-    socketRef: useRef(null), setSocket: () => {}, setIsWaiting: () => {}, setDropTime, quitGame: () => navigate('/')
+    countdownRef, listeningActionRef: useRef(null), setKeyConfig: () => { }, setListeningAction: () => { },
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame: () => { },
+    socketRef: useRef(null), setSocket: () => { }, setIsWaiting: () => { }, setDropTime, quitGame: () => navigate('/')
   });
 
   useEffect(() => {
@@ -244,7 +244,7 @@ const MenuPage = () => {
       fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1230px', marginBottom: '20px', position: 'relative', zIndex: 50 }}>
-        <button 
+        <button
           onClick={() => navigate('/')}
           style={{
             width: '150px',
@@ -262,7 +262,7 @@ const MenuPage = () => {
         </button>
         <h1 style={{ fontSize: '48px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>TETRIS</h1>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
+          <button
             onClick={() => setDropTime(dropTime ? null : 1000)}
             style={{
               width: '150px',
@@ -278,10 +278,10 @@ const MenuPage = () => {
           >
             {dropTime ? 'STOP' : 'RESUME'}
           </button>
-          
+
           {token && user ? (
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
+              <button
                 onClick={() => navigate('/dashboard')}
                 style={{
                   padding: '12px 20px',
@@ -296,7 +296,7 @@ const MenuPage = () => {
               >
                 DASHBOARD
               </button>
-              <button 
+              <button
                 onClick={() => navigate('/profile')}
                 style={{
                   padding: '12px 20px',
@@ -311,7 +311,7 @@ const MenuPage = () => {
               >
                 PROFILE
               </button>
-              <button 
+              <button
                 onClick={() => { logout(); navigate('/'); }}
                 style={{
                   padding: '12px 20px',
@@ -328,7 +328,7 @@ const MenuPage = () => {
               </button>
             </div>
           ) : (
-            <button 
+            <button
               onClick={() => navigate('/login?redirectTo=/menu&cancelTo=/menu')}
               style={{
                 padding: '12px 20px',
@@ -346,21 +346,21 @@ const MenuPage = () => {
           )}
         </div>
       </div>
-      
+
       <div style={{ position: 'relative', width: 1230, height: 660 }}>
         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
           <Stage width={1230} height={1200} options={{ backgroundAlpha: 0 }}>
-            <GameBoard 
-              stage={stage} 
-              player={transitionMode ? { ...player, tetromino: [] } : player} 
-              ghostY={calculateGhostY(player, stage)} 
+            <GameBoard
+              stage={stage}
+              player={transitionMode ? { ...player, tetromino: [] } : player}
+              ghostY={calculateGhostY(player, stage)}
             />
           </Stage>
         </div>
 
         <div style={{ position: 'absolute', bottom: 0, left: 0, width: '1230px', height: '250px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>
           {['4_WIDE', '40_LINES', 'MARATHON', 'MULTI_PLAY', 'CONFIG'].map((mode, index) => (
-            <div 
+            <div
               key={mode}
               onClick={() => handleMouseSelect(index)}
               style={{ width: '246px', height: '100%', cursor: 'pointer', pointerEvents: 'auto' }}
@@ -370,18 +370,18 @@ const MenuPage = () => {
         </div>
 
         <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none', zIndex: 20 }}>
-           <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
-           
-           <div style={{ position: 'absolute', top: 0, left: '50%', marginLeft: '320px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px 20px', border: '2px solid white', color: '#ccc', fontSize: '10px', textAlign: 'left', lineHeight: '1.6' }}>
-             <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
-             <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
-               <div style={{color: '#4caf50'}}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-               <div style={{color: '#4caf50'}}>RIGHT:</div><div>{keyConfig.right?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-               <div style={{color: '#4caf50'}}>ROTATE:</div><div>{keyConfig.rotateCW?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-               <div style={{color: '#4caf50'}}>H-DROP:</div><div>{keyConfig.hardDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-               <div style={{color: '#4caf50'}}>S-DROP:</div><div>{keyConfig.softDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-             </div>
-           </div>
+          <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
+
+          <div style={{ position: 'absolute', top: 0, left: '50%', marginLeft: '320px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px 20px', border: '2px solid white', color: '#ccc', fontSize: '10px', textAlign: 'left', lineHeight: '1.6' }}>
+            <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
+              <div style={{ color: '#4caf50' }}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+              <div style={{ color: '#4caf50' }}>RIGHT:</div><div>{keyConfig.right?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+              <div style={{ color: '#4caf50' }}>ROTATE:</div><div>{keyConfig.rotateCW?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+              <div style={{ color: '#4caf50' }}>H-DROP:</div><div>{keyConfig.hardDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+              <div style={{ color: '#4caf50' }}>S-DROP:</div><div>{keyConfig.softDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+            </div>
+          </div>
         </div>
         <div style={{ position: 'absolute', bottom: '150px', left: '15px', width: '1230px', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
           <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
@@ -418,7 +418,6 @@ const MenuPage = () => {
             </h1>
           </div>
         )}
-      </div>
       </div>
     </div>
   );
