@@ -172,11 +172,17 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         setIsWaiting(false); setDropTime(null); 
         navigate(`/lobby/${gameMode}`);
       }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
+        setIsWaiting(false); setDropTime(null); 
+        navigate(`/lobby/${gameMode}`);
+      }}
       style={{
         fontFamily: '"Press Start 2P", monospace', padding: '12px',
         backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c',
         boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', fontSize: '12px',
-        transition: 'transform 0.1s'
+        transition: 'transform 0.1s', position: 'relative', zIndex: 100
       }}
       onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
       onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
@@ -452,6 +458,14 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                         navigate('/lobby/MULTI_PLAY');
                       }
                     }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      if (joinOnline) {
+                        joinOnline();
+                      } else {
+                        navigate('/lobby/MULTI_PLAY');
+                      }
+                    }}
                     style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                     onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
@@ -463,6 +477,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   <button 
                     autoFocus
                     onClick={() => restartGame()}
+                    onTouchEnd={(e) => { e.preventDefault(); restartGame(); }}
                     style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                     onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
@@ -474,6 +489,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 
                 <button 
                   onClick={() => navigate('/menu')}
+                  onTouchEnd={(e) => { e.preventDefault(); navigate('/menu'); }}
                   style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                   onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                   onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
