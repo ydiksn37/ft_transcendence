@@ -6,6 +6,7 @@ import Dashboard from "@/pages/Dashboard"
 import Chat from "@/pages/Chat"
 import Friends from "@/pages/Friends"
 import Profile from "@/pages/Profile"
+import Settings from "@/pages/Settings"
 import JoinPage from "@/pages/JoinPage"
 import MenuPage from "@/pages/MenuPage"
 import LobbyPage from "@/pages/LobbyPage"
@@ -23,6 +24,7 @@ export default function App() {
 
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
+      <Route path="/settings" element={<Settings />} />
 
       {/* TOPページ（JOIN -> ゲーム） */}
       <Route path="/" element={<JoinPage />} />

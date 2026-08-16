@@ -92,7 +92,7 @@ export async function calcAiMove(
 
   // ミス確率でランダムな配置をする
   if (Math.random() < config.mistakeRate) {
-    const rotation = (Math.floor(Math.random() * 4)) as 0 | 1 | 2 | 3;
+    const rotation = Math.floor(Math.random() * 4) as 0 | 1 | 2 | 3;
     const validXs: number[] = [];
     for (let x = 0; x < BOARD_COLS; x++) {
       if (isValidPosition(board, type, x, 0, rotation)) validXs.push(x);

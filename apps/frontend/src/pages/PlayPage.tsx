@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { CustomRoomsList } from '../components/UI/CustomRoomsList';
+import { useAuth } from '../hooks/useAuth';
+import { useConfig } from '../hooks/useConfig';
+import { useGameState } from '../hooks/useGameState';
+import { useInterval } from '../hooks/useInterval';
+import { useKeyboardControls } from '../hooks/useKeyboardControls';
+import { useTouchControls } from '../hooks/useTouchControls';
+import { useMultiplayer } from '../hooks/useMultiplayer';
 import { usePlayer } from '../hooks/usePlayer';
 import { useStage } from '../hooks/useStage';
-import { useInterval } from '../hooks/useInterval';
-import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
-import { resetTetrominoBag, TETROMINOS, setRandomSeed } from '../utils/tetrominos';
+import { calculateGhostY, checkCollision, createStage } from '../utils/gameHelpers';
+import type { Cell } from '../utils/gameHelpers';
+import { soundManager } from '../utils/soundManager';
+import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
-import { useConfig } from '../hooks/useConfig';
-import { useKeyboardControls } from '../hooks/useKeyboardControls';
-import { useMultiplayer } from '../hooks/useMultiplayer';
-import { useGameState } from '../hooks/useGameState';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { CustomRoomsList } from '../components/UI/CustomRoomsList';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -128,6 +131,11 @@ const PlayPage = () => {
     
     if (lines > 0) {
       comboRef.current += 1;
+      if (lines === 4) {
+        soundManager.playSe('tetris');
+      } else {
+        soundManager.playSe('clear');
+      }
     } else {
       comboRef.current = -1;
     }
@@ -345,11 +353,11 @@ const PlayPage = () => {
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
       if (token) {
-        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint`, {
+        fetch(`/api/sprint`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             timeMs: finalTime,
@@ -360,6 +368,36 @@ const PlayPage = () => {
       }
     }
   }, [gameOver, finalTime, token, piecesPlaced]);
+
+  // General Game Result Submission Effect
+  useEffect(() => {
+    if (gameOver && (gameModeRef.current === '40_LINES' || gameModeRef.current === 'MARATHON')) {
+      if (token) {
+        const durationSeconds = elapsedTime / 1000;
+        const durationMinutes = durationSeconds / 60;
+        const apm = durationMinutes > 0 ? attackLines / durationMinutes : 0;
+        const pps = durationMinutes > 0 ? piecesPlaced / (durationMinutes * 60) : 0;
+
+        fetch(`/api/game/result`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            gameMode: gameModeRef.current,
+            apm: Math.round(apm * 10) / 10,
+            pps: Math.round(pps * 100) / 100,
+            linesCleared: lines,
+            tSpins: 0, 
+            tetrises: 0, 
+            durationSeconds: Math.floor(durationSeconds),
+            score: score
+          })
+        }).catch(err => console.error('Failed to save game result:', err));
+      }
+    }
+  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -588,6 +626,26 @@ const PlayPage = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
+  // Handle Game Over sound and stop BGM
+  useEffect(() => {
+    if (gameOver) {
+      soundManager.playSe('gameover');
+      soundManager.stopBgm();
+    }
+  }, [gameOver]);
+
+  // Handle BGM starting
+  useEffect(() => {
+    if (appState === 'PLAYING' || appState === 'ONLINE_1V1') {
+      if (!gameOver && countdown === null) {
+        soundManager.playBgm('/bgm.mp3'); // Fallback placeholder path
+      }
+    }
+    return () => {
+      soundManager.stopBgm();
+    };
+  }, [appState, gameOver, countdown]);
+
   const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
@@ -610,6 +668,18 @@ const PlayPage = () => {
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame
+  });
+
+  useTouchControls({
+    stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
+    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
+    startGame, quitGame: () => {
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        setAppState('CUSTOM_ROOMS');
+      } else {
+        navigate(`/lobby/${mode}`);
+      }
+    }
   });
 
   // Auto-drop (gravity)
@@ -663,6 +733,7 @@ const PlayPage = () => {
       joinOnline={joinOnline}
       isCustomRoom={mode === 'CUSTOM_ROOMS'}
       quitGame={quitGame}
+      onHold={() => playerHold(stage[0].length, stage)}
     />
   );
 };

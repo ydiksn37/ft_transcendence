@@ -3,6 +3,7 @@ import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import type { Player } from './usePlayer';
 import type { Cell } from '../utils/gameHelpers';
 import type { Socket } from 'socket.io-client';
+import { soundManager } from '../utils/soundManager';
 
 type UseKeyboardControlsProps = {
   player: Player;
@@ -169,6 +170,7 @@ export const useKeyboardControls = ({
             heldKeys.current.add(code);
             horizKeys.current.push(code);
             movePlayerRef.current(dir, stageRef.current, false);
+            soundManager.playSe('move');
             startDASARR();
           }
           break;
@@ -180,19 +182,34 @@ export const useKeyboardControls = ({
           softDrop();
           break;
         case conf.hardDrop:
-          if (!e.repeat) hardDrop();
+          if (!e.repeat) {
+            hardDrop();
+            soundManager.playSe('drop');
+          }
           break;
         case conf.rotateCW:
-          if (!e.repeat) playerRotate(stageRef.current, 1);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, 1);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.rotateCCW:
-          if (!e.repeat) playerRotate(stageRef.current, -1);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, -1);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.rotate180:
-          if (!e.repeat) playerRotate(stageRef.current, 2);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, 2);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.hold:
-          if (!e.repeat) playerHold(stageRef.current[0].length, stageRef.current);
+          if (!e.repeat) {
+            playerHold(stageRef.current[0].length, stageRef.current);
+            soundManager.playSe('hold');
+          }
           break;
       }
     },

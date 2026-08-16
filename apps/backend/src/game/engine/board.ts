@@ -1,4 +1,11 @@
-import { TetrominoType, TETROMINO_SHAPES, Board, Cell, WALL_KICKS_NORMAL, WALL_KICKS_I } from '@transcendence/shared';
+import {
+  TetrominoType,
+  TETROMINO_SHAPES,
+  Board,
+  Cell,
+  WALL_KICKS_NORMAL,
+  WALL_KICKS_I,
+} from '@transcendence/shared';
 
 export const BOARD_ROWS = 40;
 export const BOARD_COLS = 10;
@@ -63,16 +70,21 @@ export function lockMino(
   const newBoard = cloneBoard(board);
   const cells = getMinoCells(type, x, y, rotation);
   for (const [row, col] of cells) {
-    if (row >= 0 && row < BOARD_ROWS) newBoard[row][col] = type as Cell;
+    if (row >= 0 && row < BOARD_ROWS) newBoard[row][col] = type;
   }
   return newBoard;
 }
 
 /** ライン消去 — 消去ライン数を返す */
-export function clearLines(board: Board): { board: Board; linesCleared: number } {
+export function clearLines(board: Board): {
+  board: Board;
+  linesCleared: number;
+} {
   const newBoard = board.filter((row) => row.some((cell) => cell === null));
   const linesCleared = BOARD_ROWS - newBoard.length;
-  const emptyRows = Array.from({ length: linesCleared }, () => Array(BOARD_COLS).fill(null));
+  const emptyRows = Array.from({ length: linesCleared }, () =>
+    Array(BOARD_COLS).fill(null),
+  );
   return { board: [...emptyRows, ...newBoard], linesCleared };
 }
 
@@ -95,7 +107,13 @@ export function detectTSpin(
   ];
 
   const occupied = corners.filter(([r, c]) => {
-    return r < 0 || r >= BOARD_ROWS || c < 0 || c >= BOARD_COLS || board[r]?.[c] !== null;
+    return (
+      r < 0 ||
+      r >= BOARD_ROWS ||
+      c < 0 ||
+      c >= BOARD_COLS ||
+      board[r]?.[c] !== null
+    );
   }).length;
 
   if (occupied >= 3) return 'tspin';
@@ -113,8 +131,10 @@ export function tryRotate(
   direction: 'CW' | 'CCW' | '180',
 ): { x: number; y: number; rotation: 0 | 1 | 2 | 3 } | null {
   let newRotation: 0 | 1 | 2 | 3;
-  if (direction === 'CW') newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
-  else if (direction === 'CCW') newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
+  if (direction === 'CW')
+    newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
+  else if (direction === 'CCW')
+    newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
   else newRotation = ((currentRotation + 2) % 4) as 0 | 1 | 2 | 3;
 
   const kickTable = type === 'I' ? WALL_KICKS_I : WALL_KICKS_NORMAL;

@@ -59,10 +59,22 @@ export class GameService {
 
     // 統計を非同期で更新
     if (data.player1Id) {
-      this.updateStats(data.player1Id, data.winnerId === data.player1Id, data.player1Apm, data.player1Pps, data.player1LinesCleared).catch(this.logger.error.bind(this.logger));
+      this.updateStats(
+        data.player1Id,
+        data.winnerId === data.player1Id,
+        data.player1Apm,
+        data.player1Pps,
+        data.player1LinesCleared,
+      ).catch(this.logger.error.bind(this.logger));
     }
     if (data.player2Id && !data.isAiGame) {
-      this.updateStats(data.player2Id, data.winnerId === data.player2Id, data.player2Apm, data.player2Pps, data.player2LinesCleared).catch(this.logger.error.bind(this.logger));
+      this.updateStats(
+        data.player2Id,
+        data.winnerId === data.player2Id,
+        data.player2Apm,
+        data.player2Pps,
+        data.player2LinesCleared,
+      ).catch(this.logger.error.bind(this.logger));
     }
 
     return result;

@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import {
   ApiTags,
   ApiOperation,
@@ -48,13 +48,25 @@ export class UsersController {
     return this.usersService.updateMe(user.id, dto);
   }
 
+  @Patch('me/settings')
+  @ApiOperation({ summary: 'ゲーム設定を更新する' })
+  updateSettings(@CurrentUser() user: any, @Body() body: any) {
+    return this.usersService.updateGameSettings(user.id, body);
+  }
+
+  @Delete('me')
+  @ApiOperation({ summary: 'アカウント削除（ソフトデリート）' })
+  deleteMe(@CurrentUser() user: any) {
+    return this.usersService.deleteMe(user.id);
+  }
+
   @Post('me/avatar')
   @ApiOperation({ summary: 'アバター画像をアップロード' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: diskStorage({
-        destination: process.env.UPLOAD_DIR ?? '/tmp/uploads',
+        destination: process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads'),
         filename: (_req, file, cb) => {
           const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `avatar-${unique}${extname(file.originalname)}`);
@@ -63,13 +75,19 @@ export class UsersController {
       limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-          return cb(new Error('JPG/PNG/GIF/WebPのみアップロード可能です'), false);
+          return cb(
+            new Error('JPG/PNG/GIF/WebPのみアップロード可能です'),
+            false,
+          );
         }
         cb(null, true);
       },
     }),
   )
-  uploadAvatar(@CurrentUser() user: any, @UploadedFile() file: Express.Multer.File) {
+  uploadAvatar(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
     const avatarUrl = `/uploads/${file.filename}`;
     return this.usersService.updateAvatar(user.id, avatarUrl);
   }
@@ -88,8 +106,11 @@ export class UsersController {
 
   @Post('friends/request')
   @ApiOperation({ summary: 'フレンド申請を送る' })
-  sendFriendRequest(@CurrentUser() user: any, @Body() body: { addresseeId: string }) {
-    return this.usersService.sendFriendRequest(user.id, body.addresseeId);
+  sendFriendRequest(
+    @CurrentUser() user: any,
+    @Body() body: { addresseeId?: string; username?: string },
+  ) {
+    return this.usersService.sendFriendRequest(user.id, body);
   }
 
   @Patch('friends/:id')
@@ -159,7 +180,6 @@ export class UsersController {
   ) {
     return this.usersService.getGameHistory(id, page, limit, mode);
   }
-
 }
 
 // ── 管理者専用コントローラー ──────────────────────────────────

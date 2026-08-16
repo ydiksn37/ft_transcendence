@@ -1,20 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { soundManager } from '../../utils/soundManager';
 
 type ConfigProps = {
-  tuning: { arr: number; das: number; dcd: number; sdf: number };
-  setTuning: React.Dispatch<React.SetStateAction<{ arr: number; das: number; dcd: number; sdf: number }>>;
+  tuning: { arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean };
+  setTuning: React.Dispatch<React.SetStateAction<{ arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean }>>;
+  volume: { se: number; bgm: number };
+  setVolume: React.Dispatch<React.SetStateAction<{ se: number; bgm: number }>>;
   keyConfig: Record<string, string>;
   listeningAction: string | null;
   setListeningAction: (action: string | null) => void;
   setAppState: (state: 'MENU') => void;
 };
 
-export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, keyConfig, listeningAction, setListeningAction,}) => {
+export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVolume, keyConfig, listeningAction, setListeningAction }) => {
+  useEffect(() => {
+    soundManager.setVolumes(volume.se, volume.bgm);
+  }, [volume]);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-      <h1>Configuration</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
+      <h1 style={{ fontSize: '24px' }}>Configuration</h1>
       
-      <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '600px' }}>
+      <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
           <input type="number" min="0" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
@@ -31,9 +37,41 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, keyConfig, li
           <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
           <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
         </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <label style={{ fontSize: '12px', color: 'gray' }}>Touch Flick</label>
+          <input type="checkbox" checked={tuning.touchFlick ?? true} onChange={e => setTuning(p => ({...p, touchFlick: e.target.checked}))} style={{ width: '24px', height: '24px', cursor: 'pointer' }} />
+        </div>
       </div>
 
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', maxWidth: '600px' }}>
+      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 1 200px' }}>
+          <label style={{ fontSize: '12px', color: 'gray', marginBottom: '10px' }}>SE Volume: {Math.round(volume.se * 100)}%</label>
+          <input 
+            type="range" min="0" max="1" step="0.05" value={volume.se} 
+            onChange={e => {
+              const val = Number(e.target.value);
+              setVolume(p => ({...p, se: val}));
+              soundManager.setVolumes(val, volume.bgm);
+              soundManager.playSe('test');
+            }} 
+            style={{ width: '100%' }} 
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 1 200px' }}>
+          <label style={{ fontSize: '12px', color: 'gray', marginBottom: '10px' }}>BGM Volume: {Math.round(volume.bgm * 100)}%</label>
+          <input 
+            type="range" min="0" max="1" step="0.05" value={volume.bgm} 
+            onChange={e => {
+              const val = Number(e.target.value);
+              setVolume(p => ({...p, bgm: val}));
+              soundManager.setVolumes(volume.se, val);
+            }} 
+            style={{ width: '100%' }} 
+          />
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
         <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
         <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
           {Object.entries(keyConfig).map(([action, code]) => (

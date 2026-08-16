@@ -20,17 +20,19 @@ import { JwtAuthGuard } from './auth/guards/auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { SprintModule } from './sprint/sprint.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
+    ChatModule,
     // ── 設定 ────────────────────────────────────────────────
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
 
     // ── レート制限（グローバル） ─────────────────────────────
     ThrottlerModule.forRoot([
       {
-        ttl: 60_000,  // 60秒
-        limit: 100,   // 100リクエスト/分
+        ttl: 60_000, // 60秒
+        limit: 100, // 100リクエスト/分
       },
     ]),
 

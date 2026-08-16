@@ -1,8 +1,14 @@
 import { GARBAGE_TABLE } from '@transcendence/shared';
 
 export type ClearType =
-  | 'single' | 'double' | 'triple' | 'tetris'
-  | 'tspin_single' | 'tspin_double' | 'tspin_triple' | 'tspin_mini'
+  | 'single'
+  | 'double'
+  | 'triple'
+  | 'tetris'
+  | 'tspin_single'
+  | 'tspin_double'
+  | 'tspin_triple'
+  | 'tspin_mini'
   | 'perfect_clear';
 
 /** ライン消去数と T-Spin 種別から攻撃ライン数を計算 */
@@ -55,7 +61,11 @@ export function isPerfectClear(board: any[][]): boolean {
 }
 
 /** スコア計算 */
-export function calcScore(clearType: ClearType | null, level: number, combo: number): number {
+export function calcScore(
+  clearType: ClearType | null,
+  level: number,
+  combo: number,
+): number {
   const BASE: Record<string, number> = {
     single: 100,
     double: 300,

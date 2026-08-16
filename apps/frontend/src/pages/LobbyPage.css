@@ -17,7 +17,12 @@
 }
 
 .back-btn, .nav-btn {
-  padding: 8px 16px;
+  padding: 0 16px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   font-size: 14px;
   cursor: pointer;
   background-color: #333;
@@ -67,6 +72,7 @@
   padding: 20px;
   min-height: 400px;
   box-shadow: 8px 8px 0px rgba(0, 0, 0, 1);
+  box-sizing: border-box;
   display: flex;
   justify-content: center;
 }
@@ -92,9 +98,90 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: 'Press Start 2P', monospace;
+  box-sizing: border-box;
 }
 
 .start-game-btn:hover {
   transform: scale(1.05);
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .lobby-header {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    align-items: stretch;
+  }
+  .user-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .user-controls .nav-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+  .back-btn, .nav-btn {
+    font-size: 10px;
+    padding: 10px;
+    height: auto;
+  }
+  .lobby-panels {
+    flex-direction: column;
+    align-items: center;
+  }
+  .config-panel, .records-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+  .mode-title {
+    font-size: 32px;
+  }
+  .marathon-slider-wrapper {
+    transform: scale(0.65);
+  }
+  .multi-play-buttons {
+    flex-direction: column !important;
+    align-items: center;
+    width: 100%;
+  }
+  .multi-play-buttons .start-game-btn {
+    margin-bottom: 0;
+  }
+  .start-game-btn {
+    font-size: 24px;
+    padding: 15px 30px;
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 30px;
+  }
+  .settings-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 15px;
+  }
+  .settings-title {
+    font-size: 24px !important;
+    text-align: center;
+  }
+  .settings-header-spacer {
+    display: none;
+  }
+  .api-key-form {
+    flex-wrap: wrap;
+  }
+  .api-key-form input {
+    flex: 1 1 150px !important;
+  }
+  .api-key-form button {
+    flex: 1 1 auto;
+  }
+  .gdpr-row {
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  .gdpr-text {
+    max-width: 100% !important;
+  }
 }

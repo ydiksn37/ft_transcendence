@@ -6,18 +6,27 @@ import {
   OnGatewayDisconnect,
   ConnectedSocket,
   MessageBody,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
-import { ClientEvent, ServerEvent, AiDifficulty, Cell } from '@transcendence/shared';
+import {
+  ClientEvent,
+  ServerEvent,
+  AiDifficulty,
+  Cell,
+} from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
+import { ChatService } from '../chat/chat.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: '/',
 })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -25,7 +34,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private rooms = new Map<string, GameInstance>();
   private clientRoom = new Map<string, string>(); // socketId -> roomId
   private matchmakingQueue: Socket[] = [];
-  
+
   // Custom Rooms
   private customRooms = new Map<string, {
     roomId: string;
@@ -39,7 +48,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     isPlaying: boolean;
   }>();
 
-  constructor(private readonly gameService: GameService) {}
+  constructor(
+    private readonly gameService: GameService,
+    private readonly chatService: ChatService,
+  ) {}
+
+  afterInit() {
+    this.logger.log('GameGateway initialized');
+  }
 
   handleConnection(client: Socket) {
     const userId = client.handshake?.auth?.userId;
@@ -54,7 +70,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`切断: ${client.id}`);
 
     // マッチメイキングキューから除外
-    this.matchmakingQueue = this.matchmakingQueue.filter((s) => s.id !== client.id);
+    this.matchmakingQueue = this.matchmakingQueue.filter(
+      (s) => s.id !== client.id,
+    );
 
     // ゲーム中だった場合
     const roomId = this.clientRoom.get(client.id);
@@ -95,11 +113,60 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private getCustomRoomsList() {
-    return Array.from(this.customRooms.values()).map(r => ({
+    return Array.from(this.customRooms.values()).map((r) => ({
       roomId: r.roomId,
       name: r.name,
-ownerId: r.ownerSocketId
+      ownerId: r.ownerSocketId
     }));
+  }
+
+  // ── ゲーム履歴保存 ─────────────────────────────────────────
+  private async saveGameStats(
+    roomId: string,
+    winnerSocketId: string | null,
+    stats: Record<string, any>,
+    gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
+    isAiGame: boolean,
+    aiDifficulty?: string,
+  ) {
+    const socketIds = Object.keys(stats);
+    if (socketIds.length < 2) return;
+
+    const p1SocketId = socketIds[0];
+    const p2SocketId = socketIds[1];
+    const p1Stats = stats[p1SocketId];
+    const p2Stats = stats[p2SocketId];
+    const winnerUserId = winnerSocketId ? stats[winnerSocketId]?.userId : null;
+
+    try {
+      await this.gameService.saveResult({
+        roomId,
+        player1Id: p1Stats.userId,
+        player2Id: p2Stats.userId,
+        winnerId: winnerUserId,
+        isAiGame,
+        aiDifficulty,
+        player1Apm: p1Stats.apm,
+        player2Apm: p2Stats.apm,
+        player1Pps: p1Stats.pps,
+        player2Pps: p2Stats.pps,
+        player1LinesCleared: p1Stats.linesCleared,
+        player2LinesCleared: p2Stats.linesCleared,
+        player1TSpins: p1Stats.tSpins,
+        player2TSpins: p2Stats.tSpins,
+        player1Tetrises: p1Stats.tetrises,
+        player2Tetrises: p2Stats.tetrises,
+        garbageSent1to2: p1Stats.attacksSent,
+        garbageSent2to1: p2Stats.attacksSent,
+        durationSeconds: Math.max(
+          p1Stats.durationSeconds,
+          p2Stats.durationSeconds,
+        ),
+        gameMode: gameMode,
+      });
+    } catch (e) {
+      this.logger.error('Failed to save game result', e);
+    }
   }
 
   // ── マッチメイキング ──────────────────────────────────────
@@ -113,7 +180,12 @@ ownerId: r.ownerSocketId
       const roomId = `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const seed = Math.floor(Math.random() * 2147483647);
 
-      const instance = new GameInstance(roomId, this.server, seed);
+      const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
+        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
+        this.rooms.delete(rId);
+      };
+
+      const instance = new GameInstance(roomId, this.server, seed, onGameOver);
 
       // ユーザーIDはJWTから取得（実装簡略化のため socket.data を利用）
       const userId1 = (client.data?.userId as string) ?? null;
@@ -145,13 +217,18 @@ ownerId: r.ownerSocketId
 
   @SubscribeMessage(ClientEvent.LEAVE_QUEUE)
   handleLeaveQueue(@ConnectedSocket() client: Socket) {
-    this.matchmakingQueue = this.matchmakingQueue.filter((s) => s.id !== client.id);
+    this.matchmakingQueue = this.matchmakingQueue.filter(
+      (s) => s.id !== client.id,
+    );
     client.emit('queue_left');
   }
 
   // ── カスタムルーム (マルチプレイ) ──────────────────────────
   @SubscribeMessage('game:create_custom_room')
-  handleCreateCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { name?: string }) {
+  handleCreateCustomRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { name?: string },
+  ) {
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
       if (room.ownerSocketId === client.id) {
@@ -160,14 +237,16 @@ ownerId: r.ownerSocketId
     }
 
     const roomId = Math.random().toString(36).slice(2, 6).toUpperCase();
-    
+
     if (this.customRooms.has(roomId)) {
-      client.emit('error', { message: 'Failed to generate unique Room ID. Please try again.' });
+      client.emit('error', {
+        message: 'Failed to generate unique Room ID. Please try again.',
+      });
       return;
     }
 
     const roomName = data?.name?.trim() || `Room ${roomId}`;
-    
+
     this.customRooms.set(roomId, {
       roomId,
       name: roomName,
@@ -187,13 +266,16 @@ ownerId: r.ownerSocketId
   }
 
   @SubscribeMessage('game:update_custom_room_id')
-  handleUpdateCustomRoomId(@ConnectedSocket() client: Socket, @MessageBody() data: { newRoomId: string }) {
+  handleUpdateCustomRoomId(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { newRoomId: string },
+  ) {
     const newId = data.newRoomId.trim().toUpperCase();
     if (!newId || newId.length === 0) {
       client.emit('error', { message: 'Invalid Room ID' });
       return;
     }
-    
+
     if (this.customRooms.has(newId)) {
       client.emit('error', { message: 'Room ID already exists' });
       return;
@@ -254,7 +336,10 @@ ownerId: r.ownerSocketId
   }
 
   @SubscribeMessage('game:join_custom_room')
-  handleJoinCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { roomId: string }) {
+  handleJoinCustomRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
     const room = this.customRooms.get(data.roomId);
     if (!room) {
       client.emit('error', { message: 'ルームが見つかりません' });
@@ -336,7 +421,13 @@ ownerId: r.ownerSocketId
   ) {
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
-    const instance = new GameInstance(roomId, this.server, seed);
+
+    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
+      this.saveGameStats(rId, winnerId, stats, 'AI', true, data.difficulty);
+      this.rooms.delete(rId);
+    };
+
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
 
     const userId = (client.data?.userId as string) ?? null;
     instance.addPlayer(client.id, userId);
@@ -400,14 +491,20 @@ ownerId: r.ownerSocketId
 
   // ── P2P 通信 (フロントエンド主導の対戦用) ───────────────────
   @SubscribeMessage('board_update')
-  handleBoardUpdate(@ConnectedSocket() client: Socket, @MessageBody() data: { stage: Cell[][]; score: number }) {
+  handleBoardUpdate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { stage: Cell[][]; score: number },
+  ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('opponent_board_update', data);
   }
 
   @SubscribeMessage('send_garbage')
-  handleSendGarbage(@ConnectedSocket() client: Socket, @MessageBody() data: { lines: number }) {
+  handleSendGarbage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { lines: number },
+  ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('receive_garbage', data);
@@ -446,16 +543,36 @@ ownerId: r.ownerSocketId
 
   // ── チャット ──────────────────────────────────────────────
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
-  handleChatMessage(
+  async handleChatMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; content: string },
   ) {
     if (!data.content?.trim()) return;
-    const message = {
-      senderId: client.id,
-      content: data.content.trim().substring(0, 500),
-      timestamp: Date.now(),
-    };
-    this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    const userId = (client.data?.userId as string) || client.id;
+
+    try {
+      const savedMsg = await this.chatService.saveMessage(
+        data.roomId,
+        userId,
+        data.content.trim().substring(0, 500),
+      );
+      const message = {
+        id: savedMsg.id,
+        senderId: savedMsg.senderId,
+        sender: savedMsg.sender,
+        content: savedMsg.content,
+        timestamp: savedMsg.createdAt.getTime(),
+      };
+      this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    } catch (error) {
+      this.logger.error('Failed to save message', error);
+      // Fallback
+      const message = {
+        senderId: userId,
+        content: data.content.trim().substring(0, 500),
+        timestamp: Date.now(),
+      };
+      this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    }
   }
 }

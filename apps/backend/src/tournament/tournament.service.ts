@@ -61,21 +61,43 @@ export class TournamentService {
       include: {
         matches: {
           include: {
-            player1: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
-            player2: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+            player1: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+            player2: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
             winner: { select: { id: true, username: true } },
           },
           orderBy: [{ round: 'asc' }, { matchNumber: 'asc' }],
         },
         entries: {
           include: {
-            user: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
           },
         },
       },
     });
 
-    if (!tournament) throw new NotFoundException('トーナメントが見つかりません');
+    if (!tournament)
+      throw new NotFoundException('トーナメントが見つかりません');
 
     // ラウンドごとにグループ化
     const rounds = tournament.matches.reduce(
@@ -96,7 +118,8 @@ export class TournamentService {
       include: { _count: { select: { entries: true } } },
     });
 
-    if (!tournament) throw new NotFoundException('トーナメントが見つかりません');
+    if (!tournament)
+      throw new NotFoundException('トーナメントが見つかりません');
     if (tournament.status !== 'REGISTRATION') {
       throw new BadRequestException('参加受付中のトーナメントではありません');
     }
@@ -120,7 +143,8 @@ export class TournamentService {
       include: { entries: true },
     });
 
-    if (!tournament) throw new NotFoundException('トーナメントが見つかりません');
+    if (!tournament)
+      throw new NotFoundException('トーナメントが見つかりません');
     if (tournament.creatorId !== requesterId) {
       throw new ForbiddenException('トーナメント作成者のみ開始できます');
     }
@@ -135,7 +159,10 @@ export class TournamentService {
 
     // シングルエリミネーション ブラケット生成
     const participants = tournament.entries.sort(() => Math.random() - 0.5);
-    const matches = this.generateBracket(tournamentId, participants.map((e) => e.userId));
+    const matches = this.generateBracket(
+      tournamentId,
+      participants.map((e) => e.userId),
+    );
 
     await this.prisma.$transaction([
       this.prisma.tournament.update({
@@ -146,13 +173,13 @@ export class TournamentService {
     ]);
 
     this.logger.log(`トーナメント開始: ${tournament.name}`);
-    return { message: 'トーナメントを開始しました', matchesCreated: matches.length };
+    return {
+      message: 'トーナメントを開始しました',
+      matchesCreated: matches.length,
+    };
   }
 
-  private generateBracket(
-    tournamentId: string,
-    playerIds: string[],
-  ) {
+  private generateBracket(tournamentId: string, playerIds: string[]) {
     const matches: any[] = [];
     let matchNumber = 1;
     const round = 1;

@@ -13,6 +13,39 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
     rotationIndex: 0,
     spawnCount: 0
   });
+
+  const [ fitScale, setFitScale ] = useState(0.8);
+  useEffect(() => {
+    const handleResize = () => {
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      
+      // Base scale: try to fit the 660px board nicely in the vertical space
+      let s = vh / 700;
+      
+      // On wide screens, scale up more so it doesn't look tiny
+      if (vw > 1200) {
+        s = Math.max(s, vw / 1600);
+      }
+      
+      const isMobile = vw <= 768;
+      
+      // Max width calculation to prevent overflow or overlapping the center UI
+      // On mobile: centered, can use 90% of screen.
+      // On desktop: anchor is 260px from center. Distance to edge is (vw / 2) - 260.
+      // Leave an extra 20px margin on the outer edge -> (vw / 2) - 280.
+      const maxAvailableWidth = isMobile 
+        ? vw * 0.9 
+        : Math.max(100, (vw / 2) - 280);
+        
+      const maxScaleX = maxAvailableWidth / 300; 
+      
+      setFitScale(Math.min(s, maxScaleX));
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const stageRef = useRef(stage);
   const playerRef = useRef(player);
@@ -91,13 +124,18 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
     return () => clearInterval(interval);
   }, []);
 
+  const isMobile = window.innerWidth <= 768;
+  const origin = isMobile ? 'center center' : (reversed ? 'right center' : 'left center');
+
   return (
-    <div style={{ opacity: 0.6, transform: reversed ? 'scale(-0.8, 0.8)' : 'scale(0.8)', pointerEvents: 'none' }}>
-      <div style={{ position: 'relative', width: 300, height: 660 }}>
-        <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-          <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
-            <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
-          </Stage>
+    <div style={{ transform: `scale(${fitScale})`, transformOrigin: origin, pointerEvents: 'none' }}>
+      <div style={{ opacity: 0.6, transform: reversed ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }}>
+        <div style={{ position: 'relative', width: 300, height: 660 }}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+            <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+              <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
+            </Stage>
+          </div>
         </div>
       </div>
     </div>

@@ -46,6 +46,8 @@ enum GameMode {
   VERSUS
   AI
   TOURNAMENT
+  LINES_40
+  MARATHON
 }
 
 enum FriendshipStatus {
