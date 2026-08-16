@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Stage } from '@pixi/react';
-import GameBoard from '../GameBoard';
+import GameBoard, { CELL_SIZE, BOARD_PIXEL_HEIGHT } from '../GameBoard';
 import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
 import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
@@ -56,12 +56,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   useEffect(() => {
     const handleResize = () => {
-      // 850px is approximately the required vertical height.
+      // 1200px is approximately the required vertical height.
       // 700px width for solo mode, 1200px width for 1v1 mode.
       const vh = window.innerHeight;
       const vw = window.innerWidth;
       const navH = 0;
-      const scaleY = (vh - navH) / 850;
+      const scaleY = (vh - navH) / 1200;
       const scaleX = vw / (appState === 'MENU' ? 1200 : (gameMode === 'ONLINE_1V1' ? 1200 : 700));
       setScale(Math.min(1, scaleY, scaleX));
     };
@@ -371,22 +371,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
-          {gameMode === '40_LINES' && (
-            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
-              <strong>TIME</strong><br />
-              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white', fontVariantNumeric: 'tabular-nums' }}>
-                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
-              </span>
-              {finalTime && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #444' }}>
-                  <strong>PPS</strong><br />
-                  <span style={{ color: 'white', fontSize: '16px', fontVariantNumeric: 'tabular-nums' }}>
-                    {(piecesPlaced / (finalTime / 1000)).toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
             <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

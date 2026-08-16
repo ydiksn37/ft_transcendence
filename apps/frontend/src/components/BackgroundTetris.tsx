@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Stage } from '@pixi/react';
-import GameBoard from './GameBoard';
+import GameBoard , { CELL_SIZE, BOARD_PIXEL_HEIGHT }from './GameBoard';
 import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { randomTetromino } from '../utils/tetrominos';
 
@@ -13,6 +13,19 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
     rotationIndex: 0,
     spawnCount: 0
   });
+
+  const [ fitScale, setFitScale ] = useState(0.8);
+  useEffect(() => {
+    const handleResize = () => {
+      const vh = window.innerHeight;
+      const margin = 0;
+      const s = (vh - margin) / 1200;
+      setFitScale(s);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const stageRef = useRef(stage);
   const playerRef = useRef(player);
