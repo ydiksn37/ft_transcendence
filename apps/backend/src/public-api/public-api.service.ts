@@ -129,15 +129,25 @@ export class PublicApiService {
           player2Pps: true,
           player1LinesCleared: true,
           player2LinesCleared: true,
-          player1: { select: { username: true, displayName: true, avatarUrl: true } },
-          player2: { select: { username: true, displayName: true, avatarUrl: true } },
+          player1: {
+            select: { username: true, displayName: true, avatarUrl: true },
+          },
+          player2: {
+            select: { username: true, displayName: true, avatarUrl: true },
+          },
           winner: { select: { username: true } },
         },
       }),
       this.prisma.gameResult.count({ where }),
     ]);
 
-    return { data: results, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data: results,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ── 5. トーナメント一覧 ───────────────────────────────────
@@ -170,6 +180,12 @@ export class PublicApiService {
       this.prisma.tournament.count({ where }),
     ]);
 
-    return { data: tournaments, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data: tournaments,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }

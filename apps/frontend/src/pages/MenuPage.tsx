@@ -34,6 +34,19 @@ const createMenuStage = (): Cell[][] => {
 
 const MenuPage = () => {
   const navigate = useNavigate();
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const handleResize = () => {
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      const scaleY = (vh - 40) / 800;
+      const scaleX = (vw - 40) / 1230;
+      setScale(Math.min(1.5, scaleY, scaleX));
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const { token, user, logout } = useAuth();
   const {
     appStateRef,
@@ -48,7 +61,7 @@ const MenuPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver, true);
 
-  const { tuning, setTuning, tuningRef, keyConfig, setKeyConfig, keyConfigRef, listeningAction, setListeningAction, volume, setVolume } = useConfig();
+  const { tuningRef, keyConfig, keyConfigRef } = useConfig();
 
   const lastProcessedEventIdRef = useRef(-1);
 
@@ -239,11 +252,13 @@ const MenuPage = () => {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '20px', backgroundColor: '#111', color: 'white',
-      fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box'
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: '#111', color: 'white',
+      fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box',
+      overflow: 'hidden'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1230px', marginBottom: '20px', position: 'relative', zIndex: 50 }}>
+      <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '1230px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', position: 'relative', zIndex: 50 }}>
         <button
           onClick={() => navigate('/')}
           style={{
@@ -260,7 +275,6 @@ const MenuPage = () => {
         >
           ◀ TOP
         </button>
-        <h1 style={{ fontSize: '48px', margin: 0, textShadow: '4px 4px 0px #555', letterSpacing: '2px', color: '#fff' }}>TETRIS</h1>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             onClick={() => setDropTime(dropTime ? null : 1000)}
@@ -418,6 +432,7 @@ const MenuPage = () => {
             </h1>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

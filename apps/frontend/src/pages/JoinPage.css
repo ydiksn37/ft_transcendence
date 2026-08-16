@@ -35,9 +35,10 @@
 }
 
 .title-text {
-  font-size: 80px;
+  font-size: 56px;
   font-weight: bold;
-  letter-spacing: 8px;
+  letter-spacing: 0px;
+  word-spacing: -10px;
   text-shadow: 4px 4px 0px #e74c3c, -4px -4px 0px #3498db;
   margin: 0;
 }
@@ -121,3 +122,31 @@
 .t-2 { top: 20px; left: 20px; }
 .t-3 { top: 20px; left: 40px; }
 .t-4 { top: 0px; left: 20px; }
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+  .title-text {
+    font-size: 46px;
+    letter-spacing: 0px;
+    word-spacing: -6px;
+  }
+  .join-button {
+    font-size: 14px;
+    padding: 12px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .title-text {
+    font-size: 32px;
+    letter-spacing: 0px;
+    word-spacing: -4px;
+  }
+  .join-button {
+    font-size: 12px;
+    padding: 10px 20px;
+  }
+  .join-content > div {
+    width: 280px !important;
+  }
+}

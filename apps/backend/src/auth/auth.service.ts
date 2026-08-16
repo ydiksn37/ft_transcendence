@@ -31,7 +31,9 @@ export class AuthService {
       where: { OR: [{ email: dto.email }, { username: dto.username }] },
     });
     if (exists) {
-      throw new ConflictException('メールアドレスまたはユーザー名が既に使用されています');
+      throw new ConflictException(
+        'メールアドレスまたはユーザー名が既に使用されています',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
@@ -57,7 +59,9 @@ export class AuthService {
     });
 
     if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('メールアドレスまたはパスワードが正しくありません');
+      throw new UnauthorizedException(
+        'メールアドレスまたはパスワードが正しくありません',
+      );
     }
 
     if (user.deletedAt) {
@@ -65,12 +69,16 @@ export class AuthService {
     }
 
     if (user.bannedUntil && user.bannedUntil > new Date()) {
-      throw new UnauthorizedException(`アカウントがBANされています（解除: ${user.bannedUntil.toISOString()}）`);
+      throw new UnauthorizedException(
+        `アカウントがBANされています（解除: ${user.bannedUntil.toISOString()}）`,
+      );
     }
 
     const isValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isValid) {
-      throw new UnauthorizedException('メールアドレスまたはパスワードが正しくありません');
+      throw new UnauthorizedException(
+        'メールアドレスまたはパスワードが正しくありません',
+      );
     }
 
     return this.issueTokens(user);
@@ -97,7 +105,9 @@ export class AuthService {
 
       // ユーザー名の重複を回避
       let username = profile.username;
-      const usernameExists = await this.prisma.user.findUnique({ where: { username } });
+      const usernameExists = await this.prisma.user.findUnique({
+        where: { username },
+      });
       if (usernameExists) username = `${username}_${Date.now()}`;
 
       if (emailExists) {
@@ -146,10 +156,15 @@ export class AuthService {
       });
 
       // ブラックリスト確認
-      const isBlacklisted = await this.redis.exists(`blacklist:${refreshToken}`);
-      if (isBlacklisted) throw new UnauthorizedException('トークンは無効化されています');
+      const isBlacklisted = await this.redis.exists(
+        `blacklist:${refreshToken}`,
+      );
+      if (isBlacklisted)
+        throw new UnauthorizedException('トークンは無効化されています');
 
-      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
+      const user = await this.prisma.user.findUniqueOrThrow({
+        where: { id: payload.sub },
+      });
       return this.issueTokens(user);
     } catch {
       throw new UnauthorizedException('リフレッシュトークンが無効です');

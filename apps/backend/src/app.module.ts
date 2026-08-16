@@ -31,8 +31,8 @@ import { ChatModule } from './chat/chat.module';
     // ── レート制限（グローバル） ─────────────────────────────
     ThrottlerModule.forRoot([
       {
-        ttl: 60_000,  // 60秒
-        limit: 100,   // 100リクエスト/分
+        ttl: 60_000, // 60秒
+        limit: 100, // 100リクエスト/分
       },
     ]),
 

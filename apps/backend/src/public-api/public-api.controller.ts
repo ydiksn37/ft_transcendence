@@ -38,11 +38,16 @@ export class PublicApiController {
   @Get('leaderboard')
   @ApiOperation({
     summary: '[Public] グローバルランキング取得',
-    description: 'ランクポイント順のユーザーランキング。ページネーション・ランクフィルター対応。',
+    description:
+      'ランクポイント順のユーザーランキング。ページネーション・ランクフィルター対応。',
   })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  @ApiQuery({ name: 'rank', required: false, enum: ['BRONZE','SILVER','GOLD','PLATINUM','DIAMOND','MASTER'] })
+  @ApiQuery({
+    name: 'rank',
+    required: false,
+    enum: ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER'],
+  })
   getLeaderboard(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
@@ -79,18 +84,28 @@ export class PublicApiController {
   @Get('users/:username/history')
   @ApiOperation({
     summary: '[Public] 対戦履歴取得',
-    description: '最新の対戦結果。ページネーション・ゲームモードフィルター対応。',
+    description:
+      '最新の対戦結果。ページネーション・ゲームモードフィルター対応。',
   })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'mode', required: false, enum: ['VERSUS','AI','TOURNAMENT'] })
+  @ApiQuery({
+    name: 'mode',
+    required: false,
+    enum: ['VERSUS', 'AI', 'TOURNAMENT'],
+  })
   async getUserHistory(
     @Param('username') username: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Query('mode') mode?: string,
   ) {
-    const result = await this.publicApiService.getUserHistory(username, page, limit, mode);
+    const result = await this.publicApiService.getUserHistory(
+      username,
+      page,
+      limit,
+      mode,
+    );
     if (!result) throw new NotFoundException('ユーザーが見つかりません');
     return result;
   }
@@ -101,7 +116,11 @@ export class PublicApiController {
     summary: '[Public] トーナメント一覧取得',
     description: '開催中・完了済みトーナメントの一覧。',
   })
-  @ApiQuery({ name: 'status', required: false, enum: ['REGISTRATION','IN_PROGRESS','COMPLETED'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['REGISTRATION', 'IN_PROGRESS', 'COMPLETED'],
+  })
   getTournaments(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,

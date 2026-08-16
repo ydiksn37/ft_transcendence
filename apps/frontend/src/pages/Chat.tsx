@@ -14,7 +14,6 @@ export default function Chat() {
 	const { keyConfig } = useConfig();
 	const { user, token } = useAuth();
 
-	const [rooms, setRooms] = useState<any[]>([]);
 	const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
 	const [messages, setMessages] = useState<any[]>([]);
 	const [inputText, setInputText] = useState("");
@@ -38,7 +37,6 @@ export default function Chat() {
 		})
 		.then(res => res.json())
 		.then(data => {
-			setRooms(data);
 			if (data.length > 0) {
 				const globalRoom = data.find((r: any) => r.type === 'GLOBAL') || data[0];
 				setActiveRoomId(globalRoom.id);

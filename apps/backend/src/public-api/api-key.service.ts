@@ -10,7 +10,12 @@ export class ApiKeyService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** APIキーを生成して DB に保存 */
-  async createApiKey(userId: string, label: string, rateLimit = 1000, expiresAt?: Date) {
+  async createApiKey(
+    userId: string,
+    label: string,
+    rateLimit = 1000,
+    expiresAt?: Date,
+  ) {
     // 安全なランダムキーを生成 (32バイト = 64文字の hex)
     const rawKey = crypto.randomBytes(32).toString('hex');
     const prefix = rawKey.substring(0, 8);
@@ -32,7 +37,7 @@ export class ApiKeyService {
     return {
       id: record.id,
       label: record.label,
-      key: rawKey,      // 生成時のみ返す（以降は表示不可）
+      key: rawKey, // 生成時のみ返す（以降は表示不可）
       prefix: record.keyPrefix,
       rateLimit: record.rateLimit,
       expiresAt: record.expiresAt,
@@ -61,7 +66,9 @@ export class ApiKeyService {
 
   /** APIキーを無効化 */
   async revokeApiKey(userId: string, keyId: string) {
-    const key = await this.prisma.apiKey.findFirst({ where: { id: keyId, userId } });
+    const key = await this.prisma.apiKey.findFirst({
+      where: { id: keyId, userId },
+    });
     if (!key) throw new NotFoundException('APIキーが見つかりません');
 
     await this.prisma.apiKey.update({

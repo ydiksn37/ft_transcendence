@@ -9,7 +9,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -61,13 +66,13 @@ export class AuthController {
     const oauthUser = req.user as any;
     const result = await this.authService.loginOrRegisterOauth(oauthUser);
 
-    const tokens = result as { accessToken: string; refreshToken: string; userId: string };
-    
+    const tokens = result;
+
     let redirectUrl = `/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`;
     if (req.query.state && typeof req.query.state === 'string') {
       redirectUrl += `&redirectTo=${encodeURIComponent(req.query.state)}`;
     }
-    
+
     return res.redirect(redirectUrl);
   }
 

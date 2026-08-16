@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  MinLength,
-  MaxLength,
-  IsUrl,
-} from 'class-validator';
+import { IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
@@ -48,7 +42,10 @@ export class BanUserDto {
   @IsOptional()
   reason?: string;
 
-  @ApiPropertyOptional({ example: '2026-08-30T00:00:00Z', description: '未指定は永久BAN' })
+  @ApiPropertyOptional({
+    example: '2026-08-30T00:00:00Z',
+    description: '未指定は永久BAN',
+  })
   @IsOptional()
   bannedUntil?: string;
 }

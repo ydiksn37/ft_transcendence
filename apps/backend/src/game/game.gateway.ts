@@ -10,7 +10,12 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
-import { ClientEvent, ServerEvent, AiDifficulty, Cell } from '@transcendence/shared';
+import {
+  ClientEvent,
+  ServerEvent,
+  AiDifficulty,
+  Cell,
+} from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
@@ -19,7 +24,9 @@ import { ChatService } from '../chat/chat.service';
   cors: { origin: '*' },
   namespace: '/',
 })
-export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -27,25 +34,31 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   private rooms = new Map<string, GameInstance>();
   private clientRoom = new Map<string, string>(); // socketId -> roomId
   private matchmakingQueue: Socket[] = [];
-  
-  // Custom Rooms
-  private customRooms = new Map<string, {
-    roomId: string;
-    name: string;
-    ownerId: string;
-    ownerSocket: Socket;
-  }>();
 
-  private activeCustomRooms = new Map<string, {
-    roomId: string;
-    name: string;
-    ownerSocket: Socket;
-    ownerId: string;
-    guestSocket: Socket;
-    guestId: string;
-    ownerWins: number;
-    guestWins: number;
-  }>();
+  // Custom Rooms
+  private customRooms = new Map<
+    string,
+    {
+      roomId: string;
+      name: string;
+      ownerId: string;
+      ownerSocket: Socket;
+    }
+  >();
+
+  private activeCustomRooms = new Map<
+    string,
+    {
+      roomId: string;
+      name: string;
+      ownerSocket: Socket;
+      ownerId: string;
+      guestSocket: Socket;
+      guestId: string;
+      ownerWins: number;
+      guestWins: number;
+    }
+  >();
 
   constructor(
     private readonly gameService: GameService,
@@ -64,7 +77,9 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.logger.log(`切断: ${client.id}`);
 
     // マッチメイキングキューから除外
-    this.matchmakingQueue = this.matchmakingQueue.filter((s) => s.id !== client.id);
+    this.matchmakingQueue = this.matchmakingQueue.filter(
+      (s) => s.id !== client.id,
+    );
 
     // ゲーム中だった場合
     const roomId = this.clientRoom.get(client.id);
@@ -89,10 +104,10 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   private getCustomRoomsList() {
-    return Array.from(this.customRooms.values()).map(r => ({
+    return Array.from(this.customRooms.values()).map((r) => ({
       roomId: r.roomId,
       name: r.name,
-      ownerId: r.ownerId
+      ownerId: r.ownerId,
     }));
   }
 
@@ -103,11 +118,11 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     stats: Record<string, any>,
     gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
     isAiGame: boolean,
-    aiDifficulty?: string
+    aiDifficulty?: string,
   ) {
     const socketIds = Object.keys(stats);
     if (socketIds.length < 2) return;
-    
+
     const p1SocketId = socketIds[0];
     const p2SocketId = socketIds[1];
     const p1Stats = stats[p1SocketId];
@@ -134,8 +149,11 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         player2Tetrises: p2Stats.tetrises,
         garbageSent1to2: p1Stats.attacksSent,
         garbageSent2to1: p2Stats.attacksSent,
-        durationSeconds: Math.max(p1Stats.durationSeconds, p2Stats.durationSeconds),
-        gameMode: gameMode as any,
+        durationSeconds: Math.max(
+          p1Stats.durationSeconds,
+          p2Stats.durationSeconds,
+        ),
+        gameMode: gameMode,
       });
     } catch (e) {
       this.logger.error('Failed to save game result', e);
@@ -190,13 +208,18 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   @SubscribeMessage(ClientEvent.LEAVE_QUEUE)
   handleLeaveQueue(@ConnectedSocket() client: Socket) {
-    this.matchmakingQueue = this.matchmakingQueue.filter((s) => s.id !== client.id);
+    this.matchmakingQueue = this.matchmakingQueue.filter(
+      (s) => s.id !== client.id,
+    );
     client.emit('queue_left');
   }
 
   // ── カスタムルーム (マルチプレイ) ──────────────────────────
   @SubscribeMessage('game:create_custom_room')
-  handleCreateCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { name?: string }) {
+  handleCreateCustomRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { name?: string },
+  ) {
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
       if (room.ownerSocket.id === client.id) {
@@ -205,19 +228,21 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     const roomId = Math.random().toString(36).slice(2, 6).toUpperCase();
-    
+
     if (this.customRooms.has(roomId)) {
-      client.emit('error', { message: 'Failed to generate unique Room ID. Please try again.' });
+      client.emit('error', {
+        message: 'Failed to generate unique Room ID. Please try again.',
+      });
       return;
     }
 
     const roomName = data?.name?.trim() || `Room ${roomId}`;
-    
+
     this.customRooms.set(roomId, {
       roomId,
       name: roomName,
       ownerId: (client.data?.userId as string) || client.id,
-      ownerSocket: client
+      ownerSocket: client,
     });
 
     client.join(roomId);
@@ -226,13 +251,16 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   @SubscribeMessage('game:update_custom_room_id')
-  handleUpdateCustomRoomId(@ConnectedSocket() client: Socket, @MessageBody() data: { newRoomId: string }) {
+  handleUpdateCustomRoomId(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { newRoomId: string },
+  ) {
     const newId = data.newRoomId.trim().toUpperCase();
     if (!newId || newId.length === 0) {
       client.emit('error', { message: 'Invalid Room ID' });
       return;
     }
-    
+
     if (this.customRooms.has(newId)) {
       client.emit('error', { message: 'Room ID already exists' });
       return;
@@ -308,7 +336,10 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   @SubscribeMessage('game:join_custom_room')
-  handleJoinCustomRoom(@ConnectedSocket() client: Socket, @MessageBody() data: { roomId: string }) {
+  handleJoinCustomRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
     const room = this.customRooms.get(data.roomId);
     if (!room) {
       client.emit('error', { message: 'ルームが見つかりません' });
@@ -352,7 +383,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   handleStartCustomRoom(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    
+
     const activeRoom = this.activeCustomRooms.get(roomId);
     if (!activeRoom) return;
 
@@ -362,7 +393,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     const seed = Math.floor(Math.random() * 2147483647);
-    
+
     const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
       const room = this.activeCustomRooms.get(rId);
       if (room) {
@@ -373,7 +404,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
         // ゲーム終了後、結果を保存してルーム状態に戻す
         this.rooms.delete(rId);
-        
+
         // クライアントへロビーに戻るように通知
         this.server.to(rId).emit('custom_room_returned', {
           ownerWins: room.ownerWins,
@@ -385,7 +416,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const instance = new GameInstance(roomId, this.server, seed, onGameOver);
     instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
     instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
-    
+
     this.rooms.set(roomId, instance);
 
     this.server.to(roomId).emit(ServerEvent.MATCH_FOUND, {
@@ -404,7 +435,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   ) {
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
-    
+
     const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
       this.saveGameStats(rId, winnerId, stats, 'AI', true, data.difficulty);
       this.rooms.delete(rId);
@@ -474,14 +505,20 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   // ── P2P 通信 (フロントエンド主導の対戦用) ───────────────────
   @SubscribeMessage('board_update')
-  handleBoardUpdate(@ConnectedSocket() client: Socket, @MessageBody() data: { stage: Cell[][]; score: number }) {
+  handleBoardUpdate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { stage: Cell[][]; score: number },
+  ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('opponent_board_update', data);
   }
 
   @SubscribeMessage('send_garbage')
-  handleSendGarbage(@ConnectedSocket() client: Socket, @MessageBody() data: { lines: number }) {
+  handleSendGarbage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { lines: number },
+  ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('receive_garbage', data);
@@ -518,9 +555,13 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   ) {
     if (!data.content?.trim()) return;
     const userId = (client.data?.userId as string) || client.id;
-    
+
     try {
-      const savedMsg = await this.chatService.saveMessage(data.roomId, userId, data.content.trim().substring(0, 500));
+      const savedMsg = await this.chatService.saveMessage(
+        data.roomId,
+        userId,
+        data.content.trim().substring(0, 500),
+      );
       const message = {
         id: savedMsg.id,
         senderId: savedMsg.senderId,

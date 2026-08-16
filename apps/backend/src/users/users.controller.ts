@@ -75,13 +75,19 @@ export class UsersController {
       limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-          return cb(new Error('JPG/PNG/GIF/WebPのみアップロード可能です'), false);
+          return cb(
+            new Error('JPG/PNG/GIF/WebPのみアップロード可能です'),
+            false,
+          );
         }
         cb(null, true);
       },
     }),
   )
-  uploadAvatar(@CurrentUser() user: any, @UploadedFile() file: Express.Multer.File) {
+  uploadAvatar(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
     const avatarUrl = `/uploads/${file.filename}`;
     return this.usersService.updateAvatar(user.id, avatarUrl);
   }
@@ -100,7 +106,10 @@ export class UsersController {
 
   @Post('friends/request')
   @ApiOperation({ summary: 'フレンド申請を送る' })
-  sendFriendRequest(@CurrentUser() user: any, @Body() body: { addresseeId?: string, username?: string }) {
+  sendFriendRequest(
+    @CurrentUser() user: any,
+    @Body() body: { addresseeId?: string; username?: string },
+  ) {
     return this.usersService.sendFriendRequest(user.id, body);
   }
 
@@ -171,7 +180,6 @@ export class UsersController {
   ) {
     return this.usersService.getGameHistory(id, page, limit, mode);
   }
-
 }
 
 // ── 管理者専用コントローラー ──────────────────────────────────

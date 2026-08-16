@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Stage } from '@pixi/react';
-import GameBoard, { CELL_SIZE, BOARD_PIXEL_HEIGHT } from '../GameBoard';
+import GameBoard from '../GameBoard';
 import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
 import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
@@ -60,10 +60,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       // 700px width for solo mode, 1200px width for 1v1 mode.
       const vh = window.innerHeight;
       const vw = window.innerWidth;
-      const navH = 0;
-      const scaleY = (vh - navH) / 1200;
-      const scaleX = vw / (appState === 'MENU' ? 1200 : (gameMode === 'ONLINE_1V1' ? 1200 : 700));
-      setScale(Math.min(1, scaleY, scaleX));
+      const scaleY = (vh - 40) / 800;
+      const expectedWidth = gameMode === 'ONLINE_1V1' ? 1100 : 700;
+      const scaleX = (vw - 40) / expectedWidth;
+      setScale(Math.min(1.5, scaleY, scaleX));
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -152,14 +152,15 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   return (
     <div style={{
-      width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column',
       backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundAttachment: 'fixed',
+      overflow: 'hidden'
      }}>
-      <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto', padding: '40px 0' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+      <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: 'center center' }}>
           <style>{`
             @keyframes pop {
               0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }

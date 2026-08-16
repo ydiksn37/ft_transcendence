@@ -7,28 +7,30 @@ export class ChatService implements OnModuleInit {
 
   async onModuleInit() {
     const globalRoom = await this.prisma.chatRoom.findFirst({
-      where: { type: 'GLOBAL' }
+      where: { type: 'GLOBAL' },
     });
     if (!globalRoom) {
       await this.prisma.chatRoom.create({
         data: {
           type: 'GLOBAL',
-          name: 'GLOBAL_ROOM'
-        }
+          name: 'GLOBAL_ROOM',
+        },
       });
     }
   }
 
   async getUserRooms(userId: string) {
-    const globalRoom = await this.prisma.chatRoom.findFirst({ where: { type: 'GLOBAL' }});
-    
+    const globalRoom = await this.prisma.chatRoom.findFirst({
+      where: { type: 'GLOBAL' },
+    });
+
     const memberships = await this.prisma.chatRoomMembership.findMany({
       where: { userId },
-      include: { room: true }
+      include: { room: true },
     });
-    const rooms = memberships.map(m => m.room);
-    
-    if (globalRoom && !rooms.some(r => r.id === globalRoom.id)) {
+    const rooms = memberships.map((m) => m.room);
+
+    if (globalRoom && !rooms.some((r) => r.id === globalRoom.id)) {
       rooms.unshift(globalRoom);
     }
     return rooms;
@@ -39,10 +41,15 @@ export class ChatService implements OnModuleInit {
       where: { roomId },
       include: {
         sender: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true }
-        }
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
   }
 
@@ -51,13 +58,18 @@ export class ChatService implements OnModuleInit {
       data: {
         roomId,
         senderId,
-        content
+        content,
       },
       include: {
         sender: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true }
-        }
-      }
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
     });
   }
 }

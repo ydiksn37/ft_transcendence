@@ -32,8 +32,8 @@ async function bootstrap() {
   // ── バリデーション ────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,      // DTOにないフィールドを除去
-      transform: true,      // 型変換を自動実行
+      whitelist: true, // DTOにないフィールドを除去
+      transform: true, // 型変換を自動実行
       forbidNonWhitelisted: true,
     }),
   );
@@ -55,10 +55,7 @@ async function bootstrap() {
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'access-token',
     )
-    .addApiKey(
-      { type: 'apiKey', in: 'header', name: 'X-API-Key' },
-      'api-key',
-    )
+    .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-Key' }, 'api-key')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document, {

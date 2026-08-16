@@ -66,23 +66,30 @@ export class GameInstance {
   private onGameOver?: (
     roomId: string,
     winnerId: string | null,
-    stats: Record<string, {
-      userId: string | null;
-      apm: number;
-      pps: number;
-      linesCleared: number;
-      tSpins: number;
-      tetrises: number;
-      attacksSent: number;
-      durationSeconds: number;
-    }>
+    stats: Record<
+      string,
+      {
+        userId: string | null;
+        apm: number;
+        pps: number;
+        linesCleared: number;
+        tSpins: number;
+        tetrises: number;
+        attacksSent: number;
+        durationSeconds: number;
+      }
+    >,
   ) => void;
 
   constructor(
     roomId: string,
     server: Server,
     seed: number,
-    onGameOver?: (roomId: string, winnerId: string | null, stats: Record<string, any>) => void
+    onGameOver?: (
+      roomId: string,
+      winnerId: string | null,
+      stats: Record<string, any>,
+    ) => void,
   ) {
     this.roomId = roomId;
     this.server = server;
@@ -147,7 +154,8 @@ export class GameInstance {
   private startGravity(): void {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
-        if (player.isGameOver || (this.aiDifficulty && player.userId === null)) return;
+        if (player.isGameOver || (this.aiDifficulty && player.userId === null))
+          return;
         this.applyGravity(socketId);
       });
     }, GRAVITY_INTERVAL_MS);
@@ -162,7 +170,15 @@ export class GameInstance {
 
     switch (event) {
       case ClientEvent.MOVE_LEFT:
-        if (isValidPosition(player.board, player.activeMino, player.activeX - 1, player.activeY, player.activeRotation)) {
+        if (
+          isValidPosition(
+            player.board,
+            player.activeMino,
+            player.activeX - 1,
+            player.activeY,
+            player.activeRotation,
+          )
+        ) {
           player.activeX -= 1;
           player.lastMoveWasRotation = false;
           moved = true;
@@ -170,7 +186,15 @@ export class GameInstance {
         break;
 
       case ClientEvent.MOVE_RIGHT:
-        if (isValidPosition(player.board, player.activeMino, player.activeX + 1, player.activeY, player.activeRotation)) {
+        if (
+          isValidPosition(
+            player.board,
+            player.activeMino,
+            player.activeX + 1,
+            player.activeY,
+            player.activeRotation,
+          )
+        ) {
           player.activeX += 1;
           player.lastMoveWasRotation = false;
           moved = true;
@@ -180,8 +204,20 @@ export class GameInstance {
       case ClientEvent.ROTATE_CW:
       case ClientEvent.ROTATE_CCW:
       case ClientEvent.ROTATE_180: {
-        const dir = event === ClientEvent.ROTATE_CW ? 'CW' : event === ClientEvent.ROTATE_CCW ? 'CCW' : '180';
-        const result = tryRotate(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation, dir);
+        const dir =
+          event === ClientEvent.ROTATE_CW
+            ? 'CW'
+            : event === ClientEvent.ROTATE_CCW
+              ? 'CCW'
+              : '180';
+        const result = tryRotate(
+          player.board,
+          player.activeMino,
+          player.activeX,
+          player.activeY,
+          player.activeRotation,
+          dir,
+        );
         if (result) {
           player.activeX = result.x;
           player.activeY = result.y;
@@ -193,7 +229,15 @@ export class GameInstance {
       }
 
       case ClientEvent.SOFT_DROP:
-        if (isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation)) {
+        if (
+          isValidPosition(
+            player.board,
+            player.activeMino,
+            player.activeX,
+            player.activeY + 1,
+            player.activeRotation,
+          )
+        ) {
           player.activeY += 1;
           player.score += 1;
           moved = true;
@@ -211,7 +255,13 @@ export class GameInstance {
 
     if (moved) {
       // ロックタイマーリセット
-      const isOnGround = !isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation);
+      const isOnGround = !isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY + 1,
+        player.activeRotation,
+      );
       if (isOnGround) this.scheduleLock(socketId);
       else this.clearLockTimer(socketId);
 
@@ -224,7 +274,15 @@ export class GameInstance {
     const player = this.players.get(socketId);
     if (!player) return;
 
-    if (isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation)) {
+    if (
+      isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY + 1,
+        player.activeRotation,
+      )
+    ) {
       player.activeY += 1;
       this.broadcastState(socketId, player);
     } else {
@@ -235,7 +293,15 @@ export class GameInstance {
   /** ハードドロップ */
   private hardDrop(socketId: string, player: PlayerState): void {
     let dropY = player.activeY;
-    while (isValidPosition(player.board, player.activeMino, player.activeX, dropY + 1, player.activeRotation)) {
+    while (
+      isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        dropY + 1,
+        player.activeRotation,
+      )
+    ) {
       dropY++;
       player.score += 2;
     }
@@ -263,20 +329,34 @@ export class GameInstance {
 
     // T-Spin 判定
     const tspin = detectTSpin(
-      player.board, player.activeMino,
-      player.activeX, player.activeY,
-      player.activeRotation, player.lastMoveWasRotation,
+      player.board,
+      player.activeMino,
+      player.activeX,
+      player.activeY,
+      player.activeRotation,
+      player.lastMoveWasRotation,
     );
 
     // Lock Out 判定用 (Vanish Zoneで完全に固定されたか)
-    const cells = getMinoCells(player.activeMino, player.activeX, player.activeY, player.activeRotation);
+    const cells = getMinoCells(
+      player.activeMino,
+      player.activeX,
+      player.activeY,
+      player.activeRotation,
+    );
     let maxLockY = -1;
     for (const [r, c] of cells) {
       maxLockY = Math.max(maxLockY, r);
     }
 
     // ピースを固定
-    player.board = lockMino(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation);
+    player.board = lockMino(
+      player.board,
+      player.activeMino,
+      player.activeX,
+      player.activeY,
+      player.activeRotation,
+    );
     const { board: clearedBoard, linesCleared } = clearLines(player.board);
 
     // Clutch ルール：ラインを消せなかった場合、かつピースが完全にVanish Zone(y < 20)に固定されたらLock Out
@@ -293,7 +373,12 @@ export class GameInstance {
       player.level = Math.floor(player.lines / 10) + 1;
 
       const perfectClear = isPerfectClear(player.board);
-      const { garbage, clearType } = calcGarbage(linesCleared, tspin, perfectClear, player.b2b > 0);
+      const { garbage, clearType } = calcGarbage(
+        linesCleared,
+        tspin,
+        perfectClear,
+        player.b2b > 0,
+      );
 
       if (clearType === 'tetris') player.tetrises++;
       if (tspin) player.tSpins++;
@@ -316,7 +401,9 @@ export class GameInstance {
     // 蓄積おじゃまを適用
     if (player.garbageQueue > 0) {
       player.board = addGarbageLines(player.board, player.garbageQueue);
-      this.server.to(socketId).emit(ServerEvent.GARBAGE_INCOMING, { lines: player.garbageQueue });
+      this.server
+        .to(socketId)
+        .emit(ServerEvent.GARBAGE_INCOMING, { lines: player.garbageQueue });
       player.garbageQueue = 0;
     }
 
@@ -337,13 +424,29 @@ export class GameInstance {
     player.lastMoveWasRotation = false;
 
     // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
-    if (!isValidPosition(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation)) {
+    if (
+      !isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY,
+        player.activeRotation,
+      )
+    ) {
       this.handleGameOver(socketId);
       return;
     }
 
     // もし y=18 が空いていれば、即座に重力を適用して1マス下げる
-    if (isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation)) {
+    if (
+      isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY + 1,
+        player.activeRotation,
+      )
+    ) {
       player.activeY += 1;
     }
   }
@@ -361,7 +464,10 @@ export class GameInstance {
 
   private clearLockTimer(socketId: string): void {
     const t = this.lockTimer.get(socketId);
-    if (t) { clearTimeout(t); this.lockTimer.delete(socketId); }
+    if (t) {
+      clearTimeout(t);
+      this.lockTimer.delete(socketId);
+    }
   }
 
   /** おじゃまを相手に送信 */
@@ -377,7 +483,7 @@ export class GameInstance {
   private broadcastState(socketId: string, player: PlayerState): void {
     const elapsed = (Date.now() - player.startTime) / 60000; // 分
     const apm = elapsed > 0 ? player.attacksSent / elapsed : 0;
-    const pps = elapsed > 0 ? player.piecesPlaced / elapsed * 60 : 0;
+    const pps = elapsed > 0 ? (player.piecesPlaced / elapsed) * 60 : 0;
 
     const gameState: GameState = {
       board: player.board,
@@ -387,7 +493,13 @@ export class GameInstance {
         y: player.activeY,
         rotation: player.activeRotation,
       },
-      ghostY: calcGhostY(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation),
+      ghostY: calcGhostY(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY,
+        player.activeRotation,
+      ),
       nextMinos: this.bag.peek(5),
       holdMino: player.holdMino,
       canHold: player.canHold,
@@ -416,7 +528,8 @@ export class GameInstance {
     };
 
     this.players.forEach((_, sid) => {
-      if (sid !== socketId) this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
+      if (sid !== socketId)
+        this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
     });
     this.spectators.forEach((sid) => {
       this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
@@ -463,23 +576,35 @@ export class GameInstance {
 
   /** AI ループ */
   private async runAiLoop(): Promise<void> {
-    const aiEntry = [...this.players.entries()].find(([, p]) => p.userId === null);
+    const aiEntry = [...this.players.entries()].find(
+      ([, p]) => p.userId === null,
+    );
     if (!aiEntry || !this.aiDifficulty) return;
     const [aiSocketId, aiPlayer] = aiEntry;
 
     while (this.isRunning && !aiPlayer.isGameOver) {
-      const move = await calcAiMove(aiPlayer.board, aiPlayer.activeMino, this.aiDifficulty);
+      const move = await calcAiMove(
+        aiPlayer.board,
+        aiPlayer.activeMino,
+        this.aiDifficulty,
+      );
 
       if (!this.isRunning) break;
 
       // AI の移動を適用
       const rotations = move.rotation - aiPlayer.activeRotation;
       for (let i = 0; i < Math.abs(rotations); i++) {
-        this.applyInput(aiSocketId, rotations > 0 ? ClientEvent.ROTATE_CW : ClientEvent.ROTATE_CCW);
+        this.applyInput(
+          aiSocketId,
+          rotations > 0 ? ClientEvent.ROTATE_CW : ClientEvent.ROTATE_CCW,
+        );
       }
       const dx = move.x - aiPlayer.activeX;
       for (let i = 0; i < Math.abs(dx); i++) {
-        this.applyInput(aiSocketId, dx > 0 ? ClientEvent.MOVE_RIGHT : ClientEvent.MOVE_LEFT);
+        this.applyInput(
+          aiSocketId,
+          dx > 0 ? ClientEvent.MOVE_RIGHT : ClientEvent.MOVE_LEFT,
+        );
       }
       this.applyInput(aiSocketId, ClientEvent.HARD_DROP);
     }

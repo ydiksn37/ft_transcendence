@@ -70,7 +70,7 @@ export default function JoinPage() {
 
       {!loading ? (
         <div className="join-content" style={{ fontFamily: "'Press Start 2P', monospace" }}>
-          <h1 className="title-text" style={{ textShadow: '4px 4px 0px #000' }}>TETRIS</h1>
+          <h1 className="title-text" style={{ textShadow: '4px 4px 0px #000' }}>Project T</h1>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px', width: '360px' }}>
             <button 
               className={`join-button ${selectedIndex === 0 ? 'selected' : ''}`}

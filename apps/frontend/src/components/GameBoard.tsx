@@ -12,10 +12,7 @@ type GameBoardProps = {
   targetLine?: number;
 };
 
-export const CELL_SIZE = 45; 
-const TOP_OFFSET = 2 * CELL_SIZE;
-const BOARD_HEIGHT = 20 * CELL_SIZE;
-const BOARD_BOTTOM = TOP_OFFSET + BOARD_HEIGHT;
+export const CELL_SIZE = 30; 
 export const BOARD_PIXEL_HEIGHT = 22 * CELL_SIZE;
 
 const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine }) => {

@@ -93,7 +93,7 @@ export default function LobbyPage() {
     if (mode === '40_LINES') {
       const fetchLeaderboard = async () => {
         try {
-          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint/leaderboard`);
+          const res = await fetch(`/api/sprint/leaderboard`);
           if (res.ok) {
             const data = await res.json();
             setRecords(data);

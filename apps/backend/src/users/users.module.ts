@@ -12,7 +12,12 @@ import { ExportController } from './export.controller';
     MulterModule.register({ dest: process.env.UPLOAD_DIR ?? '/tmp/uploads' }),
   ],
   providers: [UsersService, AnalyticsService, ExportService],
-  controllers: [UsersController, AdminUsersController, AnalyticsController, ExportController],
+  controllers: [
+    UsersController,
+    AdminUsersController,
+    AnalyticsController,
+    ExportController,
+  ],
   exports: [UsersService],
 })
 export class UsersModule {}

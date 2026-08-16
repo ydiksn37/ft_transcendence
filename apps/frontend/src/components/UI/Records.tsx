@@ -30,7 +30,7 @@ export const Records: React.FC<RecordsProps> = ({ records }) => {
             }}>
               <span style={{ width: '30px' }}>{idx + 1}.</span>
               <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '10px' }}>
-                {r.record?.user?.displayName || r.record?.user?.username || 'Guest'}
+                {r.user?.displayName || r.user?.username || r.record?.user?.displayName || r.record?.user?.username || 'Guest'}
               </span>
               <span style={{ minWidth: '80px', textAlign: 'right' }}>{formatTime(r.record?.timeMs || r)}</span>
             </div>

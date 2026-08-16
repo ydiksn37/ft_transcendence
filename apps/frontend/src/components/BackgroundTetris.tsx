@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Stage } from '@pixi/react';
-import GameBoard , { CELL_SIZE, BOARD_PIXEL_HEIGHT }from './GameBoard';
+import GameBoard from './GameBoard';
 import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { randomTetromino } from '../utils/tetrominos';
 
@@ -19,7 +19,7 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
     const handleResize = () => {
       const vh = window.innerHeight;
       const margin = 0;
-      const s = (vh - margin) / 1200;
+      const s = (vh - margin) / 800;
       setFitScale(s);
     };
     handleResize();
@@ -105,7 +105,7 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
   }, []);
 
   return (
-    <div style={{ opacity: 0.6, transform: reversed ? 'scale(-0.8, 0.8)' : 'scale(0.8)', pointerEvents: 'none' }}>
+    <div style={{ opacity: 0.6, transform: reversed ? `scale(-${fitScale}, ${fitScale})` : `scale(${fitScale})`, pointerEvents: 'none' }}>
       <div style={{ position: 'relative', width: 300, height: 660 }}>
         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
           <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>

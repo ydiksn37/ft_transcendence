@@ -51,7 +51,6 @@ export class UsersService {
     return { message: 'アカウントを削除しました' };
   }
 
-
   // ── アバター更新 ───────────────────────────────────────────
   async updateAvatar(userId: string, avatarUrl: string) {
     const user = await this.prisma.user.update({
@@ -83,7 +82,9 @@ export class UsersService {
         ? {
             OR: [
               { username: { contains: dto.q, mode: 'insensitive' as const } },
-              { displayName: { contains: dto.q, mode: 'insensitive' as const } },
+              {
+                displayName: { contains: dto.q, mode: 'insensitive' as const },
+              },
             ],
           }
         : {}),
@@ -127,12 +128,7 @@ export class UsersService {
   }
 
   // ── 対戦履歴取得 ──────────────────────────────────────────
-  async getGameHistory(
-    id: string,
-    page = 1,
-    limit = 20,
-    mode?: string,
-  ) {
+  async getGameHistory(id: string, page = 1, limit = 20, mode?: string) {
     const skip = (page - 1) * limit;
     const where = {
       OR: [{ player1Id: id }, { player2Id: id }],
@@ -146,8 +142,22 @@ export class UsersService {
         skip,
         take: limit,
         include: {
-          player1: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
-          player2: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+          player1: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+          player2: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
           winner: { select: { id: true, username: true } },
         },
       }),
@@ -164,12 +174,20 @@ export class UsersService {
   }
 
   // ── フレンド申請 ──────────────────────────────────────────
-  async sendFriendRequest(requesterId: string, dto: { addresseeId?: string, username?: string }) {
+  async sendFriendRequest(
+    requesterId: string,
+    dto: { addresseeId?: string; username?: string },
+  ) {
     let addresseeId = dto.addresseeId;
     if (!addresseeId && dto.username) {
-      const uname = dto.username.startsWith('@') ? dto.username.substring(1) : dto.username;
-      const targetUser = await this.prisma.user.findUnique({ where: { username: uname } });
-      if (!targetUser) throw new NotFoundException('指定されたユーザーが見つかりません');
+      const uname = dto.username.startsWith('@')
+        ? dto.username.substring(1)
+        : dto.username;
+      const targetUser = await this.prisma.user.findUnique({
+        where: { username: uname },
+      });
+      if (!targetUser)
+        throw new NotFoundException('指定されたユーザーが見つかりません');
       addresseeId = targetUser.id;
     }
     if (!addresseeId) {
@@ -228,8 +246,24 @@ export class UsersService {
         ],
       },
       include: {
-        requester: { select: { id: true, username: true, displayName: true, avatarUrl: true, isOnline: true } },
-        addressee: { select: { id: true, username: true, displayName: true, avatarUrl: true, isOnline: true } },
+        requester: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            isOnline: true,
+          },
+        },
+        addressee: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            isOnline: true,
+          },
+        },
       },
     });
 
@@ -248,14 +282,16 @@ export class UsersService {
       },
     });
 
-    if (!friendship) throw new NotFoundException('フレンド関係が見つかりません');
+    if (!friendship)
+      throw new NotFoundException('フレンド関係が見つかりません');
     await this.prisma.friendship.delete({ where: { id: friendship.id } });
     return { message: 'フレンドを削除しました' };
   }
 
   // ── ブロック ───────────────────────────────────────────────
   async blockUser(blockerId: string, blockedId: string) {
-    if (blockerId === blockedId) throw new BadRequestException('自分をブロックできません');
+    if (blockerId === blockedId)
+      throw new BadRequestException('自分をブロックできません');
 
     const existing = await this.prisma.block.findUnique({
       where: { blockerId_blockedId: { blockerId, blockedId } },
@@ -290,7 +326,13 @@ export class UsersService {
       }),
       this.prisma.user.count({ where: { deletedAt: null } }),
     ]);
-    return { data: users, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data: users,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ── [ADMIN] ロール変更 ────────────────────────────────────
@@ -306,7 +348,9 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: targetId },
       data: {
-        bannedUntil: dto.bannedUntil ? new Date(dto.bannedUntil) : new Date('9999-12-31'),
+        bannedUntil: dto.bannedUntil
+          ? new Date(dto.bannedUntil)
+          : new Date('9999-12-31'),
         banReason: dto.reason,
       },
     });

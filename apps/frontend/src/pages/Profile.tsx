@@ -125,7 +125,7 @@ export default function Profile() {
 		event.target.value = '';
 	};
 
-	const onCropComplete = (croppedArea: any, croppedAreaPixels: any) => {
+	const onCropComplete = (_croppedArea: any, croppedAreaPixels: any) => {
 		setCroppedAreaPixels(croppedAreaPixels);
 	};
 

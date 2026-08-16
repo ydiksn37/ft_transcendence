@@ -33,7 +33,7 @@ export class GameController {
       garbageSent1to2: 0,
       garbageSent2to1: 0,
       durationSeconds: body.durationSeconds || 0,
-      gameMode: mode as any,
+      gameMode: mode,
     });
 
     return { success: true };

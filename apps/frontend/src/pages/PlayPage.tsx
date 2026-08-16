@@ -352,11 +352,11 @@ const PlayPage = () => {
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
       if (token) {
-        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint`, {
+        fetch(`/api/sprint`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             timeMs: finalTime,
@@ -377,7 +377,7 @@ const PlayPage = () => {
         const apm = durationMinutes > 0 ? attackLines / durationMinutes : 0;
         const pps = durationMinutes > 0 ? piecesPlaced / (durationMinutes * 60) : 0;
 
-        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/game/result`, {
+        fetch(`/api/game/result`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
