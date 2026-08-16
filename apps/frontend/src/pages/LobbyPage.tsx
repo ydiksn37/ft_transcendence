@@ -182,29 +182,6 @@ export default function LobbyPage() {
           {getModeLabel()}
         </h1>
 
-        <div className="lobby-panels">
-          {mode === 'CONFIG' && (
-            <div className="panel config-panel">
-              <Config
-                tuning={tuning}
-                setTuning={setTuning}
-                volume={volume}
-                setVolume={setVolume}
-                keyConfig={keyConfig}
-                listeningAction={listeningAction}
-                setListeningAction={setListeningAction as any}
-                setAppState={() => {}}
-              />
-            </div>
-          )}
-          
-          {mode === '40_LINES' && token && user && (
-            <div className="panel records-panel">
-              <Records records={records} />
-            </div>
-          )}
-        </div>
-
         {mode === 'MARATHON' && (() => {
           const index = startLevel === 1 ? 0 : startLevel / 5;
           const blocksCount = 4 + index;
@@ -260,18 +237,18 @@ export default function LobbyPage() {
         })()}
 
         {mode === 'MULTI_PLAY' && (
-          <div className="multi-play-buttons" style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+          <div className="multi-play-buttons" style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
             <button 
               className="start-game-btn" 
               onClick={() => navigate(`/play/ONLINE_1V1`)}
-              style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c` }}
+              style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c`, marginBottom: 0 }}
             >
               RANDOM MATCH
             </button>
             <button 
               className="start-game-btn" 
               onClick={() => navigate(`/play/CUSTOM_ROOMS`)}
-              style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400' }}
+              style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400', marginBottom: 0 }}
             >
               CUSTOM ROOMS
             </button>
@@ -286,12 +263,36 @@ export default function LobbyPage() {
             style={{ 
               borderColor: getModeColor(), 
               boxShadow: `0 0 20px ${getModeColor()}`,
+              marginBottom: '40px',
               ...(selectedIndex === 0 ? { backgroundColor: 'rgba(255,255,255,0.1)', transform: 'scale(1.05)' } : {})
             }}
           >
             {selectedIndex === 0 ? `▶ ${mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME'}` : (mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME')}
           </button>
         )}
+
+        <div className="lobby-panels">
+          {mode === 'CONFIG' && (
+            <div className="panel config-panel">
+              <Config
+                tuning={tuning}
+                setTuning={setTuning}
+                volume={volume}
+                setVolume={setVolume}
+                keyConfig={keyConfig}
+                listeningAction={listeningAction}
+                setListeningAction={setListeningAction as any}
+                setAppState={() => {}}
+              />
+            </div>
+          )}
+          
+          {mode === '40_LINES' && token && user && (
+            <div className="panel records-panel">
+              <Records records={records} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

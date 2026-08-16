@@ -127,15 +127,6 @@
     padding: 10px;
     height: auto;
   }
-  .lobby-content > * {
-    order: 2;
-  }
-  .lobby-content > .mode-title {
-    order: 1;
-  }
-  .lobby-content > .lobby-panels {
-    order: 3;
-  }
   .lobby-panels {
     flex-direction: column;
     align-items: center;
