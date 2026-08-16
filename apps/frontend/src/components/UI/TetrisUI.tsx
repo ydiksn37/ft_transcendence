@@ -12,6 +12,7 @@ import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
 const BG_IMAGES = [bg1, bg2];
 
 import { colorMap } from "../Cell"
+import './TetrisUI.css';
 
 type TetrisUIProps = {
   stage: Cell[][];
@@ -151,16 +152,11 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   }
 
   return (
-    <div style={{
-      width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column',
-      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundAttachment: 'fixed',
-      overflow: 'hidden'
+    <div className="tetris-ui-container" style={{
+      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`
      }}>
-      <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      <div className="tetris-ui-content">
+        <div className="tetris-ui-scaling-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: 'center center' }}>
           <style>{`
             @keyframes pop {
               0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
@@ -178,8 +174,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </h2>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="tetris-ui-layout">
+            <div className="tetris-side-panel">
           <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
 
           {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
@@ -208,7 +204,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="tetris-board-container">
             {gameMode === 'ONLINE_1V1' ? (
               <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
             ) : (
@@ -371,10 +367,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '80px' }}>
+        <div className="tetris-right-panel">
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
             <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {(gameMode === 'ONLINE_1V1' && isWaiting) ? (
                 [1,2,3,4,5].map(i => (
                   <div key={i} style={retroBoxStyle} />
@@ -403,7 +399,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           </div>
 
-          <div style={{
+          <div className="score-container" style={{
             backgroundColor: '#000',
             border: '4px solid #fff',
             boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
@@ -418,7 +414,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
               { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
             ].map((s) => (
-              <div key={s.label}>
+              <div key={s.label} className="score-item">
                 <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
                   {s.label}
                 </div>

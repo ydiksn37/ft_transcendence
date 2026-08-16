@@ -162,3 +162,17 @@
   background-color: #444;
   border-color: #fff;
 }
+
+@media (max-width: 480px) {
+  .login-panel {
+    padding: 20px;
+    border-width: 2px;
+  }
+  .login-title {
+    font-size: 24px;
+  }
+  .submit-btn, .oauth-btn {
+    font-size: 12px;
+    padding: 10px;
+  }
+}

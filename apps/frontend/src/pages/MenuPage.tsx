@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { Stage } from '@pixi/react';
 import GameBoard from '../components/GameBoard';
 import { useAuth } from '../hooks/useAuth';
+import './MenuPage.css';
 
 const createMenuStage = (): Cell[][] => {
   const width = 41;
@@ -251,14 +252,9 @@ const MenuPage = () => {
   };
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#111', color: 'white',
-      fontFamily: "'Press Start 2P', monospace", height: '100vh', width: '100vw', boxSizing: 'border-box',
-      overflow: 'hidden'
-    }}>
-      <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '1230px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', position: 'relative', zIndex: 50 }}>
+    <div className="menu-page-container">
+      <div className="menu-page-scaling-container" style={{ transform: `scale(${scale})` }}>
+      <div className="menu-page-header">
         <button
           onClick={() => navigate('/')}
           style={{
@@ -275,7 +271,7 @@ const MenuPage = () => {
         >
           ◀ TOP
         </button>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="menu-page-controls-group">
           <button
             onClick={() => setDropTime(dropTime ? null : 1000)}
             style={{
@@ -294,7 +290,7 @@ const MenuPage = () => {
           </button>
 
           {token && user ? (
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="menu-page-auth-group">
               <button
                 onClick={() => navigate('/dashboard')}
                 style={{
@@ -361,7 +357,7 @@ const MenuPage = () => {
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: 1230, height: 660 }}>
+      <div className="menu-page-board-wrapper">
         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
           <Stage width={1230} height={1200} options={{ backgroundAlpha: 0 }}>
             <GameBoard
@@ -386,7 +382,7 @@ const MenuPage = () => {
         <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none', zIndex: 20 }}>
           <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
 
-          <div style={{ position: 'absolute', top: 0, left: '50%', marginLeft: '320px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px 20px', border: '2px solid white', color: '#ccc', fontSize: '10px', textAlign: 'left', lineHeight: '1.6' }}>
+          <div className="menu-page-controls-info">
             <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
             <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
               <div style={{ color: '#4caf50' }}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
@@ -397,12 +393,12 @@ const MenuPage = () => {
             </div>
           </div>
         </div>
-        <div style={{ position: 'absolute', bottom: '150px', left: '15px', width: '1230px', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
-          <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>4-WIDE</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>40 LINES</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MARATHON</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>MULTI PLAY</div>
-          <div style={{ width: '240px', textAlign: 'center', color: '#9b59b6', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>CONFIG</div>
+        <div className="menu-page-mode-labels">
+          <div style={{ color: '#3498db' }}>4-WIDE</div>
+          <div style={{ color: '#ff9800' }}>40 LINES</div>
+          <div style={{ color: '#4caf50' }}>MARATHON</div>
+          <div style={{ color: '#e74c3c' }}>MULTI PLAY</div>
+          <div style={{ color: '#9b59b6' }}>CONFIG</div>
         </div>
 
         {transitionMode && (

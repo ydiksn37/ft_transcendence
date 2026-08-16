@@ -20,11 +20,13 @@
 }
 
 .background-tetris.left {
-  left: 5%;
+  right: calc(50% + 260px);
+  left: auto;
 }
 
 .background-tetris.right {
-  right: 5%;
+  left: calc(50% + 260px);
+  right: auto;
 }
 
 .join-content {
@@ -125,6 +127,14 @@
 
 /* Responsive breakpoints */
 @media (max-width: 768px) {
+  .background-tetris.left {
+    display: none;
+  }
+  .background-tetris.right {
+    right: auto;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
   .title-text {
     font-size: 46px;
     letter-spacing: 0px;

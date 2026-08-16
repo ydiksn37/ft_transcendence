@@ -1,0 +1,99 @@
+.tetris-ui-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+.tetris-ui-content {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.tetris-ui-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  transition: transform 0.2s ease;
+}
+
+.tetris-side-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tetris-board-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.tetris-right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 80px;
+}
+
+@media (max-width: 768px) {
+  .tetris-ui-content {
+    align-items: flex-start;
+    padding-top: 20px;
+    overflow-y: auto;
+  }
+  
+  .tetris-ui-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    /* Disable scale transform on small screens so layout isn't tiny */
+    transform: none !important;
+  }
+
+  .tetris-side-panel {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .tetris-right-panel {
+    flex-direction: row;
+    width: 100%;
+    max-width: 300px;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  
+  /* Next piece container adjustments */
+  .next-pieces-container {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    gap: 5px !important;
+  }
+
+  /* Score container adjustments */
+  .score-container {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px !important;
+    padding: 10px !important;
+  }
+  
+  .score-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+}

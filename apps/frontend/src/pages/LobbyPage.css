@@ -103,3 +103,27 @@
   transform: scale(1.05);
   background-color: rgba(255, 255, 255, 0.1);
 }
+
+@media (max-width: 768px) {
+  .lobby-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  .lobby-panels {
+    flex-direction: column;
+    align-items: center;
+  }
+  .config-panel, .records-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+  .mode-title {
+    font-size: 32px;
+  }
+  .start-game-btn {
+    font-size: 24px;
+    padding: 15px 30px;
+    width: 100%;
+    max-width: 300px;
+  }
+}
