@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useConfig } from '../hooks/useConfig';
-import { getCurrentUser, getGlobalMessages, sendMessage } from "@/lib/mock"
-import type { ChatMessage, PlayerSummary } from "@/lib/types";
+import { useAuth } from '../hooks/useAuth';
+import { io, Socket } from "socket.io-client";
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
 import { getAvatarPreset } from "@/lib/avatarPresets";
 import '../pages/Dashboard.css'
@@ -12,10 +12,13 @@ export default function Chat() {
 	const location = useLocation();
 	const mode = new URLSearchParams(location.search).get('mode');
 	const { keyConfig } = useConfig();
-	const me = getCurrentUser();
+	const { user, token } = useAuth();
 
-	const [messages, setMessages] = useState<ChatMessage[]>(() => getGlobalMessages());
+	const [rooms, setRooms] = useState<any[]>([]);
+	const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+	const [messages, setMessages] = useState<any[]>([]);
 	const [inputText, setInputText] = useState("");
+	const [socket, setSocket] = useState<Socket | null>(null);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -27,20 +30,70 @@ export default function Chat() {
 		return () => window.removeEventListener('keydown', handleKeyDown);
 	}, [navigate, keyConfig.quitToMenu, mode]);
 
-	const meAsSender: PlayerSummary = {
-		id: me.id,
-		username: me.username,
-		displayName: me.displayName,
-		avatarUrl: me.avatarUrl,
-		isOnline: true,
-	}
+	// Fetch Rooms
+	useEffect(() => {
+		if (!token) return;
+		fetch('/api/chat/rooms', {
+			headers: { 'Authorization': `Bearer ${token}` }
+		})
+		.then(res => res.json())
+		.then(data => {
+			setRooms(data);
+			if (data.length > 0) {
+				const globalRoom = data.find((r: any) => r.type === 'GLOBAL') || data[0];
+				setActiveRoomId(globalRoom.id);
+			}
+		});
+	}, [token]);
+
+	// Fetch Messages for active room
+	useEffect(() => {
+		if (!activeRoomId || !token) return;
+		fetch(`/api/chat/rooms/${activeRoomId}/messages`, {
+			headers: { 'Authorization': `Bearer ${token}` }
+		})
+		.then(res => res.json())
+		.then(data => setMessages(data));
+	}, [activeRoomId, token]);
+
+	// Socket connection
+	useEffect(() => {
+		if (!token) return;
+		const newSocket = io('/', { 
+			forceNew: true,
+			auth: { token }
+		});
+		setSocket(newSocket);
+
+		newSocket.on('chat_message', (msg: any) => {
+			setMessages((prev) => [...prev, msg]);
+		});
+
+		return () => {
+			newSocket.disconnect();
+		};
+	}, [token]);
+
+	// Join socket room
+	useEffect(() => {
+		if (socket && activeRoomId) {
+			// A basic emit to notify the server about joining the room could be sent here
+			// if required, but socket.io broadcast to 'global' room might just work if server is configured.
+		}
+	}, [socket, activeRoomId]);
 
 	const handleSend = () => {
-		if (!inputText.trim()) return;
-		const msg = sendMessage("GLOBAL_ROOM", meAsSender, inputText.trim());
-		setMessages((prev) => [...prev, msg]);
+		if (!inputText.trim() || !activeRoomId || !socket) return;
+		
+		socket.emit('chat_message', { 
+			roomId: activeRoomId, 
+			content: inputText.trim() 
+		});
+		
 		setInputText("");
 	}
+
+	if (!user) return null;
 
 	return (
 		<div className="dashboard-container">
@@ -59,8 +112,8 @@ export default function Chat() {
 					{/* Messages Area */}
 					<div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
 						{messages.map((m) => {
-							const isMe = m.sender.id === me.id;
-							const preset = getAvatarPreset(0); // Mock avatar
+							const isMe = m.sender.id === user.id;
+							const preset = getAvatarPreset(m.sender.avatarId || m.sender.id?.charCodeAt(0) % 8 || 0);
 							return (
 								<div key={m.id} style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
 									<AvatarIcon color={preset.color} symbol={preset.symbol} photo={m.sender.avatarUrl} size={32} />
@@ -73,12 +126,13 @@ export default function Chat() {
 											border: `2px solid ${isMe ? '#ff80ab' : '#555'}`,
 											fontSize: '12px',
 											lineHeight: '1.4',
-											wordBreak: 'break-word'
+											wordBreak: 'break-word',
+											fontFamily: "'Press Start 2P', monospace"
 										}}>
 											{m.content}
 										</div>
 										<div style={{ fontSize: '8px', color: '#555', marginTop: '5px' }}>
-											{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+											{new Date(m.createdAt || m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
 										</div>
 									</div>
 								</div>
@@ -96,7 +150,7 @@ export default function Chat() {
 							placeholder="Type a message..."
 							style={{ 
 								flex: 1, padding: '10px', backgroundColor: '#000', color: '#fff',
-								border: '2px solid #555', fontSize: '12px', fontFamily: "'Press Start 2P', monospace"
+								border: '2px solid #555', fontSize: '12px', fontFamily: "'Press Start 2P', monospace", minWidth: 0
 							}}
 						/>
 						<button 

@@ -6,18 +6,20 @@ import {
   OnGatewayDisconnect,
   ConnectedSocket,
   MessageBody,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { ClientEvent, ServerEvent, AiDifficulty, Cell } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
+import { ChatService } from '../chat/chat.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: '/',
 })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -45,7 +47,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     guestWins: number;
   }>();
 
-  constructor(private readonly gameService: GameService) {}
+  constructor(
+    private readonly gameService: GameService,
+    private readonly chatService: ChatService,
+  ) {}
+
+  afterInit() {
+    this.logger.log('GameGateway initialized');
+  }
 
   handleConnection(client: Socket) {
     this.logger.log(`接続: ${client.id}`);
@@ -87,6 +96,52 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }));
   }
 
+  // ── ゲーム履歴保存 ─────────────────────────────────────────
+  private async saveGameStats(
+    roomId: string,
+    winnerSocketId: string | null,
+    stats: Record<string, any>,
+    gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
+    isAiGame: boolean,
+    aiDifficulty?: string
+  ) {
+    const socketIds = Object.keys(stats);
+    if (socketIds.length < 2) return;
+    
+    const p1SocketId = socketIds[0];
+    const p2SocketId = socketIds[1];
+    const p1Stats = stats[p1SocketId];
+    const p2Stats = stats[p2SocketId];
+    const winnerUserId = winnerSocketId ? stats[winnerSocketId]?.userId : null;
+
+    try {
+      await this.gameService.saveResult({
+        roomId,
+        player1Id: p1Stats.userId,
+        player2Id: p2Stats.userId,
+        winnerId: winnerUserId,
+        isAiGame,
+        aiDifficulty,
+        player1Apm: p1Stats.apm,
+        player2Apm: p2Stats.apm,
+        player1Pps: p1Stats.pps,
+        player2Pps: p2Stats.pps,
+        player1LinesCleared: p1Stats.linesCleared,
+        player2LinesCleared: p2Stats.linesCleared,
+        player1TSpins: p1Stats.tSpins,
+        player2TSpins: p2Stats.tSpins,
+        player1Tetrises: p1Stats.tetrises,
+        player2Tetrises: p2Stats.tetrises,
+        garbageSent1to2: p1Stats.attacksSent,
+        garbageSent2to1: p2Stats.attacksSent,
+        durationSeconds: Math.max(p1Stats.durationSeconds, p2Stats.durationSeconds),
+        gameMode: gameMode as any,
+      });
+    } catch (e) {
+      this.logger.error('Failed to save game result', e);
+    }
+  }
+
   // ── マッチメイキング ──────────────────────────────────────
   @SubscribeMessage(ClientEvent.JOIN_QUEUE)
   handleJoinQueue(@ConnectedSocket() client: Socket) {
@@ -98,7 +153,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const roomId = `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const seed = Math.floor(Math.random() * 2147483647);
 
-      const instance = new GameInstance(roomId, this.server, seed);
+      const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
+        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
+        this.rooms.delete(rId);
+      };
+
+      const instance = new GameInstance(roomId, this.server, seed, onGameOver);
 
       // ユーザーIDはJWTから取得（実装簡略化のため socket.data を利用）
       const userId1 = (client.data?.userId as string) ?? null;
@@ -303,11 +363,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const seed = Math.floor(Math.random() * 2147483647);
     
-    const onGameOver = (rId: string, winnerId: string | null) => {
+    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
       const room = this.activeCustomRooms.get(rId);
       if (room) {
         if (winnerId === room.ownerSocket.id) room.ownerWins++;
         else if (winnerId === room.guestSocket.id) room.guestWins++;
+
+        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
 
         // ゲーム終了後、結果を保存してルーム状態に戻す
         this.rooms.delete(rId);
@@ -342,7 +404,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
-    const instance = new GameInstance(roomId, this.server, seed);
+    
+    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
+      this.saveGameStats(rId, winnerId, stats, 'AI', true, data.difficulty);
+      this.rooms.delete(rId);
+    };
+
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
 
     const userId = (client.data?.userId as string) ?? null;
     instance.addPlayer(client.id, userId);
@@ -444,16 +512,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // ── チャット ──────────────────────────────────────────────
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
-  handleChatMessage(
+  async handleChatMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; content: string },
   ) {
     if (!data.content?.trim()) return;
-    const message = {
-      senderId: client.id,
-      content: data.content.trim().substring(0, 500),
-      timestamp: Date.now(),
-    };
-    this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    const userId = (client.data?.userId as string) || client.id;
+    
+    try {
+      const savedMsg = await this.chatService.saveMessage(data.roomId, userId, data.content.trim().substring(0, 500));
+      const message = {
+        id: savedMsg.id,
+        senderId: savedMsg.senderId,
+        sender: savedMsg.sender,
+        content: savedMsg.content,
+        timestamp: savedMsg.createdAt.getTime(),
+      };
+      this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    } catch (error) {
+      this.logger.error('Failed to save message', error);
+      // Fallback
+      const message = {
+        senderId: userId,
+        content: data.content.trim().substring(0, 500),
+        timestamp: Date.now(),
+      };
+      this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+    }
   }
 }

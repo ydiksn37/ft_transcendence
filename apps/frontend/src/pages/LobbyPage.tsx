@@ -87,8 +87,24 @@ export default function LobbyPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, token, user]);
 
-  // Load records directly here just for viewing
-  const records = JSON.parse(sessionStorage.getItem('tetris40LinesRecords') || '[]');
+  const [records, setRecords] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (mode === '40_LINES') {
+      const fetchLeaderboard = async () => {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint/leaderboard`);
+          if (res.ok) {
+            const data = await res.json();
+            setRecords(data);
+          }
+        } catch (e) {
+          console.error('Failed to fetch leaderboard', e);
+        }
+      };
+      fetchLeaderboard();
+    }
+  }, [mode]);
 
   const getModeLabel = () => {
     switch (mode) {

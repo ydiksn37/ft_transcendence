@@ -20,9 +20,11 @@ import { JwtAuthGuard } from './auth/guards/auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { SprintModule } from './sprint/sprint.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
+    ChatModule,
     // ── 設定 ────────────────────────────────────────────────
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
 

@@ -48,6 +48,12 @@ export class UsersController {
     return this.usersService.updateMe(user.id, dto);
   }
 
+  @Patch('me/settings')
+  @ApiOperation({ summary: 'ゲーム設定を更新する' })
+  updateSettings(@CurrentUser() user: any, @Body() body: any) {
+    return this.usersService.updateGameSettings(user.id, body);
+  }
+
   @Delete('me')
   @ApiOperation({ summary: 'アカウント削除（ソフトデリート）' })
   deleteMe(@CurrentUser() user: any) {
@@ -94,8 +100,8 @@ export class UsersController {
 
   @Post('friends/request')
   @ApiOperation({ summary: 'フレンド申請を送る' })
-  sendFriendRequest(@CurrentUser() user: any, @Body() body: { addresseeId: string }) {
-    return this.usersService.sendFriendRequest(user.id, body.addresseeId);
+  sendFriendRequest(@CurrentUser() user: any, @Body() body: { addresseeId?: string, username?: string }) {
+    return this.usersService.sendFriendRequest(user.id, body);
   }
 
   @Patch('friends/:id')

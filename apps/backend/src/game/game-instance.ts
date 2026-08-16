@@ -48,6 +48,8 @@ export interface PlayerState {
   startTime: number;
   attacksSent: number;
   piecesPlaced: number;
+  tSpins: number;
+  tetrises: number;
 }
 
 export class GameInstance {
@@ -61,13 +63,26 @@ export class GameInstance {
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
 
-  private onGameOver?: (roomId: string, winnerId: string | null) => void;
+  private onGameOver?: (
+    roomId: string,
+    winnerId: string | null,
+    stats: Record<string, {
+      userId: string | null;
+      apm: number;
+      pps: number;
+      linesCleared: number;
+      tSpins: number;
+      tetrises: number;
+      attacksSent: number;
+      durationSeconds: number;
+    }>
+  ) => void;
 
   constructor(
     roomId: string,
     server: Server,
     seed: number,
-    onGameOver?: (roomId: string, winnerId: string | null) => void
+    onGameOver?: (roomId: string, winnerId: string | null, stats: Record<string, any>) => void
   ) {
     this.roomId = roomId;
     this.server = server;
@@ -99,6 +114,8 @@ export class GameInstance {
       startTime: Date.now(),
       attacksSent: 0,
       piecesPlaced: 0,
+      tSpins: 0,
+      tetrises: 0,
     });
   }
 
@@ -278,6 +295,9 @@ export class GameInstance {
       const perfectClear = isPerfectClear(player.board);
       const { garbage, clearType } = calcGarbage(linesCleared, tspin, perfectClear, player.b2b > 0);
 
+      if (clearType === 'tetris') player.tetrises++;
+      if (tspin) player.tSpins++;
+
       // B2B カウント更新
       const isB2b = clearType === 'tetris' || (tspin && linesCleared > 0);
       if (isB2b) player.b2b++;
@@ -419,7 +439,23 @@ export class GameInstance {
 
     if (winner || survivors.length === 0) {
       if (this.onGameOver) {
-        this.onGameOver(this.roomId, winner?.socketId ?? null);
+        const stats: Record<string, any> = {};
+        const now = Date.now();
+        this.players.forEach((p, sid) => {
+          const duration = (now - p.startTime) / 1000;
+          const durationMinutes = duration / 60;
+          stats[sid] = {
+            userId: p.userId,
+            apm: durationMinutes > 0 ? p.attacksSent / durationMinutes : 0,
+            pps: durationMinutes > 0 ? p.piecesPlaced / duration : 0,
+            linesCleared: p.lines,
+            tSpins: p.tSpins,
+            tetrises: p.tetrises,
+            attacksSent: p.attacksSent,
+            durationSeconds: duration,
+          };
+        });
+        this.onGameOver(this.roomId, winner?.socketId ?? null, stats);
       }
       this.stop();
     }

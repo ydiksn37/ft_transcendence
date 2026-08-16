@@ -368,6 +368,36 @@ const PlayPage = () => {
     }
   }, [gameOver, finalTime, token, piecesPlaced]);
 
+  // General Game Result Submission Effect
+  useEffect(() => {
+    if (gameOver && (gameModeRef.current === '40_LINES' || gameModeRef.current === 'MARATHON')) {
+      if (token) {
+        const durationSeconds = elapsedTime / 1000;
+        const durationMinutes = durationSeconds / 60;
+        const apm = durationMinutes > 0 ? attackLines / durationMinutes : 0;
+        const pps = durationMinutes > 0 ? piecesPlaced / (durationMinutes * 60) : 0;
+
+        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/game/result`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            gameMode: gameModeRef.current,
+            apm: Math.round(apm * 10) / 10,
+            pps: Math.round(pps * 100) / 100,
+            linesCleared: lines,
+            tSpins: 0, 
+            tetrises: 0, 
+            durationSeconds: Math.floor(durationSeconds),
+            score: score
+          })
+        }).catch(err => console.error('Failed to save game result:', err));
+      }
+    }
+  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score]);
+
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerRef = useRef(player);

@@ -33,6 +33,15 @@ export class UsersService {
     return this.sanitizeUser(user);
   }
 
+  // ── ゲーム設定更新 ──────────────────────────────────────
+  async updateGameSettings(userId: string, data: any) {
+    return this.prisma.userGameSettings.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    });
+  }
+
   // ── アカウント削除（ソフトデリート） ───────────────────
   async deleteMe(userId: string) {
     await this.prisma.user.update({
@@ -155,7 +164,18 @@ export class UsersService {
   }
 
   // ── フレンド申請 ──────────────────────────────────────────
-  async sendFriendRequest(requesterId: string, addresseeId: string) {
+  async sendFriendRequest(requesterId: string, dto: { addresseeId?: string, username?: string }) {
+    let addresseeId = dto.addresseeId;
+    if (!addresseeId && dto.username) {
+      const uname = dto.username.startsWith('@') ? dto.username.substring(1) : dto.username;
+      const targetUser = await this.prisma.user.findUnique({ where: { username: uname } });
+      if (!targetUser) throw new NotFoundException('指定されたユーザーが見つかりません');
+      addresseeId = targetUser.id;
+    }
+    if (!addresseeId) {
+      throw new BadRequestException('addresseeIdまたはusernameが必要です');
+    }
+
     if (requesterId === addresseeId) {
       throw new BadRequestException('自分にフレンド申請はできません');
     }
@@ -203,8 +223,8 @@ export class UsersService {
     const friendships = await this.prisma.friendship.findMany({
       where: {
         OR: [
-          { requesterId: userId, status: 'ACCEPTED' },
-          { addresseeId: userId, status: 'ACCEPTED' },
+          { requesterId: userId, status: { in: ['ACCEPTED', 'PENDING'] } },
+          { addresseeId: userId, status: { in: ['ACCEPTED', 'PENDING'] } },
         ],
       },
       include: {
@@ -213,9 +233,7 @@ export class UsersService {
       },
     });
 
-    return friendships.map((f) =>
-      f.requesterId === userId ? f.addressee : f.requester,
-    );
+    return friendships;
   }
 
   // ── フレンド削除 ──────────────────────────────────────────

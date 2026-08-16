@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useConfig } from '../hooks/useConfig';
-import { getFriends, getPendingRequests } from "@/lib/mock"
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
 import { getAvatarPreset } from "@/lib/avatarPresets";
 import '../pages/Dashboard.css'
@@ -12,11 +11,45 @@ export default function Friends() {
 	const mode = new URLSearchParams(location.search).get('mode');
 	const { keyConfig } = useConfig();
 
-	const friends = getFriends();
-	const requests = getPendingRequests();
-
+	const [friendships, setFriendships] = useState<any[]>([]);
 	const [search, setSearch] = useState("");
 	const [addFriendInput, setAddFriendInput] = useState("");
+	const [currentUser, setCurrentUser] = useState<any>(null);
+
+	const fetchFriends = async () => {
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch('/api/users/friends', {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) {
+				const data = await res.json();
+				setFriendships(data);
+			}
+		} catch (error) {
+			console.error("Failed to fetch friends", error);
+		}
+	};
+
+	const fetchCurrentUser = async () => {
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch('/api/users/me', {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) {
+				const data = await res.json();
+				setCurrentUser(data);
+			}
+		} catch (error) {
+			console.error("Failed to fetch current user", error);
+		}
+	};
+
+	useEffect(() => {
+		fetchCurrentUser();
+		fetchFriends();
+	}, []);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -28,11 +61,96 @@ export default function Friends() {
 		return () => window.removeEventListener('keydown', handleKeyDown);
 	}, [navigate, keyConfig.quitToMenu, mode]);
 
+	const handleAddFriend = async () => {
+		if (!addFriendInput.trim()) return;
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch('/api/users/friends/request', {
+				method: 'POST',
+				headers: { 
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}` 
+				},
+				body: JSON.stringify({ username: addFriendInput })
+			});
+			
+			if (res.ok) {
+				setAddFriendInput("");
+				fetchFriends();
+				alert('Friend request sent!');
+			} else {
+				const errorData = await res.json();
+				alert(errorData.message || 'Failed to send friend request');
+			}
+		} catch (error: any) {
+			console.error("Failed to send friend request", error);
+			alert('Failed to send friend request');
+		}
+	};
+
+	const handleAccept = async (id: string) => {
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch(`/api/users/friends/${id}`, {
+				method: 'PATCH',
+				headers: { 
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}` 
+				},
+				body: JSON.stringify({ accept: true })
+			});
+			if (res.ok) fetchFriends();
+		} catch (error) {
+			console.error("Failed to accept friend request", error);
+		}
+	};
+
+	const handleDecline = async (id: string) => {
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch(`/api/users/friends/${id}`, {
+				method: 'PATCH',
+				headers: { 
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}` 
+				},
+				body: JSON.stringify({ accept: false })
+			});
+			if (res.ok) fetchFriends();
+		} catch (error) {
+			console.error("Failed to decline friend request", error);
+		}
+	};
+
+	const handleRemoveFriend = async (friendId: string) => {
+		if (!confirm('Are you sure you want to remove this friend?')) return;
+		try {
+			const token = localStorage.getItem('token');
+			const res = await fetch(`/api/users/friends/${friendId}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) fetchFriends();
+		} catch (error) {
+			console.error("Failed to remove friend", error);
+		}
+	};
+
+	const currentUserId = currentUser?.id;
+	
+	const friends = friendships
+		.filter(f => f.status === 'ACCEPTED')
+		.map(f => f.requesterId === currentUserId ? { ...f.addressee, friendshipId: f.id } : { ...f.requester, friendshipId: f.id });
+
+	const pendingRequests = friendships
+		.filter(f => f.status === 'PENDING' && f.addresseeId === currentUserId)
+		.map(f => ({ ...f.requester, friendshipId: f.id }));
+
 	const keyword = search.trim().toLowerCase();
-	const filtered = keyword
+	const filteredFriends = keyword
 		? friends.filter((f) => 
-			f.displayName.toLowerCase().includes(keyword) || 
-			f.username.toLocaleLowerCase().includes(keyword)
+			f.displayName?.toLowerCase().includes(keyword) || 
+			f.username?.toLowerCase().includes(keyword)
 		)
 		: friends;
 
@@ -46,11 +164,10 @@ export default function Friends() {
 
 			<div className="dashboard-content">
 				<h1 className="dashboard-title" style={{ color: '#3498db' }}>FRIENDS LIST</h1>
-				<div className="dashboard-subtitle">{friends.length} FRIENDS ONLINE</div>
+				<div className="dashboard-subtitle">{friends.filter(f => f.isOnline).length} FRIENDS ONLINE</div>
 
 				<div className="dashboard-panels" style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
 					
-					{/* Left: Friends List */}
 					<div className="arcade-panel" style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '20px' }}>
 						<input
 							type="text"
@@ -64,9 +181,9 @@ export default function Friends() {
 						/>
 						
 						<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-							{filtered.length === 0 && <div style={{ color: '#555', textAlign: 'center', padding: '20px' }}>NO FRIENDS FOUND</div>}
-							{filtered.map(f => {
-								const preset = getAvatarPreset((f as any).avatarId || f.id.charCodeAt(0) % 8);
+							{filteredFriends.length === 0 && <div style={{ color: '#555', textAlign: 'center', padding: '20px' }}>NO FRIENDS FOUND</div>}
+							{filteredFriends.map(f => {
+								const preset = getAvatarPreset(f.avatarId || f.id?.charCodeAt(0) % 8 || 0);
 								return (
 									<div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: '#1a1a1a', border: '2px solid #333' }}>
 										<AvatarIcon color={preset.color} symbol={preset.symbol} photo={f.avatarUrl} size={48} />
@@ -74,9 +191,16 @@ export default function Friends() {
 											<div style={{ fontSize: '16px', fontWeight: 'bold' }}>{f.displayName || f.username}</div>
 											<div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>@{f.username}</div>
 										</div>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-											<div style={{ width: '10px', height: '10px', backgroundColor: f.isOnline ? '#4caf50' : '#555', borderRadius: '50%', boxShadow: f.isOnline ? '0 0 10px #4caf50' : 'none' }} />
-											<span style={{ fontSize: '10px', color: f.isOnline ? '#4caf50' : '#888' }}>{f.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+										<div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+												<div style={{ width: '10px', height: '10px', backgroundColor: f.isOnline ? '#4caf50' : '#555', borderRadius: '50%', boxShadow: f.isOnline ? '0 0 10px #4caf50' : 'none' }} />
+												<span style={{ fontSize: '10px', color: f.isOnline ? '#4caf50' : '#888' }}>{f.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+											</div>
+											<button 
+												onClick={() => handleRemoveFriend(f.id)}
+												style={{ padding: '5px 10px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>
+												REMOVE
+											</button>
 										</div>
 									</div>
 								)
@@ -84,10 +208,8 @@ export default function Friends() {
 						</div>
 					</div>
 
-					{/* Right: Add Friend & Pending */}
 					<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '30px' }}>
 						
-						{/* Add Friend */}
 						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
 							<div style={{ fontSize: '14px', color: '#3498db', borderBottom: '4px solid #444', paddingBottom: '10px' }}>ADD FRIEND</div>
 							<div style={{ display: 'flex', gap: '10px' }}>
@@ -102,6 +224,7 @@ export default function Friends() {
 									}}
 								/>
 								<button 
+									onClick={handleAddFriend}
 									style={{ 
 										padding: '10px 15px', backgroundColor: '#3498db', color: '#fff',
 										border: '2px solid #fff', fontSize: '12px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace"
@@ -112,27 +235,24 @@ export default function Friends() {
 							</div>
 						</div>
 
-						{/* Pending Requests */}
 						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-							<div style={{ fontSize: '14px', color: '#f1c40f', borderBottom: '4px solid #444', paddingBottom: '10px' }}>PENDING ({requests.length})</div>
-							{requests.length === 0 && <div style={{ color: '#555', fontSize: '12px', textAlign: 'center' }}>NONE</div>}
+							<div style={{ fontSize: '14px', color: '#f1c40f', borderBottom: '4px solid #444', paddingBottom: '10px' }}>PENDING ({pendingRequests.length})</div>
+							{pendingRequests.length === 0 && <div style={{ color: '#555', fontSize: '12px', textAlign: 'center' }}>NONE</div>}
 							<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-								{requests.map(r => (
-									<div key={r.id} style={{ padding: '10px', backgroundColor: '#1a1a1a', border: '2px solid #333', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+								{pendingRequests.map(r => (
+									<div key={r.friendshipId} style={{ padding: '10px', backgroundColor: '#1a1a1a', border: '2px solid #333', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 											<span style={{ fontSize: '12px' }}>@{r.username}</span>
 										</div>
 										<div style={{ display: 'flex', gap: '10px' }}>
-											<button style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer' }}>ACCEPT</button>
-											<button style={{ flex: 1, padding: '8px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer' }}>DECLINE</button>
+											<button onClick={() => handleAccept(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>ACCEPT</button>
+											<button onClick={() => handleDecline(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>DECLINE</button>
 										</div>
 									</div>
 								))}
 							</div>
 						</div>
-
 					</div>
-
 				</div>
 			</div>
 		</div>
