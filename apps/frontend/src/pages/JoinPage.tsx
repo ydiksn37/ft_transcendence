@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BackgroundTetris } from '../components/BackgroundTetris';
 import { TETROMINOS } from '../utils/tetrominos';
@@ -8,8 +8,26 @@ import './JoinPage.css';
 export default function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [loadingPiece, setLoadingPiece] = useState<any>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0); // 0: GUEST, 1: LOGIN
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (loading) return;
+      if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'KeyW' || e.code === 'KeyS') {
+        setSelectedIndex(prev => (prev === 0 ? 1 : 0));
+      } else if (e.code === 'Enter' || e.code === 'Space') {
+        if (selectedIndex === 0) {
+          handleGuest();
+        } else {
+          navigate('/login?cancelTo=/');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loading, selectedIndex, navigate]);
 
   const handleGuest = () => {
     if (loading) return;
@@ -29,10 +47,10 @@ export default function JoinPage() {
     });
     
     setLoading(true);
-    // 2.5秒間ロード演出を見せてからTOP画面（ゲーム）へ遷移
+    // 1秒間ロード演出を見せてからTOP画面（ゲーム）へ遷移
     setTimeout(() => {
       navigate('/menu');
-    }, 2500);
+    }, 1000);
   };
 
   // キーボード操作などが不要になったためEnterキーリスナーを削除
@@ -53,18 +71,20 @@ export default function JoinPage() {
       {!loading ? (
         <div className="join-content" style={{ fontFamily: "'Press Start 2P', monospace" }}>
           <h1 className="title-text" style={{ textShadow: '4px 4px 0px #000' }}>TETRIS</h1>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px', width: '300px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px', width: '360px' }}>
             <button 
-              className="join-button" 
+              className={`join-button ${selectedIndex === 0 ? 'selected' : ''}`}
+              onMouseEnter={() => setSelectedIndex(0)}
               onClick={handleGuest} 
             >
-              PLAY AS GUEST
+              {selectedIndex === 0 ? '▶ PLAY AS GUEST' : 'PLAY AS GUEST'}
             </button>
             <button 
-              className="join-button" 
-              onClick={() => navigate('/login')} 
+              className={`join-button ${selectedIndex === 1 ? 'selected' : ''}`}
+              onMouseEnter={() => setSelectedIndex(1)}
+              onClick={() => navigate('/login?cancelTo=/')} 
             >
-              LOGIN / REGISTER
+              {selectedIndex === 1 ? '▶ LOGIN / REGISTER' : 'LOGIN / REGISTER'}
             </button>
           </div>
         </div>

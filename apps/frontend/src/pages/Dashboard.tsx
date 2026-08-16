@@ -91,7 +91,7 @@ export default function Dashboard() {
 			} finally {
 				setTimeout(() => {
 					setLoading(false);
-				}, location.state?.skipLoading ? 0 : 1500);
+				}, location.state?.skipLoading ? 0 : 1000);
 			}
 		}
 

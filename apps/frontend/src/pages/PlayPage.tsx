@@ -11,6 +11,7 @@ import { useMultiplayer } from '../hooks/useMultiplayer';
 import { useGameState } from '../hooks/useGameState';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { CustomRoomsList } from '../components/UI/CustomRoomsList';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -28,7 +29,7 @@ const formatTime = (ms: number) => {
 
 
 const PlayPage = () => {
-  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' }>();
+  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' }>();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -41,8 +42,7 @@ const PlayPage = () => {
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
-    gameModeRef, setGameMode,
-    records, setRecords,
+    gameMode, gameModeRef, setGameMode,
     setStartTime, startTimeRef,
     elapsedTime, setElapsedTime,
     finalTime, setFinalTime,
@@ -60,11 +60,20 @@ const PlayPage = () => {
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
-  const checkGameOver = useCallback((newStage: Cell[][]) => {
+  const checkGameOver = useCallback((newStage: Cell[][], isLockOut: boolean = false) => {
+     if (isLockOut) {
+       setGameOver(true);
+       setDropTime(null);
+       if (gameModeRef.current === 'ONLINE_1V1') {
+         setMatchResult('LOSE');
+       }
+       return true;
+     }
+
      if (!nextPieceKeys || nextPieceKeys.length === 0) return false;
      const nextPiece = TETROMINOS[nextPieceKeys[0] as keyof typeof TETROMINOS].shape;
      const dummyPlayer = {
-       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 0 },
+       pos: { x: Math.floor(newStage[0].length / 2) - Math.ceil(nextPiece[0].length / 2), y: 17 }, // 1マス上にスポーンテスト
        tetromino: nextPiece,
        collided: false,
        rotationIndex: 0,
@@ -90,17 +99,21 @@ const PlayPage = () => {
   // ── Score / Level / Speed ───────────────────────────────────────────────
   const b2bRef = useRef(false);
   const comboRef = useRef(-1);
+  const levelPointsRef = useRef(0);
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionText, setActionText] = useState<string | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
   const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
   const joinOnlineRef = useRef<(() => void) | null>(null);
+  const setupCustomRoomConnectionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (mode === 'ONLINE_1V1') {
       joinOnlineRef.current?.();
-    } else {
+    } else if (mode === 'CUSTOM_ROOMS') {
+      setupCustomRoomConnectionRef.current?.();
+    } else if (mode) {
       startGameRef.current?.(mode);
     }
   }, [mode]);
@@ -174,7 +187,37 @@ const PlayPage = () => {
     if (totalScore > 0) {
        setScore(prev => prev + totalScore);
     }
+
+    // Official Variable Goal Leveling
+    let levelPts = 0;
+    if (tSpinType === 't-spin') {
+      if (lines === 0) levelPts = 2;
+      else if (lines === 1) levelPts = 2;
+      else if (lines === 2) levelPts = 4;
+      else if (lines === 3) levelPts = 6;
+    } else if (tSpinType === 'mini-t-spin') {
+      levelPts = 1;
+    } else {
+      if (lines === 1) levelPts = 1;
+      else if (lines === 2) levelPts = 3;
+      else if (lines === 3) levelPts = 5;
+      else if (lines === 4) levelPts = 8;
+    }
+    if (isB2B && lines > 0) {
+      levelPts = Math.floor(levelPts * 1.5);
+    }
+    levelPointsRef.current += levelPts;
+
+    const calculatedLevel = Math.max(1, Math.floor((1 + Math.sqrt(1 + 8 * (levelPointsRef.current / 5))) / 2));
     
+    setLevel(prevLevel => {
+       if (calculatedLevel > prevLevel) {
+          setDropTime(levelDropTime(calculatedLevel));
+          return calculatedLevel;
+       }
+       return prevLevel;
+    });
+
     if (lines > 0) {
        setLines(prev => {
           const newLines = prev + lines;
@@ -185,11 +228,6 @@ const PlayPage = () => {
              setGameOver(true);
              setDropTime(null);
              
-             setRecords(prevRecs => {
-               const newRecs = [...prevRecs, timeTaken].sort((a, b) => a - b).slice(0, 10);
-               sessionStorage.setItem('tetris40LinesRecords', JSON.stringify(newRecs));
-               return newRecs;
-             });
              return newLines;
           }
 
@@ -272,14 +310,9 @@ const PlayPage = () => {
            stageRef.current = newStage;
            setStage(newStage);
            
-           setPlayer(p => {
-             const newY = Math.max(0, p.pos.y - linesToAdd);
-             return { ...p, pos: { ...p.pos, y: newY } };
-           });
-           
            remainingAttacks = [];
            
-           if (isPushedOut || newStage[0].some(cell => cell[1] === 'merged')) {
+           if (isPushedOut) {
              setGameOver(true);
              if (gameModeRef.current === 'ONLINE_1V1') {
                setMatchResult('LOSE');
@@ -306,13 +339,13 @@ const PlayPage = () => {
          actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
        }, 0);
     }
-  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setRecords, setPiecesPlaced, setOpponentStage, setMatchResult]);
+  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
 
   // Sprint Record Submission Effect
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {
       if (token) {
-        fetch('http://localhost:3000/api/sprint', {
+        fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/sprint`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -320,13 +353,13 @@ const PlayPage = () => {
           },
           body: JSON.stringify({
             timeMs: finalTime,
-            lines: lines >= 40 ? lines : 40,
+            lines: 40,
             pieces: piecesPlaced
           })
         }).catch(err => console.error('Failed to save sprint record:', err));
       }
     }
-  }, [gameOver, finalTime, token]);
+  }, [gameOver, finalTime, token, piecesPlaced]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -505,8 +538,8 @@ const PlayPage = () => {
     
     const newStage = createStage(nextMode === '4_WIDE' ? 4 : 10);
     if (nextMode === '4_WIDE') {
-      // Board width is 4. Place 3 blocks on the bottom row (row 21).
-      for (let x = 0; x < 3; x++) newStage[21][x] = ['X', 'merged'];
+      // Board width is 4. Place 3 blocks on the bottom row (y=39).
+      for (let x = 0; x < 3; x++) newStage[39][x] = ['X', 'merged'];
     }
     setStage(newStage);
     stageRef.current = newStage;
@@ -516,7 +549,7 @@ const PlayPage = () => {
       setRandomSeed(null);
     }
     resetTetrominoBag();
-    resetPlayer(nextMode === '4_WIDE' ? 4 : 10);
+    resetPlayer(nextMode === '4_WIDE' ? 4 : 10, stageRef.current);
     resetHold();
     setGameOver(false);
     setMatchResult(null);
@@ -529,10 +562,12 @@ const PlayPage = () => {
     setAttackLines(0);
     comboRef.current = -1;
     b2bRef.current = false;
+    levelPointsRef.current = 0;
     setActionText(null);
     if (nextMode !== 'ONLINE_1V1') {
       setAppState('PLAYING');
     } else {
+      setAppState('ONLINE_1V1');
       setIsWaiting(false);
     }
 
@@ -551,10 +586,10 @@ const PlayPage = () => {
     countdownTimeoutsRef.current = [t1, t2];
   }, [setStage, resetPlayer, resetHold, stageRef]);
 
-  const { joinOnline } = useMultiplayer({
-    appState, setStage, stageRef, resetPlayer, resetHold,
+  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
+    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, isWaiting, setIsWaiting,
+    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting,
     setOpponentStage, setOpponentScore,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
   });
@@ -564,7 +599,13 @@ const PlayPage = () => {
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => navigate(`/lobby/${mode}`)
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        setAppState('CUSTOM_ROOMS');
+      } else {
+        navigate(`/lobby/${mode}`);
+      }
+    }
   });
 
   // Auto-drop (gravity)
@@ -574,13 +615,23 @@ const PlayPage = () => {
 
   startGameRef.current = startGame;
   joinOnlineRef.current = joinOnline;
+  setupCustomRoomConnectionRef.current = setupCustomRoomConnection;
+
+  if (appState === 'CUSTOM_ROOMS') {
+    return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
+  }
+
+  // Prevent flashing the wrong mode's board on first render before useEffect triggers
+  if (appState === 'MENU') {
+    return <div style={{ backgroundColor: '#111', width: '100vw', height: '100vh' }} />;
+  }
 
   return (
     <TetrisUI
       stage={stage}
       player={player}
       gameOver={gameOver}
-      gameMode={gameModeRef.current}
+      gameMode={gameMode}
       score={score}
       level={level}
       lines={lines}
@@ -602,10 +653,10 @@ const PlayPage = () => {
       setIsWaiting={setIsWaiting}
       setDropTime={setDropTime}
       formatTime={formatTime}
-      records={records}
       createStage={createStage}
       appState={appState}
       restartGame={() => startGame()}
+      joinOnline={joinOnline}
     />
   );
 };

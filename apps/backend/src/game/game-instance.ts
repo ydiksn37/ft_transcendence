@@ -8,6 +8,7 @@ import {
 } from '@transcendence/shared';
 import { BagGenerator } from './engine/bag-generator';
 import {
+  getMinoCells,
   createEmptyBoard,
   isValidPosition,
   lockMino,
@@ -60,10 +61,18 @@ export class GameInstance {
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
 
-  constructor(roomId: string, server: Server, seed: number) {
+  private onGameOver?: (roomId: string, winnerId: string | null) => void;
+
+  constructor(
+    roomId: string,
+    server: Server,
+    seed: number,
+    onGameOver?: (roomId: string, winnerId: string | null) => void
+  ) {
     this.roomId = roomId;
     this.server = server;
     this.bag = new BagGenerator(seed);
+    this.onGameOver = onGameOver;
   }
 
   /** プレイヤーを追加 */
@@ -75,7 +84,7 @@ export class GameInstance {
       board: createEmptyBoard(),
       activeMino: firstMino,
       activeX: 3,
-      activeY: 0,
+      activeY: 18,
       activeRotation: 0,
       holdMino: null,
       canHold: true,
@@ -224,13 +233,11 @@ export class GameInstance {
     const prev = player.holdMino;
     player.holdMino = player.activeMino;
     player.activeMino = prev ?? this.bag.next();
-    player.activeX = 3;
-    player.activeY = 0;
-    player.activeRotation = 0;
     player.canHold = false;
-    player.lastMoveWasRotation = false;
-
-    this.broadcastState(socketId, player);
+    this.spawnPiece(socketId, player);
+    if (!player.isGameOver) {
+      this.broadcastState(socketId, player);
+    }
   }
 
   /** ピースをロック（固定） */
@@ -244,9 +251,22 @@ export class GameInstance {
       player.activeRotation, player.lastMoveWasRotation,
     );
 
+    // Lock Out 判定用 (Vanish Zoneで完全に固定されたか)
+    const cells = getMinoCells(player.activeMino, player.activeX, player.activeY, player.activeRotation);
+    let maxLockY = -1;
+    for (const [r, c] of cells) {
+      maxLockY = Math.max(maxLockY, r);
+    }
+
     // ピースを固定
     player.board = lockMino(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation);
     const { board: clearedBoard, linesCleared } = clearLines(player.board);
+
+    // Clutch ルール：ラインを消せなかった場合、かつピースが完全にVanish Zone(y < 20)に固定されたらLock Out
+    if (linesCleared === 0 && maxLockY < 20) {
+      this.handleGameOver(socketId);
+      return;
+    }
     player.board = clearedBoard;
     player.piecesPlaced++;
 
@@ -282,19 +302,30 @@ export class GameInstance {
 
     // 次のミノを取得
     player.activeMino = this.bag.next();
-    player.activeX = 3;
-    player.activeY = 0;
-    player.activeRotation = 0;
     player.canHold = true;
+    this.spawnPiece(socketId, player);
+    if (!player.isGameOver) {
+      this.broadcastState(socketId, player);
+    }
+  }
+
+  /** ミノをスポーンさせる (TETR.IO仕様: 1マス上にスポーン後、即時落下可能なら落下) */
+  private spawnPiece(socketId: string, player: PlayerState): void {
+    player.activeX = 3;
+    player.activeY = 17; // 1マス上にスポーン
+    player.activeRotation = 0;
     player.lastMoveWasRotation = false;
 
-    // ゲームオーバー判定
+    // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
     if (!isValidPosition(player.board, player.activeMino, player.activeX, player.activeY, player.activeRotation)) {
       this.handleGameOver(socketId);
       return;
     }
 
-    this.broadcastState(socketId, player);
+    // もし y=18 が空いていれば、即座に重力を適用して1マス下げる
+    if (isValidPosition(player.board, player.activeMino, player.activeX, player.activeY + 1, player.activeRotation)) {
+      player.activeY += 1;
+    }
   }
 
   /** ロック遅延タイマー */
@@ -387,6 +418,9 @@ export class GameInstance {
     });
 
     if (winner || survivors.length === 0) {
+      if (this.onGameOver) {
+        this.onGameOver(this.roomId, winner?.socketId ?? null);
+      }
       this.stop();
     }
   }

@@ -153,19 +153,21 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
-          <div style={{ position: 'relative' }}>
-            <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={660} options={{ backgroundAlpha: 0 }}>
-            <GameBoard 
-              stage={stage} 
-              player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-              ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
-              targetLine={
-                gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                  ? 22 - (40 - lines) 
-                  : undefined
-              }
-            />
-          </Stage>
+          <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+              <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
+                <GameBoard 
+                  stage={stage} 
+                  player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
+                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
+                  targetLine={
+                    gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                      ? 22 - (40 - lines) 
+                      : undefined
+                  }
+                />
+              </Stage>
+            </div>
 
           {appState === 'MENU' && (
             <>
@@ -176,7 +178,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 <div style={{ width: '240px', textAlign: 'center', color: '#4caf50', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>MARATHON</div>
                 <div style={{ width: '240px', textAlign: 'center', color: '#ff9800', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>40 LINES</div>
                 <div style={{ width: '240px', textAlign: 'center', color: '#3498db', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>4-WIDE</div>
-                <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>ONLINE 1v1</div>
+                <div style={{ width: '240px', textAlign: 'center', color: '#e74c3c', fontWeight: 'bold', fontSize: '20px', textShadow: '2px 2px 4px black' }}>MULTI PLAY</div>
               </div>
             </>
           )}
@@ -287,16 +289,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 
                 <button 
                   onClick={() => navigate('/menu')}
-                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                >
-                  MODE SELECTION
-                </button>
-                
-                <button 
-                  onClick={() => navigate('/')}
                   style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                   onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                   onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
@@ -384,14 +376,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
           <div style={{ position: 'relative', marginLeft: '40px' }}>
             <h3 style={{ textAlign: 'center', color: '#ff4444', margin: '0 0 10px 0' }}>OPPONENT</h3>
-            <div style={{ position: 'relative' }}>
-              <Stage width={300} height={660} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={opponentStage || createStage(10)} 
-                  player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
-                  ghostY={0} 
-                />
-              </Stage>
+            <div style={{ position: 'relative', width: 300, height: 660 }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                  <GameBoard 
+                    stage={opponentStage || createStage(10)} 
+                    player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
+                    ghostY={0} 
+                  />
+                </Stage>
+              </div>
               
               {isWaiting && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>

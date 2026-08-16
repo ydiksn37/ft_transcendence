@@ -39,17 +39,17 @@ type TetrisUIProps = {
   setIsWaiting: (w: boolean) => void;
   setDropTime: React.Dispatch<React.SetStateAction<number | null>>;
   formatTime: (ms: number) => string;
-  records: number[];
   createStage: (width?: number) => Cell[][];
   appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1';
   restartGame: () => void;
+  joinOnline?: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, records, createStage, appState, restartGame
+  formatTime, createStage, appState, restartGame, joinOnline
 }) => {
   const [scale, setScale] = useState(1);
   const navigate = useNavigate();
@@ -73,11 +73,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   useEffect(() => {
     if (!gameOver) return;
     const handleGameOverKeys = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
+      if (e.key === 'Escape') {
         navigate('/menu');
-      } else if (e.key === 'Escape') {
-        navigate('/');
       }
     };
     window.addEventListener('keydown', handleGameOverKeys);
@@ -111,15 +108,47 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     );
   };
 
-  const MODE_LABEL: Record<string, { label: string; color: string }> = {
-      MARATHON:   { label: 'MARATHON',      color: 'var(--color-neon-cyan)' },
-      '40_LINES': { label: '40 LINES',      color: 'var(--color-neon-cyan)' },
-      '4_WIDE':   { label: '4 WIDE',        color: 'var(--color-neon-cyan)' },
-      ONLINE_1V1: { label: '⚔ VS OPPONENT', color: 'var(--color-neon-magenta)' },
-    };
-  const modeMeta = MODE_LABEL[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  const modeMeta = {
+    'MARATHON': { label: 'MARATHON', color: 'var(--color-neon-cyan)' },
+    '40_LINES': { label: '40 LINES', color: 'var(--color-neon-cyan)' },
+    '4_WIDE': { label: '4 WIDE', color: 'var(--color-neon-cyan)' },
+    'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
+  }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
   const [bgImage] = useState(() => BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)]);
+
+  if (gameMode === 'ONLINE_1V1' && isWaiting) {
+    return (
+      <div style={{
+        width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+        backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
+        fontFamily: '"Press Start 2P", monospace', color: 'white'
+      }}>
+        <h1 style={{ fontSize: '48px', color: '#e74c3c', textShadow: '4px 4px 0px #000', marginBottom: '40px', animation: 'blink 1s infinite alternate', textAlign: 'center', lineHeight: '1.5' }}>
+          SEARCHING FOR<br/>OPPONENT...
+        </h1>
+        <button
+          onClick={() => {
+            if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
+            navigate('/lobby/MULTI_PLAY');
+          }}
+          style={{
+            fontFamily: '"Press Start 2P", monospace', padding: '20px 40px',
+            backgroundColor: '#000', color: '#fff', border: '4px solid #fff',
+            boxShadow: '4px 4px 0px rgba(255,255,255,0.5)', cursor: 'pointer',
+            fontSize: '18px', transition: 'transform 0.1s', marginTop: '20px'
+          }}
+          onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+          onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+        >
+          CANCEL
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -130,38 +159,26 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       backgroundAttachment: 'fixed',
      }}>
       <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto', padding: '40px 0' }}>
-      <div style={{ 
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        transform: `scale(${scale})`, transformOrigin: 'top center'
-      }}>
-      <style>{`
-        @keyframes pop {
-          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-          70% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-      `}</style>
-      
-
-
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {gameMode === '40_LINES' && (
-            <div style={{ marginBottom: '20px', backgroundColor: '#222', padding: '10px', borderRadius: '8px', textAlign: 'center', border: '2px solid #555' }}>
-              <strong>TIME</strong><br />
-              <span style={{ fontSize: '18px', color: finalTime ? 'gold' : 'white', fontVariantNumeric: 'tabular-nums' }}>
-                {finalTime ? formatTime(finalTime) : formatTime(elapsedTime)}
-              </span>
-              {finalTime && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #444' }}>
-                  <strong>PPS</strong><br />
-                  <span style={{ color: 'white', fontSize: '16px', fontVariantNumeric: 'tabular-nums' }}>
-                    {(piecesPlaced / (finalTime / 1000)).toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+          <style>{`
+            @keyframes pop {
+              0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+              70% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+              100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            }
+          `}</style>
+          
+          {appState !== 'MENU' && (
+            <h2 style={{ 
+              margin: '0 0 30px 0', textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
+              color: modeMeta.color, textShadow: '4px 4px 0px #000', fontSize: '24px', letterSpacing: '2px'
+            }}>
+              {modeMeta.label}
+            </h2>
           )}
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
 
           {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
@@ -191,28 +208,26 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {appState !== 'MENU' && (
-            <h2 style={{ 
-              margin: '0 0 20px 0', textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
-              color: modeMeta.color, textShadow: '4px 4px 0px #000', fontSize: '18px', letterSpacing: '2px'
-            }}>
-              {modeMeta.label}
-            </h2>
-          )}
-          <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
-          <div style={{ position: 'relative' }}>
-            <Stage width={stage.length > 0 ? stage[0].length * CELL_SIZE : 10 * CELL_SIZE} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
-            <GameBoard 
-              stage={stage} 
-              player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-              ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
-              targetLine={
-                gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                  ? 22 - (40 - lines) 
-                  : undefined
-              }
-            />
-          </Stage>
+            {gameMode === 'ONLINE_1V1' ? (
+              <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
+            ) : (
+              <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
+            )}
+          <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+              <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
+                <GameBoard 
+                  stage={stage} 
+                  player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
+                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
+                  targetLine={
+                    gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                      ? 22 - (40 - lines) 
+                      : undefined
+                  }
+                />
+              </Stage>
+            </div>
 
 
           {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
@@ -273,11 +288,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               {gameMode === '40_LINES' && finalTime && (
                 <div style={{ marginBottom: '25px', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', lineHeight: '1.8' }}>
                   <div style={{ color: '#aaa' }}>TIME: <span style={{ color: '#fff' }}>{formatTime(finalTime)}</span></div>
-                  {records.indexOf(finalTime) !== -1 && records.indexOf(finalTime) < 10 && (
-                    <div style={{ color: 'gold', animation: 'pop 0.5s ease-out', marginTop: '10px' }}>
-                      NEW RECORD! RANK {records.indexOf(finalTime) + 1}
-                    </div>
-                  )}
+
                 </div>
               )}
               {gameMode === 'ONLINE_1V1' && matchResult && (
@@ -298,8 +309,11 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   <button
                     autoFocus
                     onClick={() => {
-                      if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
-                      navigate('/lobby/ONLINE_1V1');
+                      if (joinOnline) {
+                        joinOnline();
+                      } else {
+                        navigate('/lobby/MULTI_PLAY');
+                      }
                     }}
                     style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                     onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
@@ -323,16 +337,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 
                 <button 
                   onClick={() => navigate('/menu')}
-                  style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                >
-                  MODE SELECT (SPACE)
-                </button>
-                
-                <button 
-                  onClick={() => navigate('/')}
                   style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                   onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                   onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
@@ -428,16 +432,18 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
-          <div style={{ position: 'relative', marginLeft: '40px' }}>
-            <h3 style={{ textAlign: 'center', color: '#ff4444', margin: '0 0 10px 0' }}>OPPONENT</h3>
-            <div style={{ position: 'relative' }}>
-              <Stage width={10 * CELL_SIZE} height={BOARD_PIXEL_HEIGHT} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={opponentStage || createStage(10)} 
-                  player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
-                  ghostY={0} 
-                />
-              </Stage>
+          <div style={{ position: 'relative', marginLeft: '20px' }}>
+            <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>OPPONENT</h3>
+            <div style={{ position: 'relative', width: 300, height: 660 }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                  <GameBoard 
+                    stage={opponentStage || createStage(10)} 
+                    player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
+                    ghostY={0} 
+                  />
+                </Stage>
+              </div>
               
               {isWaiting && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>

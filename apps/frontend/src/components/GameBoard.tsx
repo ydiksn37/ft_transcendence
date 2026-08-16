@@ -23,19 +23,19 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
 
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
-    g.beginFill(0x040010, 0.6);
-    g.drawRect(0, TOP_OFFSET, width, BOARD_HEIGHT);
+    g.beginFill(0x000000, 0.8);
+    g.drawRect(0, 600, width, 600);
     g.endFill();
 
     g.lineStyle({ width: 1, color: 0x5d5d5d, alpha: 0.4, native: true });
     for (let x = 0; x <= width; x += CELL_SIZE) {
-    g.moveTo(x, TOP_OFFSET);
-    g.lineTo(x, BOARD_BOTTOM);
-  }
-  for (let y = TOP_OFFSET; y <= BOARD_BOTTOM; y += CELL_SIZE) {
-    g.moveTo(0, y);
-    g.lineTo(width, y);
-  }
+      g.moveTo(x, 600);
+      g.lineTo(x, 1200);
+    }
+    for (let y = 600; y <= 1200; y += CELL_SIZE) {
+      g.moveTo(0, y);
+      g.lineTo(width, y);
+    }
 
   }, [width]);
 
@@ -43,8 +43,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
     g.clear();
     if (targetLine === undefined) return;
     
-    // const yPos = targetLine * CELL_SIZE;
-    const yPos = TOP_OFFSET + targetLine * CELL_SIZE;
+    // Shift target line by 18 rows to match the new STAGE_HEIGHT offset
+    const yPos = (targetLine + 18) * CELL_SIZE;
     
     // Draw a dashed red line
     g.lineStyle(2, 0xff3333, 0.8);
@@ -57,7 +57,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
   const drawFrame = useCallback((g: PIXI.Graphics) => {
     g.clear();
     g.lineStyle(1.5, 0xF6F7F7, 0.8);
-    g.drawRect(1.5, TOP_OFFSET + 1.5, width - 3, BOARD_HEIGHT - 3);
+    g.drawRect(1.5, 601.5, width - 3, 597);
   }, [width]);
 
   return (
@@ -66,7 +66,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
       {/* 1. Static stage (merged cells and clear background) */}
       {stage.map((row, y) =>
         row.map((cell, x) => {
-          if (y < 2 && cell[1] === 'clear') return null; // Hide grid for top 2 rows
+          if (y < 20 && cell[1] === 'clear') return null; // Hide grid for top 20 rows
           return (
             <Cell
               key={`stage-${y}-${x}`}

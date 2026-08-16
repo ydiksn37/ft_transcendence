@@ -11,7 +11,7 @@ type UseKeyboardControlsProps = {
   keyConfigRef: MutableRefObject<Record<string, string>>;
   gameOver: boolean;
   dropTime: number | null;
-  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1'>;
+  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>;
   countdownRef: MutableRefObject<string | null>;
   listeningActionRef: MutableRefObject<string | null>;
   setKeyConfig: Dispatch<SetStateAction<Record<string, string>>>;
@@ -20,7 +20,7 @@ type UseKeyboardControlsProps = {
   softDrop: () => void;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
-  playerHold: (width: number) => void;
+  playerHold: (width: number, stage?: Cell[][]) => void;
   startGame: (mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   socketRef: MutableRefObject<Socket | null>;
   setSocket: (s: Socket | null) => void;
@@ -144,16 +144,6 @@ export const useKeyboardControls = ({
         return;
       }
 
-      if (code === 'Enter') {
-        if (document.activeElement?.tagName === 'BUTTON') {
-          return;
-        }
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') {
-          startGame();
-        }
-        return;
-      }
-
       if (code === conf.quitToMenu) {
         if (gameOver) return;
         if (!e.repeat) {
@@ -202,7 +192,7 @@ export const useKeyboardControls = ({
           if (!e.repeat) playerRotate(stageRef.current, 2);
           break;
         case conf.hold:
-          if (!e.repeat) playerHold(stageRef.current[0].length);
+          if (!e.repeat) playerHold(stageRef.current[0].length, stageRef.current);
           break;
       }
     },
