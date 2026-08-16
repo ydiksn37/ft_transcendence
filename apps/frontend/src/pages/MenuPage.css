@@ -86,50 +86,68 @@
   .menu-page-scaling-container {
     transform: none !important; /* Disable scale */
     width: 100%;
-    padding: 10px;
+    padding: 20px;
     height: 100%;
     overflow-y: auto;
+    justify-content: space-evenly;
+    box-sizing: border-box;
   }
   
   .menu-page-header {
     flex-direction: column;
     align-items: stretch;
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .menu-page-controls-group, .menu-page-auth-group {
     flex-wrap: wrap;
     justify-content: center;
+    width: 100%;
+    gap: 10px;
   }
   
   .menu-page-header button {
     flex: 1;
     min-width: 120px;
+    box-sizing: border-box;
   }
 
-  /* Scale the board down for mobile using css transform */
+  /* Hide the desktop playable board on mobile */
   .menu-page-board-wrapper {
-    transform: scale(0.6) translateY(-100px);
-    transform-origin: top center;
-    margin-bottom: -200px; /* offset the height */
-  }
-
-  .menu-page-controls-info {
-    position: static;
-    margin: 20px auto 0;
-  }
-
-  .menu-page-mode-labels {
-    bottom: -50px;
-  }
-
-  .menu-page-mode-labels div {
-    font-size: 10px;
+    display: none !important;
   }
 }
 
-@media (max-width: 480px) {
-  .menu-page-board-wrapper {
-    transform: scale(0.3) translateY(-400px);
-    margin-bottom: -450px;
-  }
+/* Mobile Menu Styles */
+.mobile-menu-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-bottom: 40px;
+}
+
+.mobile-menu-button {
+  width: 100%;
+  padding: 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  background-color: #333;
+  color: white;
+  border: 4px solid white;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px #000;
+  transition: all 0.2s;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.mobile-menu-button:active {
+  box-shadow: 0px 0px 0px #000;
+  transform: translate(4px, 4px);
 }

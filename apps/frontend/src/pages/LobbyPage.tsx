@@ -212,7 +212,7 @@ export default function LobbyPage() {
             <div style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '16px', color: '#ccc' }}>STARTING LEVEL</span>
               
-              <div style={{ position: 'relative', width: '480px', height: '20px', marginTop: '5px' }}>
+              <div className="marathon-slider-wrapper" style={{ position: 'relative', width: '480px', height: '20px', marginTop: '5px' }}>
                 {/* The empty background track */}
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '480px', height: '20px', backgroundColor: '#111', border: '2px solid #333', boxSizing: 'border-box' }} />
                 
@@ -260,7 +260,7 @@ export default function LobbyPage() {
         })()}
 
         {mode === 'MULTI_PLAY' && (
-          <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+          <div className="multi-play-buttons" style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
             <button 
               className="start-game-btn" 
               onClick={() => navigate(`/play/ONLINE_1V1`)}
