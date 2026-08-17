@@ -124,7 +124,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
   const modules = import.meta.glob<string>(
-    "../../assets/images/tetrisbg_*.{jpg,jpeg,png,webp,avif}",
+    "../../assets/images/tetrisbg_*.png",
     { import: "default" }
   );
 
