@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -16,6 +17,7 @@ enum class Action {
   Rotate180,
   SoftDrop,
   HardDrop,
+  Hold,
 };
 
 struct BoardEvaluation {
@@ -30,6 +32,9 @@ struct AgentDecision {
   std::vector<Action> actions;
   double score;
   int linesCleared;
+  int completedDepth = 1;
+  std::uint64_t nodesVisited = 0;
+  bool timedOut = false;
 };
 
 using EasyDecision = AgentDecision;

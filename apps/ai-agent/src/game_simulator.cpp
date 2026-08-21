@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <optional>
+#include <vector>
 
 #include "tetris/bag.hpp"
 
@@ -31,13 +32,16 @@ struct ReplayResult {
 };
 
 ReplayResult replayDecision(const Board& board, PieceType type,
-                            const AgentDecision& decision) {
+                            const AgentDecision& decision,
+                            std::size_t firstAction) {
   ActivePiece active{type, 3, 0, 0};
   bool lastMoveWasRotation = false;
   int dropScore = 0;
   bool locked = false;
 
-  for (const Action action : decision.actions) {
+  for (std::size_t index = firstAction; index < decision.actions.size();
+       ++index) {
+    const Action action = decision.actions[index];
     if (locked) return {active, lastMoveWasRotation, dropScore, false};
     ActivePiece moved = active;
     switch (action) {
@@ -87,6 +91,8 @@ ReplayResult replayDecision(const Board& board, PieceType type,
         }
         locked = true;
         continue;
+      case Action::Hold:
+        return {active, lastMoveWasRotation, dropScore, false};
     }
     if (!isValidPosition(board, moved)) {
       return {active, lastMoveWasRotation, dropScore, false};
@@ -140,11 +146,6 @@ int baseScore(ClearKind kind) noexcept {
   return 0;
 }
 
-bool isBackToBackClear(ClearKind kind) noexcept {
-  return kind == ClearKind::Tetris || kind == ClearKind::TSpinSingle ||
-         kind == ClearKind::TSpinDouble || kind == ClearKind::TSpinTriple;
-}
-
 void countClear(GameResult& result, ClearKind kind) {
   switch (kind) {
     case ClearKind::Single:
@@ -160,10 +161,20 @@ void countClear(GameResult& result, ClearKind kind) {
       ++result.tetrises;
       break;
     case ClearKind::TSpinMini:
+      ++result.tSpins;
+      ++result.tSpinMinis;
+      break;
     case ClearKind::TSpinSingle:
+      ++result.tSpins;
+      ++result.tSpinSingles;
+      break;
     case ClearKind::TSpinDouble:
+      ++result.tSpins;
+      ++result.tSpinDoubles;
+      break;
     case ClearKind::TSpinTriple:
       ++result.tSpins;
+      ++result.tSpinTriples;
       break;
     case ClearKind::PerfectClear:
       ++result.perfectClears;
@@ -180,6 +191,13 @@ double GameResult::averageDecisionMs() const noexcept {
                            : totalDecisionMs / static_cast<double>(piecesPlaced);
 }
 
+double GameResult::averageSearchDepth() const noexcept {
+  return piecesPlaced == 0
+             ? 0.0
+             : static_cast<double>(totalSearchDepth) /
+                   static_cast<double>(piecesPlaced);
+}
+
 GameResult simulateGame(Agent& agent, std::uint32_t seed,
                         std::size_t maxPieces,
                         const FrameCallback& onFrame) {
@@ -188,8 +206,9 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
   Board board;
   BagGenerator bag(seed);
   PieceType activeType = bag.next();
+  std::optional<PieceType> holdPiece;
   int combo = -1;
-  bool backToBack = false;
+  int backToBackChain = 0;
   const auto gameStartedAt = std::chrono::steady_clock::now();
 
   while (result.piecesPlaced < maxPieces) {
@@ -199,8 +218,17 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       break;
     }
 
+    std::vector<PieceType> nextPieces;
+    nextPieces.reserve(8);
+    BagGenerator previewBag = bag;
+    for (int index = 0; index < 8; ++index) {
+      nextPieces.push_back(previewBag.next());
+    }
+
     const auto decisionStartedAt = std::chrono::steady_clock::now();
-    const auto decision = agent.decide(board, activeType);
+    const auto decision = agent.decide(board, activeType, nextPieces,
+                                       holdPiece, true, 3, 0, 0,
+                                       backToBackChain > 0);
     const double decisionMs = std::chrono::duration<double, std::milli>(
                                   std::chrono::steady_clock::now() -
                                   decisionStartedAt)
@@ -212,8 +240,35 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       result.invalidDecision = true;
       break;
     }
+    result.searchNodes += decision->nodesVisited;
+    result.totalSearchDepth +=
+        static_cast<std::uint64_t>(decision->completedDepth);
+    result.maxSearchDepth =
+        std::max(result.maxSearchDepth, decision->completedDepth);
+    if (decision->timedOut) ++result.timedOutDecisions;
 
-    const ReplayResult replay = replayDecision(board, activeType, *decision);
+    PieceType placedType = activeType;
+    std::size_t firstAction = 0;
+    if (!decision->actions.empty() &&
+        decision->actions.front() == Action::Hold) {
+      ++result.holdsUsed;
+      firstAction = 1;
+      if (holdPiece) {
+        std::swap(placedType, *holdPiece);
+      } else {
+        holdPiece = activeType;
+        placedType = bag.next();
+      }
+    }
+    if (firstAction < decision->actions.size() &&
+        decision->actions[firstAction] == Action::Hold) {
+      result.gameOver = true;
+      result.invalidDecision = true;
+      break;
+    }
+
+    const ReplayResult replay =
+        replayDecision(board, placedType, *decision, firstAction);
     if (!replay.valid) {
       result.gameOver = true;
       result.invalidDecision = true;
@@ -237,16 +292,26 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       result.score += static_cast<std::int64_t>(baseScore(kind)) * level +
                       comboBonus;
       countClear(result, kind);
-      backToBack = isBackToBackClear(kind);
+      // Match game-instance.ts: a Tetris or any line-clearing T-Spin keeps
+      // B2B; an ordinary line clear breaks it. A zero-line move preserves it.
+      const bool backToBackClear =
+          cleared.linesCleared == 4 || tSpin.has_value();
+      if (backToBackClear) {
+        ++result.backToBackClears;
+        if (backToBackChain > 0) ++result.backToBackContinuations;
+        ++backToBackChain;
+        result.maxBackToBack =
+            std::max(result.maxBackToBack, backToBackChain);
+      } else {
+        if (backToBackChain > 0) ++result.backToBackBreaks;
+        backToBackChain = 0;
+      }
     } else {
       combo = -1;
     }
-
-    // B2B does not change score in the current TypeScript backend. Keep the
-    // state here so future garbage/versus benchmarks can reuse the simulator.
-    (void)backToBack;
+    result.currentBackToBack = backToBackChain;
     if (onFrame) {
-      onFrame(board, result, activeType, cleared.linesCleared);
+      onFrame(board, result, placedType, cleared.linesCleared, holdPiece);
     }
     activeType = bag.next();
   }

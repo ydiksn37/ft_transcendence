@@ -41,6 +41,7 @@ std::optional<ActivePiece> applySearchAction(const Board& board,
     case Action::Rotate180:
       return tryRotate(board, piece, RotationDirection::Rotate180);
     case Action::HardDrop:
+    case Action::Hold:
       return std::nullopt;
   }
   if (isValidPosition(board, moved)) return moved;
@@ -65,6 +66,8 @@ std::string_view toString(Action action) noexcept {
       return "soft_drop";
     case Action::HardDrop:
       return "hard_drop";
+    case Action::Hold:
+      return "hold";
   }
   return "unknown";
 }

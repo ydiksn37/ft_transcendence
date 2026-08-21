@@ -27,6 +27,7 @@ add_library(ai_engine
   src/board.cpp
   src/easy_agent.cpp
   src/game_simulator.cpp
+  src/hard_agent.cpp
 )
 target_include_directories(ai_engine PUBLIC include)
 

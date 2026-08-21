@@ -68,6 +68,7 @@ max_pieces ?= 5000
 jobs ?= 1
 preview ?= 1
 delay_ms ?= 100
+think_ms ?= 50
 
 ai-build: ## C++ AIをReleaseモードで設定・ビルドする
 	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
@@ -79,9 +80,9 @@ ai-run: ai-build ## C++ AIを実行する (例: make ai-run model=easy)
 		--games "$(games)" \
 		--seed "$(seed)" \
 		--max-pieces "$(max_pieces)" \
-		--jobs "$(jobs)" \
-		$(if $(filter 1 true yes,$(preview)),--preview) \
-		--delay-ms "$(delay_ms)"
+		--jobs "$(jobs)" $(if $(filter 1 true yes,$(preview)),--preview) \
+		--delay-ms "$(delay_ms)" \
+		--think-ms "$(think_ms)"
 
 # --- テスト ---
 test: ## 全ての単体テストを実行する

@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <iostream>
@@ -9,12 +11,46 @@
 #include "tetris/bag.hpp"
 #include "tetris/easy_agent.hpp"
 #include "tetris/game_simulator.hpp"
+#include "tetris/hard_agent.hpp"
 
 namespace {
 
 void expect(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
+
+tetris::Board makeTetrisWell() {
+  tetris::Board board;
+  for (int row = 16; row < tetris::kBoardRows; ++row) {
+    for (int col = 0; col < 9; ++col) {
+      board.set(row, col, tetris::Cell::Garbage);
+    }
+  }
+  return board;
+}
+
+class HoldFirstAgent final : public tetris::Agent {
+ public:
+  std::string_view name() const noexcept override { return "hold-test"; }
+
+  std::optional<tetris::AgentDecision> decide(
+      const tetris::Board& board, tetris::PieceType,
+      const std::vector<tetris::PieceType>& nextPieces,
+      std::optional<tetris::PieceType> holdPiece, bool canHold, int, int,
+      int, bool) override {
+    if (!canHold || (!holdPiece && nextPieces.empty())) return std::nullopt;
+    const tetris::PieceType placedType =
+        holdPiece ? *holdPiece : nextPieces.front();
+    tetris::ActivePiece placement{placedType, 3, 0, 0};
+    placement.y = tetris::calcGhostY(board, placement);
+    return tetris::AgentDecision{
+        placement,
+        {tetris::Action::Hold, tetris::Action::HardDrop},
+        0.0,
+        0,
+    };
+  }
+};
 
 void testEmptyBoardAndShapes() {
   const tetris::Board board;
@@ -114,6 +150,97 @@ void testEasyAgentReportsBlockedSpawn() {
          "blocked spawn must produce no decision");
 }
 
+void testHardAgentChoosesTetris() {
+  const tetris::Board board = makeTetrisWell();
+  tetris::HardAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(board, tetris::PieceType::I);
+  expect(decision.has_value(), "hard agent must find a Tetris placement");
+  expect(decision->linesCleared == 4,
+         "hard agent must prefer an immediately available Tetris");
+  expect(decision->completedDepth == 1 && decision->nodesVisited > 0,
+         "hard agent must report search statistics");
+}
+
+void testHardAgentUsesExistingHoldForTetris() {
+  const tetris::Board board = makeTetrisWell();
+  tetris::HardAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(
+      board, tetris::PieceType::O, {}, tetris::PieceType::I, true);
+  expect(decision.has_value(), "hard agent must consider the held I piece");
+  expect(!decision->actions.empty() &&
+             decision->actions.front() == tetris::Action::Hold,
+         "hard agent must use Hold for an available Tetris");
+  expect(decision->placement.type == tetris::PieceType::I &&
+             decision->linesCleared == 4,
+         "held I piece must complete the Tetris");
+}
+
+void testHardAgentUsesEmptyHoldAndConsumesNext() {
+  const tetris::Board board = makeTetrisWell();
+  tetris::HardAgent agent(std::chrono::milliseconds(100));
+  const std::vector<tetris::PieceType> next{tetris::PieceType::I};
+  const auto decision = agent.decide(board, tetris::PieceType::O, next,
+                                     std::nullopt, true);
+  expect(decision.has_value(), "hard agent must consider an empty Hold");
+  expect(!decision->actions.empty() &&
+             decision->actions.front() == tetris::Action::Hold,
+         "hard agent must Hold the current piece to use Next");
+  expect(decision->placement.type == tetris::PieceType::I &&
+             decision->linesCleared == 4,
+         "first Next piece must become active after an empty Hold");
+}
+
+void testSimulatorAppliesHoldAndConsumesNext() {
+  HoldFirstAgent agent;
+  const auto result = tetris::simulateGame(agent, 42, 1);
+  expect(result.piecesPlaced == 1 && result.reachedPieceLimit,
+         "simulator must lock the piece obtained through Hold");
+  expect(result.holdsUsed == 1,
+         "simulator must count the empty-Hold operation");
+  expect(!result.invalidDecision,
+         "Hold followed by hard drop must replay as a legal decision");
+}
+
+void testHardAgentChoosesTSpin() {
+  tetris::Board board;
+  for (int col = 0; col < tetris::kBoardCols; ++col) {
+    if (col < 3 || col > 5) board.set(19, col, tetris::Cell::Garbage);
+  }
+  board.set(18, 3, tetris::Cell::Garbage);
+  tetris::HardAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(board, tetris::PieceType::T);
+  expect(decision.has_value(), "hard agent must find a T-Spin placement");
+  expect(decision->linesCleared == 1,
+         "hard agent must complete the available T-Spin Single");
+  const bool rotates = std::any_of(
+      decision->actions.begin(), decision->actions.end(),
+      [](tetris::Action action) {
+        return action == tetris::Action::RotateClockwise ||
+               action == tetris::Action::RotateCounterClockwise ||
+               action == tetris::Action::Rotate180;
+      });
+  expect(rotates, "T-Spin decision must contain a rotation");
+}
+
+void testHardAgentSimulatorDecisionsAreLegal() {
+  tetris::HardAgent agent(std::chrono::milliseconds(5));
+  const auto result = tetris::simulateGame(agent, 42, 5);
+  expect(result.piecesPlaced == 5 && result.reachedPieceLimit,
+         "hard agent must reach the short simulation limit");
+  expect(!result.invalidDecision,
+         "hard agent must return replayable operation sequences");
+  expect(result.searchNodes > 0 && result.maxSearchDepth >= 1,
+         "hard simulation must collect search statistics");
+  expect(result.tSpins == result.tSpinMinis + result.tSpinSingles +
+                              result.tSpinDoubles + result.tSpinTriples,
+         "T-Spin total must equal the Mini/Single/Double/Triple breakdown");
+  expect(result.backToBackContinuations <= result.backToBackClears,
+         "B2B continuations cannot exceed B2B clears");
+  expect(result.maxBackToBack <=
+             static_cast<int>(result.backToBackClears),
+         "maximum B2B chain cannot exceed B2B clears");
+}
+
 void testSeededBagIsDeterministicAndUsesAllPieces() {
   tetris::BagGenerator first(42);
   tetris::BagGenerator second(42);
@@ -160,6 +287,12 @@ int main() {
     testEvaluationMatchesTypeScript();
     testEasyAgentClearsAvailableLine();
     testEasyAgentReportsBlockedSpawn();
+    testHardAgentChoosesTetris();
+    testHardAgentUsesExistingHoldForTetris();
+    testHardAgentUsesEmptyHoldAndConsumesNext();
+    testSimulatorAppliesHoldAndConsumesNext();
+    testHardAgentChoosesTSpin();
+    testHardAgentSimulatorDecisionsAreLegal();
     testSeededBagIsDeterministicAndUsesAllPieces();
     testSimulatorIsDeterministic();
   } catch (const std::exception& error) {

@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -33,6 +34,7 @@ struct Options {
   std::string format = "table";
   bool preview = false;
   std::uint64_t delayMs = 100;
+  std::uint64_t thinkTimeMs = 50;
 };
 
 struct Statistics {
@@ -54,6 +56,7 @@ void printUsage(std::ostream& output) {
             "  --format table|json|csv\n"
             "  --preview            Color terminal preview (requires jobs=1)\n"
             "  --delay-ms N         Preview delay per piece (default: 100)\n"
+            "  --think-ms N         Hard AI time budget per piece (default: 50)\n"
             "  --list-models\n"
             "  --help\n";
 }
@@ -113,6 +116,8 @@ Options parseOptions(int argc, char** argv) {
       options.format = value;
     } else if (argument == "--delay-ms") {
       options.delayMs = parseUnsigned(value, argument);
+    } else if (argument == "--think-ms") {
+      options.thinkTimeMs = parseUnsigned(value, argument);
     } else {
       throw std::invalid_argument("unknown option: " + argument);
     }
@@ -123,6 +128,9 @@ Options parseOptions(int argc, char** argv) {
     throw std::invalid_argument("--max-pieces must be positive");
   }
   if (options.jobs == 0) throw std::invalid_argument("--jobs must be positive");
+  if (options.thinkTimeMs == 0) {
+    throw std::invalid_argument("--think-ms must be positive");
+  }
   if (options.format != "table" && options.format != "json" &&
       options.format != "csv") {
     throw std::invalid_argument("--format must be table, json, or csv");
@@ -192,10 +200,24 @@ nlohmann::json gameJson(const tetris::GameResult& game) {
       {"triples", game.triples},
       {"tetrises", game.tetrises},
       {"t_spins", game.tSpins},
+      {"t_spin_minis", game.tSpinMinis},
+      {"t_spin_singles", game.tSpinSingles},
+      {"t_spin_doubles", game.tSpinDoubles},
+      {"t_spin_triples", game.tSpinTriples},
       {"perfect_clears", game.perfectClears},
+      {"holds", game.holdsUsed},
+      {"b2b_clears", game.backToBackClears},
+      {"b2b_continuations", game.backToBackContinuations},
+      {"b2b_breaks", game.backToBackBreaks},
+      {"current_b2b", game.currentBackToBack},
+      {"max_b2b", game.maxBackToBack},
       {"game_over", game.gameOver},
       {"piece_limit_reached", game.reachedPieceLimit},
       {"invalid_decision", game.invalidDecision},
+      {"search_nodes", game.searchNodes},
+      {"average_search_depth", game.averageSearchDepth()},
+      {"max_search_depth", game.maxSearchDepth},
+      {"timed_out_decisions", game.timedOutDecisions},
       {"elapsed_ms", game.elapsedMs},
       {"average_decision_ms", game.averageDecisionMs()},
       {"max_decision_ms", game.maxDecisionMs},
@@ -218,7 +240,8 @@ std::vector<tetris::GameResult> runGames(
         while (true) {
           const std::size_t gameIndex = nextGame.fetch_add(1);
           if (gameIndex >= options.games) return;
-          auto agent = tetris::createAgent(options.model);
+          auto agent =
+              tetris::createAgent(options.model, options.thinkTimeMs);
           const std::uint32_t gameSeed =
               options.seed + static_cast<std::uint32_t>(gameIndex);
           tetris::FrameCallback onFrame;
@@ -226,9 +249,10 @@ std::vector<tetris::GameResult> runGames(
             onFrame = [&, gameIndex](const tetris::Board& board,
                                      const tetris::GameResult& result,
                                      tetris::PieceType placedPiece,
-                                     int clearedThisMove) {
+                                     int clearedThisMove,
+                                     std::optional<tetris::PieceType> holdPiece) {
               renderer->render(gameIndex + 1, options.model, board, result,
-                               placedPiece, clearedThisMove);
+                               placedPiece, clearedThisMove, holdPiece);
             };
           }
           results[gameIndex] = tetris::simulateGame(
@@ -251,8 +275,11 @@ void printTable(const Options& options,
   std::cout << "model=" << options.model << " games=" << options.games
             << " seed=" << options.seed
             << " max_pieces=" << options.maxPieces
-            << " jobs=" << options.jobs << "\n\n";
-  std::cout << "game  seed        lines    score        pieces  avg_decision  result\n";
+            << " jobs=" << options.jobs
+            << " think_ms=" << options.thinkTimeMs << "\n\n";
+  std::cout << "game  seed        lines    score        pieces  holds  tetris"
+               "  tspin  tsm  ts1  ts2  ts3  b2bmax  brk  depth  nodes"
+               "       avg_decision  result\n";
   for (std::size_t index = 0; index < games.size(); ++index) {
     const auto& game = games[index];
     const char* status = game.invalidDecision
@@ -261,7 +288,19 @@ void printTable(const Options& options,
     std::cout << std::setw(4) << index + 1 << "  " << std::setw(10)
               << game.seed << "  " << std::setw(7) << game.linesCleared << "  "
               << std::setw(12) << game.score << "  " << std::setw(6)
-              << game.piecesPlaced << "  " << std::fixed << std::setprecision(3)
+              << game.piecesPlaced << "  " << std::setw(5) << game.holdsUsed
+              << "  " << std::setw(6) << game.tetrises << "  "
+              << std::setw(5) << game.tSpins << "  " << std::setw(3)
+              << game.tSpinMinis << "  " << std::setw(3)
+              << game.tSpinSingles << "  " << std::setw(3)
+              << game.tSpinDoubles << "  " << std::setw(3)
+              << game.tSpinTriples << "  " << std::setw(6)
+              << game.maxBackToBack << "  " << std::setw(3)
+              << game.backToBackBreaks << "  " << std::fixed
+              << std::setprecision(2)
+              << std::setw(5) << game.averageSearchDepth() << "  "
+              << std::setw(10) << game.searchNodes << "  "
+              << std::setprecision(3)
               << std::setw(9) << game.averageDecisionMs() << " ms  " << status
               << '\n';
   }
@@ -274,6 +313,20 @@ void printTable(const Options& options,
       games, [](const auto& game) { return game.piecesPlaced; });
   const Statistics decisions = statisticsFor(
       games, [](const auto& game) { return game.averageDecisionMs(); });
+  const Statistics depths = statisticsFor(
+      games, [](const auto& game) { return game.averageSearchDepth(); });
+  const Statistics tSpinMinis = statisticsFor(
+      games, [](const auto& game) { return game.tSpinMinis; });
+  const Statistics tSpinSingles = statisticsFor(
+      games, [](const auto& game) { return game.tSpinSingles; });
+  const Statistics tSpinDoubles = statisticsFor(
+      games, [](const auto& game) { return game.tSpinDoubles; });
+  const Statistics tSpinTriples = statisticsFor(
+      games, [](const auto& game) { return game.tSpinTriples; });
+  const Statistics maxBackToBack = statisticsFor(
+      games, [](const auto& game) { return game.maxBackToBack; });
+  const Statistics backToBackBreaks = statisticsFor(
+      games, [](const auto& game) { return game.backToBackBreaks; });
   const auto gameOvers = std::count_if(
       games.begin(), games.end(), [](const auto& game) { return game.gameOver; });
 
@@ -288,6 +341,13 @@ void printTable(const Options& options,
   printStatistic("score", scores);
   printStatistic("pieces", pieces);
   printStatistic("decision_ms", decisions);
+  printStatistic("search_depth", depths);
+  printStatistic("tspin_mini", tSpinMinis);
+  printStatistic("tspin_single", tSpinSingles);
+  printStatistic("tspin_double", tSpinDoubles);
+  printStatistic("tspin_triple", tSpinTriples);
+  printStatistic("b2b_max", maxBackToBack);
+  printStatistic("b2b_breaks", backToBackBreaks);
   std::cout << "game_over     " << gameOvers << "/" << games.size() << '\n';
 }
 
@@ -300,6 +360,7 @@ void printJson(const Options& options,
       {"seed", options.seed},
       {"max_pieces", options.maxPieces},
       {"jobs", options.jobs},
+      {"think_ms", options.thinkTimeMs},
   };
   output["games"] = nlohmann::json::array();
   for (const auto& game : games) output["games"].push_back(gameJson(game));
@@ -312,11 +373,32 @@ void printJson(const Options& options,
       games, [](const auto& game) { return game.piecesPlaced; });
   const Statistics decisions = statisticsFor(
       games, [](const auto& game) { return game.averageDecisionMs(); });
+  const Statistics depths = statisticsFor(
+      games, [](const auto& game) { return game.averageSearchDepth(); });
+  const Statistics tSpinMinis = statisticsFor(
+      games, [](const auto& game) { return game.tSpinMinis; });
+  const Statistics tSpinSingles = statisticsFor(
+      games, [](const auto& game) { return game.tSpinSingles; });
+  const Statistics tSpinDoubles = statisticsFor(
+      games, [](const auto& game) { return game.tSpinDoubles; });
+  const Statistics tSpinTriples = statisticsFor(
+      games, [](const auto& game) { return game.tSpinTriples; });
+  const Statistics maxBackToBack = statisticsFor(
+      games, [](const auto& game) { return game.maxBackToBack; });
+  const Statistics backToBackBreaks = statisticsFor(
+      games, [](const auto& game) { return game.backToBackBreaks; });
   output["summary"] = {
       {"lines", statisticsJson(lines)},
       {"score", statisticsJson(scores)},
       {"pieces", statisticsJson(pieces)},
       {"decision_ms", statisticsJson(decisions)},
+      {"search_depth", statisticsJson(depths)},
+      {"t_spin_minis", statisticsJson(tSpinMinis)},
+      {"t_spin_singles", statisticsJson(tSpinSingles)},
+      {"t_spin_doubles", statisticsJson(tSpinDoubles)},
+      {"t_spin_triples", statisticsJson(tSpinTriples)},
+      {"max_b2b", statisticsJson(maxBackToBack)},
+      {"b2b_breaks", statisticsJson(backToBackBreaks)},
       {"games_over",
        std::count_if(games.begin(), games.end(),
                      [](const auto& game) { return game.gameOver; })},
@@ -331,18 +413,32 @@ void printJson(const Options& options,
 void printCsv(const std::string& model,
               const std::vector<tetris::GameResult>& games) {
   std::cout << "model,game,seed,lines,score,pieces,singles,doubles,triples,"
-               "tetrises,t_spins,perfect_clears,game_over,piece_limit_reached,"
-               "invalid_decision,elapsed_ms,average_decision_ms,max_decision_ms\n";
+               "tetrises,t_spins,t_spin_minis,t_spin_singles,t_spin_doubles,"
+               "t_spin_triples,perfect_clears,holds,b2b_clears,"
+               "b2b_continuations,b2b_breaks,current_b2b,max_b2b,game_over,"
+               "piece_limit_reached,"
+               "invalid_decision,search_nodes,average_search_depth,"
+               "max_search_depth,timed_out_decisions,elapsed_ms,"
+               "average_decision_ms,max_decision_ms\n";
   for (std::size_t index = 0; index < games.size(); ++index) {
     const auto& game = games[index];
     std::cout << model << ',' << index + 1 << ',' << game.seed << ','
               << game.linesCleared << ',' << game.score << ','
               << game.piecesPlaced << ',' << game.singles << ',' << game.doubles
               << ',' << game.triples << ',' << game.tetrises << ','
-              << game.tSpins << ',' << game.perfectClears << ','
+              << game.tSpins << ',' << game.tSpinMinis << ','
+              << game.tSpinSingles << ','
+              << game.tSpinDoubles << ',' << game.tSpinTriples << ','
+              << game.perfectClears << ','
+              << game.holdsUsed << ',' << game.backToBackClears << ','
+              << game.backToBackContinuations << ',' << game.backToBackBreaks
+              << ',' << game.currentBackToBack << ',' << game.maxBackToBack
+              << ','
               << (game.gameOver ? 1 : 0) << ','
               << (game.reachedPieceLimit ? 1 : 0) << ','
-              << (game.invalidDecision ? 1 : 0) << ',' << std::fixed
+              << (game.invalidDecision ? 1 : 0) << ',' << game.searchNodes
+              << ',' << game.averageSearchDepth() << ',' << game.maxSearchDepth
+              << ',' << game.timedOutDecisions << ',' << std::fixed
               << std::setprecision(6) << game.elapsedMs << ','
               << game.averageDecisionMs() << ',' << game.maxDecisionMs << '\n';
   }

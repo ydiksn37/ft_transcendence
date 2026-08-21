@@ -39,18 +39,67 @@ TerminalRenderer::~TerminalRenderer() { finish(); }
 
 void TerminalRenderer::render(std::size_t gameNumber, std::string_view model,
                               const Board& board, const GameResult& result,
-                              PieceType placedPiece, int clearedThisMove) {
+                              PieceType placedPiece, int clearedThisMove,
+                              std::optional<PieceType> holdPiece) {
+  if (gameNumber != lastGameNumber_ || result.piecesPlaced == 1) {
+    lastGameNumber_ = gameNumber;
+    lastTetrises_ = 0;
+    lastTSpins_ = 0;
+    lastTSpinSingles_ = 0;
+    lastTSpinDoubles_ = 0;
+    lastTSpinTriples_ = 0;
+    lastPerfectClears_ = 0;
+  }
+  std::string_view clearEvent;
+  if (result.perfectClears > lastPerfectClears_) {
+    clearEvent = "PERFECT CLEAR!";
+  } else if (result.tSpinTriples > lastTSpinTriples_) {
+    clearEvent = "T-SPIN TRIPLE!";
+  } else if (result.tSpinDoubles > lastTSpinDoubles_) {
+    clearEvent = "T-SPIN DOUBLE!";
+  } else if (result.tSpinSingles > lastTSpinSingles_) {
+    clearEvent = "T-SPIN SINGLE!";
+  } else if (result.tSpins > lastTSpins_) {
+    clearEvent = "T-SPIN MINI!";
+  } else if (result.tetrises > lastTetrises_) {
+    clearEvent = "TETRIS!";
+  } else if (clearedThisMove == 3) {
+    clearEvent = "TRIPLE";
+  } else if (clearedThisMove == 2) {
+    clearEvent = "DOUBLE";
+  } else if (clearedThisMove == 1) {
+    clearEvent = "SINGLE";
+  }
+  lastTetrises_ = result.tetrises;
+  lastTSpins_ = result.tSpins;
+  lastTSpinSingles_ = result.tSpinSingles;
+  lastTSpinDoubles_ = result.tSpinDoubles;
+  lastTSpinTriples_ = result.tSpinTriples;
+  lastPerfectClears_ = result.perfectClears;
+
   cursorHidden_ = true;
   std::cout << "\x1b[?25l\x1b[2J\x1b[H"
             << "AI benchmark preview\n"
             << "model=" << model << "  game=" << gameNumber
             << "  seed=" << result.seed << '\n'
             << "piece=" << toString(placedPiece)
+            << "  hold="
+            << (holdPiece ? toString(*holdPiece) : std::string_view("-"))
+            << "  holds=" << result.holdsUsed
             << "  placed=" << result.piecesPlaced
             << "  lines=" << result.linesCleared
-            << "  score=" << result.score;
+            << "  score=" << result.score
+            << "  b2b=" << result.currentBackToBack << " (max="
+            << result.maxBackToBack << ", breaks="
+            << result.backToBackBreaks << ')'
+            << "  tspin=" << result.tSpins << " (M/S/D/T="
+            << result.tSpinMinis << '/' << result.tSpinSingles << '/'
+            << result.tSpinDoubles << '/' << result.tSpinTriples << ')';
   if (clearedThisMove > 0) {
     std::cout << "  cleared=+" << clearedThisMove;
+  }
+  if (!clearEvent.empty()) {
+    std::cout << "  \x1b[1;93m" << clearEvent << "\x1b[0m";
   }
   std::cout << "\n\n+--------------------+\n";
 
