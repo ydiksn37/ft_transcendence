@@ -56,7 +56,7 @@ void printUsage(std::ostream& output) {
             "  --format table|json|csv\n"
             "  --preview            Color terminal preview (requires jobs=1)\n"
             "  --delay-ms N         Preview delay per piece (default: 100)\n"
-            "  --think-ms N         Hard AI time budget per piece (default: 50)\n"
+            "  --think-ms N         Hard/Expert budget per piece (default: 50)\n"
             "  --list-models\n"
             "  --help\n";
 }
@@ -195,6 +195,7 @@ nlohmann::json gameJson(const tetris::GameResult& game) {
       {"pieces", game.piecesPlaced},
       {"lines", game.linesCleared},
       {"score", game.score},
+      {"attacks_sent", game.attacksSent},
       {"singles", game.singles},
       {"doubles", game.doubles},
       {"triples", game.triples},
@@ -277,7 +278,7 @@ void printTable(const Options& options,
             << " max_pieces=" << options.maxPieces
             << " jobs=" << options.jobs
             << " think_ms=" << options.thinkTimeMs << "\n\n";
-  std::cout << "game  seed        lines    score        pieces  holds  tetris"
+  std::cout << "game  seed        lines    score        attack  pieces  holds  tetris"
                "  tspin  tsm  ts1  ts2  ts3  b2bmax  brk  depth  nodes"
                "       avg_decision  result\n";
   for (std::size_t index = 0; index < games.size(); ++index) {
@@ -288,6 +289,7 @@ void printTable(const Options& options,
     std::cout << std::setw(4) << index + 1 << "  " << std::setw(10)
               << game.seed << "  " << std::setw(7) << game.linesCleared << "  "
               << std::setw(12) << game.score << "  " << std::setw(6)
+              << game.attacksSent << "  " << std::setw(6)
               << game.piecesPlaced << "  " << std::setw(5) << game.holdsUsed
               << "  " << std::setw(6) << game.tetrises << "  "
               << std::setw(5) << game.tSpins << "  " << std::setw(3)
@@ -309,6 +311,8 @@ void printTable(const Options& options,
       games, [](const auto& game) { return game.linesCleared; });
   const Statistics scores =
       statisticsFor(games, [](const auto& game) { return game.score; });
+  const Statistics attacks = statisticsFor(
+      games, [](const auto& game) { return game.attacksSent; });
   const Statistics pieces = statisticsFor(
       games, [](const auto& game) { return game.piecesPlaced; });
   const Statistics decisions = statisticsFor(
@@ -339,6 +343,7 @@ void printTable(const Options& options,
   };
   printStatistic("lines", lines);
   printStatistic("score", scores);
+  printStatistic("attack", attacks);
   printStatistic("pieces", pieces);
   printStatistic("decision_ms", decisions);
   printStatistic("search_depth", depths);
@@ -369,6 +374,8 @@ void printJson(const Options& options,
       games, [](const auto& game) { return game.linesCleared; });
   const Statistics scores =
       statisticsFor(games, [](const auto& game) { return game.score; });
+  const Statistics attacks = statisticsFor(
+      games, [](const auto& game) { return game.attacksSent; });
   const Statistics pieces = statisticsFor(
       games, [](const auto& game) { return game.piecesPlaced; });
   const Statistics decisions = statisticsFor(
@@ -390,6 +397,7 @@ void printJson(const Options& options,
   output["summary"] = {
       {"lines", statisticsJson(lines)},
       {"score", statisticsJson(scores)},
+      {"attacks_sent", statisticsJson(attacks)},
       {"pieces", statisticsJson(pieces)},
       {"decision_ms", statisticsJson(decisions)},
       {"search_depth", statisticsJson(depths)},
@@ -412,7 +420,7 @@ void printJson(const Options& options,
 
 void printCsv(const std::string& model,
               const std::vector<tetris::GameResult>& games) {
-  std::cout << "model,game,seed,lines,score,pieces,singles,doubles,triples,"
+  std::cout << "model,game,seed,lines,score,attacks_sent,pieces,singles,doubles,triples,"
                "tetrises,t_spins,t_spin_minis,t_spin_singles,t_spin_doubles,"
                "t_spin_triples,perfect_clears,holds,b2b_clears,"
                "b2b_continuations,b2b_breaks,current_b2b,max_b2b,game_over,"
@@ -424,7 +432,8 @@ void printCsv(const std::string& model,
     const auto& game = games[index];
     std::cout << model << ',' << index + 1 << ',' << game.seed << ','
               << game.linesCleared << ',' << game.score << ','
-              << game.piecesPlaced << ',' << game.singles << ',' << game.doubles
+              << game.attacksSent << ',' << game.piecesPlaced << ','
+              << game.singles << ',' << game.doubles
               << ',' << game.triples << ',' << game.tetrises << ','
               << game.tSpins << ',' << game.tSpinMinis << ','
               << game.tSpinSingles << ','

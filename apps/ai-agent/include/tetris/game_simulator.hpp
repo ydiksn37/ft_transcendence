@@ -14,6 +14,7 @@ struct GameResult {
   std::size_t piecesPlaced = 0;
   int linesCleared = 0;
   std::int64_t score = 0;
+  std::int64_t attacksSent = 0;
   int singles = 0;
   int doubles = 0;
   int triples = 0;
@@ -44,6 +45,13 @@ struct GameResult {
   [[nodiscard]] double averageDecisionMs() const noexcept;
   [[nodiscard]] double averageSearchDepth() const noexcept;
 };
+
+// Mirrors apps/backend/src/game/engine/garbage.ts. The B2B flag is the state
+// before the current clear, just like calcGarbage receives in TypeScript.
+[[nodiscard]] int calculateGarbage(int linesCleared,
+                                   std::optional<TSpin> tSpin,
+                                   bool perfectClear,
+                                   bool backToBackActive) noexcept;
 
 using FrameCallback = std::function<void(const Board&, const GameResult&,
                                          PieceType, int,

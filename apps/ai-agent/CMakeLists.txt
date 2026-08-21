@@ -26,15 +26,25 @@ add_library(ai_engine
   src/bag.cpp
   src/board.cpp
   src/easy_agent.cpp
+  src/expert_agent.cpp
   src/game_simulator.cpp
   src/hard_agent.cpp
 )
 target_include_directories(ai_engine PUBLIC include)
 
+find_package(Threads REQUIRED)
+
 add_executable(ai_agent src/main.cpp)
 target_link_libraries(ai_agent PRIVATE ai_engine nlohmann_json::nlohmann_json)
 
-find_package(Threads REQUIRED)
+add_executable(ai_tune src/tune_main.cpp)
+target_link_libraries(
+  ai_tune PRIVATE ai_engine nlohmann_json::nlohmann_json Threads::Threads
+)
+
+add_executable(ai_compare src/compare_main.cpp)
+target_link_libraries(ai_compare PRIVATE ai_engine Threads::Threads)
+
 add_executable(
   ai_benchmark
   src/benchmark_main.cpp
@@ -47,6 +57,8 @@ target_link_libraries(
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(ai_engine PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(ai_agent PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(ai_tune PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(ai_compare PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(ai_benchmark PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
@@ -67,5 +79,14 @@ if(BUILD_TESTING)
     NAME ai_benchmark_preview_smoke
     COMMAND ai_benchmark --model easy --games 1 --seed 42 --max-pieces 3
             --preview --delay-ms 0
+  )
+  add_test(
+    NAME ai_tune_smoke
+    COMMAND ai_tune --iterations 1 --population 2 --elite 1 --games 1
+            --validation-games 1 --max-pieces 5 --max-nodes 2000
+  )
+  add_test(
+    NAME ai_compare_smoke
+    COMMAND ai_compare --games 2 --max-pieces 5 --think-ms 1
   )
 endif()

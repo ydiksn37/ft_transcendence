@@ -134,7 +134,8 @@ int main(int argc, char** argv) {
     for (int index = 1; index < argc; ++index) {
       const std::string argument = argv[index];
       if (argument == "--help") {
-        std::cout << "Usage: ai_agent [--model easy|hard] [--think-ms N]\n";
+        std::cout
+            << "Usage: ai_agent [--model easy|hard|expert] [--think-ms N]\n";
         return 0;
       }
       if (index + 1 >= argc) {

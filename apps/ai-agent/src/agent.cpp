@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "tetris/expert_agent.hpp"
 #include "tetris/hard_agent.hpp"
 
 namespace tetris {
@@ -29,11 +30,15 @@ std::unique_ptr<Agent> createAgent(std::string_view modelName,
     return std::make_unique<HardAgent>(
         std::chrono::milliseconds(thinkTimeMs));
   }
+  if (modelName == "expert") {
+    return std::make_unique<ExpertAgent>(
+        std::chrono::milliseconds(thinkTimeMs));
+  }
   throw std::invalid_argument("unknown AI model: " + std::string(modelName));
 }
 
 const std::vector<std::string_view>& availableAgentNames() {
-  static const std::vector<std::string_view> names{"easy", "hard"};
+  static const std::vector<std::string_view> names{"easy", "hard", "expert"};
   return names;
 }
 

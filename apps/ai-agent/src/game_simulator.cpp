@@ -186,6 +186,31 @@ void countClear(GameResult& result, ClearKind kind) {
 
 }  // namespace
 
+int calculateGarbage(int linesCleared, std::optional<TSpin> tSpin,
+                     bool perfectClear,
+                     bool backToBackActive) noexcept {
+  if (perfectClear) return 10;
+
+  int garbage = 0;
+  bool backToBackEligible = false;
+  if (tSpin == TSpin::Full) {
+    if (linesCleared == 1) garbage = 2;
+    if (linesCleared == 2) garbage = 4;
+    if (linesCleared == 3) garbage = 6;
+    backToBackEligible = linesCleared >= 1 && linesCleared <= 3;
+  } else if (tSpin == TSpin::Mini) {
+    garbage = 1;
+  } else {
+    if (linesCleared == 2) garbage = 1;
+    if (linesCleared == 3) garbage = 2;
+    if (linesCleared == 4) garbage = 4;
+    backToBackEligible = linesCleared == 4;
+  }
+
+  if (backToBackActive && backToBackEligible) ++garbage;
+  return garbage;
+}
+
 double GameResult::averageDecisionMs() const noexcept {
   return piecesPlaced == 0 ? 0.0
                            : totalDecisionMs / static_cast<double>(piecesPlaced);
@@ -288,6 +313,8 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       const int level = result.linesCleared / 10 + 1;
       const ClearKind kind =
           classifyClear(cleared.linesCleared, tSpin, board.empty());
+      result.attacksSent += calculateGarbage(
+          cleared.linesCleared, tSpin, board.empty(), backToBackChain > 0);
       const int comboBonus = combo > 0 ? 50 * combo * level : 0;
       result.score += static_cast<std::int64_t>(baseScore(kind)) * level +
                       comboBonus;
@@ -295,7 +322,7 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       // Match game-instance.ts: a Tetris or any line-clearing T-Spin keeps
       // B2B; an ordinary line clear breaks it. A zero-line move preserves it.
       const bool backToBackClear =
-          cleared.linesCleared == 4 || tSpin.has_value();
+          kind == ClearKind::Tetris || tSpin.has_value();
       if (backToBackClear) {
         ++result.backToBackClears;
         if (backToBackChain > 0) ++result.backToBackContinuations;

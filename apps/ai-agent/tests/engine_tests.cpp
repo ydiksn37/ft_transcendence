@@ -10,6 +10,7 @@
 #include "tetris/agent.hpp"
 #include "tetris/bag.hpp"
 #include "tetris/easy_agent.hpp"
+#include "tetris/expert_agent.hpp"
 #include "tetris/game_simulator.hpp"
 #include "tetris/hard_agent.hpp"
 
@@ -241,6 +242,88 @@ void testHardAgentSimulatorDecisionsAreLegal() {
          "maximum B2B chain cannot exceed B2B clears");
 }
 
+void testExpertAgentChoosesTetris() {
+  const tetris::Board board = makeTetrisWell();
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(board, tetris::PieceType::I);
+  expect(decision.has_value(), "expert agent must find a Tetris placement");
+  expect(decision->linesCleared == 4,
+         "expert agent must take an immediately available Tetris");
+  expect(!decision->actions.empty() &&
+             decision->actions.back() == tetris::Action::HardDrop,
+         "expert decision must end with hard drop");
+}
+
+void testExpertAgentChoosesTSpinDouble() {
+  tetris::Board board;
+  board.set(17, 3, tetris::Cell::Garbage);
+  for (int col = 0; col < tetris::kBoardCols; ++col) {
+    if (col != 4 && col != 5) board.set(18, col, tetris::Cell::Garbage);
+    if (col != 4) board.set(19, col, tetris::Cell::Garbage);
+  }
+
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(
+      board, tetris::PieceType::T, {}, std::nullopt, false, 3, 0, 0, true);
+  expect(decision.has_value(), "expert agent must find the prepared TSD");
+  expect(decision->linesCleared == 2,
+         "expert agent must prefer the available T-Spin Double");
+  const bool rotates = std::any_of(
+      decision->actions.begin(), decision->actions.end(),
+      [](tetris::Action action) {
+        return action == tetris::Action::RotateClockwise ||
+               action == tetris::Action::RotateCounterClockwise ||
+               action == tetris::Action::Rotate180;
+      });
+  expect(rotates, "T-Spin Double operation sequence must contain a rotation");
+}
+
+void testExpertAgentUsesHold() {
+  const tetris::Board board = makeTetrisWell();
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100));
+  const auto decision = agent.decide(
+      board, tetris::PieceType::O, {}, tetris::PieceType::I, true);
+  expect(decision.has_value(), "expert agent must search the held piece");
+  expect(!decision->actions.empty() &&
+             decision->actions.front() == tetris::Action::Hold,
+         "expert agent must use Hold for the available Tetris");
+  expect(decision->placement.type == tetris::PieceType::I &&
+             decision->linesCleared == 4,
+         "expert agent must complete the Tetris with held I");
+}
+
+void testExpertAgentSimulatorDecisionsAreLegal() {
+  tetris::ExpertAgent agent(std::chrono::milliseconds(5));
+  const auto result = tetris::simulateGame(agent, 42, 10);
+  expect(result.piecesPlaced == 10 && result.reachedPieceLimit,
+         "expert agent must reach the short simulation limit");
+  expect(!result.invalidDecision,
+         "expert agent must return replayable TypeScript-compatible actions");
+  expect(result.searchNodes > 0 && result.maxSearchDepth >= 1,
+         "expert simulation must collect search statistics");
+}
+
+void testExpertAgentIsRegistered() {
+  const auto agent = tetris::createAgent("expert", 5);
+  expect(agent->name() == "expert", "expert model must be registered");
+  const auto& names = tetris::availableAgentNames();
+  expect(std::find(names.begin(), names.end(), "expert") != names.end(),
+         "expert model must be listed by the benchmark");
+}
+
+void testExpertFixedNodeSearchIsDeterministic() {
+  tetris::ExpertAgent first(std::chrono::milliseconds(1), {}, 6000);
+  tetris::ExpertAgent second(std::chrono::milliseconds(1), {}, 6000);
+  const auto firstResult = tetris::simulateGame(first, 4242, 10);
+  const auto secondResult = tetris::simulateGame(second, 4242, 10);
+  expect(firstResult.linesCleared == secondResult.linesCleared &&
+             firstResult.attacksSent == secondResult.attacksSent &&
+             firstResult.searchNodes == secondResult.searchNodes,
+         "fixed-node Expert evaluation must be reproducible");
+  expect(!firstResult.invalidDecision && !secondResult.invalidDecision,
+         "fixed-node Expert decisions must remain replayable");
+}
+
 void testSeededBagIsDeterministicAndUsesAllPieces() {
   tetris::BagGenerator first(42);
   tetris::BagGenerator second(42);
@@ -269,10 +352,32 @@ void testSimulatorIsDeterministic() {
          "same benchmark seed must reproduce cleared lines");
   expect(first.score == second.score,
          "same benchmark seed must reproduce score");
+  expect(first.attacksSent == second.attacksSent,
+         "same benchmark seed must reproduce sent garbage");
   expect(first.piecesPlaced == second.piecesPlaced,
          "same benchmark seed must reproduce placed pieces");
   expect(!first.invalidDecision && !second.invalidDecision,
          "easy agent decisions must replay legally");
+}
+
+void testGarbageCalculationMatchesTypeScript() {
+  expect(tetris::calculateGarbage(1, std::nullopt, false, false) == 0,
+         "Single must send zero garbage");
+  expect(tetris::calculateGarbage(2, std::nullopt, false, false) == 1,
+         "Double must send one garbage line");
+  expect(tetris::calculateGarbage(3, std::nullopt, false, false) == 2,
+         "Triple must send two garbage lines");
+  expect(tetris::calculateGarbage(4, std::nullopt, false, false) == 4 &&
+             tetris::calculateGarbage(4, std::nullopt, false, true) == 5,
+         "Tetris must receive the backend B2B bonus");
+  expect(tetris::calculateGarbage(1, tetris::TSpin::Full, false, false) == 2 &&
+             tetris::calculateGarbage(2, tetris::TSpin::Full, false, true) == 5 &&
+             tetris::calculateGarbage(3, tetris::TSpin::Full, false, false) == 6,
+         "full T-Spins must use the backend attack table");
+  expect(tetris::calculateGarbage(1, tetris::TSpin::Mini, false, true) == 1,
+         "T-Spin Mini must not receive a B2B attack bonus");
+  expect(tetris::calculateGarbage(4, std::nullopt, true, true) == 10,
+         "Perfect Clear must override line and B2B attack values");
 }
 
 }  // namespace
@@ -293,8 +398,15 @@ int main() {
     testSimulatorAppliesHoldAndConsumesNext();
     testHardAgentChoosesTSpin();
     testHardAgentSimulatorDecisionsAreLegal();
+    testExpertAgentChoosesTetris();
+    testExpertAgentChoosesTSpinDouble();
+    testExpertAgentUsesHold();
+    testExpertAgentSimulatorDecisionsAreLegal();
+    testExpertAgentIsRegistered();
+    testExpertFixedNodeSearchIsDeterministic();
     testSeededBagIsDeterministicAndUsesAllPieces();
     testSimulatorIsDeterministic();
+    testGarbageCalculationMatchesTypeScript();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

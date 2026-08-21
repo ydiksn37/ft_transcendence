@@ -1,7 +1,7 @@
 # AI agent
 
-Standalone C++ AI agent for the Tetris game engine. It currently contains the
-board rules and an Easy agent that performs a one-piece greedy search.
+Standalone C++ AI agent for the Tetris game engine. It contains the shared
+board rules plus Easy, Hard, and Expert search models.
 
 The board behavior mirrors the TypeScript backend:
 
@@ -58,7 +58,7 @@ codes would corrupt JSON or CSV output.
 
 The result contains, for each seed:
 
-- cleared lines, score, and placed pieces;
+- cleared lines, score, sent garbage, and placed pieces;
 - Single/Double/Triple/Tetris, total T-Spin, T-Spin Mini/Single/Double/Triple,
   and Perfect Clear counts;
 - Hold count and completed search depth;
@@ -128,6 +128,65 @@ depends on CPU scheduling, time-limited Hard runs are not guaranteed to choose
 the same move on every machine even with the same seed. Use the same machine,
 `--think-ms`, and `--jobs 1` for performance comparisons.
 
+### Expert model
+
+Expert is an independent C++ model and does not call Cold Clear or another
+external AI API. It uses a time-bounded beam search over placements reachable
+through the same moves and rotations as the TypeScript backend. Hold and the
+known Next queue are searched at every depth.
+
+Unlike Hard, Expert ranks clears using the backend garbage table directly. Its
+search state carries B2B status, including the backend's T-Spin Mini and Perfect
+Clear behavior. The evaluator combines survival features with Tetris wells and
+completed T-Spin Double slots. TSD receives an efficiency bonus because it
+sends Tetris-level garbage with two cleared lines, while an ordinary clear gets
+a height-sensitive penalty when it breaks B2B.
+
+```sh
+make ai-run model=expert think_ms=50
+
+./build/ai-agent/ai_benchmark \
+  --model expert --games 10 --seed 42 --max-pieces 1000 \
+  --jobs 1 --think-ms 50
+```
+
+Expert always starts a decision from the server-supplied board. Its returned
+operation sequence remains subject to replay by the authoritative game engine.
+
+### Expert weight tuning
+
+`ai_tune` applies the Cross-Entropy Method (CEM) to the Expert evaluation
+weights. Every candidate receives the same piece seeds and a fixed search-node
+budget, so fitness comparisons are reproducible and do not depend on CPU
+timing. Fitness primarily rewards sent garbage per piece, then survival and B2B.
+An independently seeded validation set decides whether sampled weights are
+recommended.
+
+```sh
+make ai-tune
+
+# Larger search used for a more reliable tuning run
+make ai-tune \
+  tune_iterations=5 tune_population=10 tune_elite=3 \
+  tune_games=4 tune_seed=1000 \
+  tune_validation_games=8 tune_validation_seed=2000000 \
+  tune_max_pieces=100 tune_max_nodes=8000
+```
+
+The command prints the baseline, best training result, holdout validation, and
+the recommended weights as JSON. The current defaults were selected from three
+optimizer seeds using 50 training and 50 validation seeds. The complete split,
+results, and final untouched 100-seed test are recorded in `TUNING.md`.
+
+Use `ai_compare` for a paired Hard/Expert test. It reports the mean same-seed
+difference and its 95% confidence interval.
+
+```sh
+make ai-compare \
+  compare_games=100 compare_seed=3000000 compare_max_pieces=500 \
+  compare_jobs=10 think_ms=50
+```
+
 ## JSON Lines protocol
 
 The agent writes one JSON object per line to stdout. Logs must be written to
@@ -139,8 +198,8 @@ It first reports readiness:
 {"version":1,"type":"ready","difficulty":"easy"}
 ```
 
-A decision request contains the locked board and current piece. Hard also reads
-the optional `next`, `hold`, `canHold`, and `b2b` fields for multi-piece search.
+A decision request contains the locked board and current piece. Hard and Expert
+read the optional `next`, `hold`, `canHold`, and `b2b` fields for multi-piece search.
 `b2b` may be the backend's numeric chain count or a boolean; `b2bActive` is also
 accepted. Board rows may be arrays in the same format as TypeScript (`null`,
 `"I"`, `"GARBAGE"`, etc.), or ten-character strings using `.` for empty and `#`
@@ -158,8 +217,8 @@ The response contains a reachable operation sequence ending in `hard_drop`:
 
 Send `{"type":"shutdown"}` to stop the worker cleanly.
 
-Start a persistent Hard JSON worker with:
+Start a persistent Expert JSON worker with:
 
 ```sh
-./build/ai-agent/ai_agent --model hard --think-ms 50
+./build/ai-agent/ai_agent --model expert --think-ms 50
 ```

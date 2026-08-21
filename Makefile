@@ -69,6 +69,21 @@ jobs ?= 1
 preview ?= 1
 delay_ms ?= 100
 think_ms ?= 50
+tune_iterations ?= 4
+tune_population ?= 8
+tune_elite ?= 2
+tune_games ?= 2
+tune_seed ?= 42
+tune_validation_games ?= 4
+tune_validation_seed ?= 1000000
+tune_optimizer_seed ?= 1
+tune_max_pieces ?= 80
+tune_max_nodes ?= 6000
+tune_jobs ?= 1
+compare_games ?= 100
+compare_seed ?= 3000000
+compare_max_pieces ?= 500
+compare_jobs ?= 1
 
 ai-build: ## C++ AIをReleaseモードで設定・ビルドする
 	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
@@ -82,6 +97,28 @@ ai-run: ai-build ## C++ AIを実行する (例: make ai-run model=easy)
 		--max-pieces "$(max_pieces)" \
 		--jobs "$(jobs)" $(if $(filter 1 true yes,$(preview)),--preview) \
 		--delay-ms "$(delay_ms)" \
+		--think-ms "$(think_ms)"
+
+ai-tune: ai-build ## CEMでExpert評価関数を最適化する
+	./$(AI_BUILD_DIR)/ai_tune \
+		--iterations "$(tune_iterations)" \
+		--population "$(tune_population)" \
+		--elite "$(tune_elite)" \
+		--games "$(tune_games)" \
+		--seed "$(tune_seed)" \
+		--validation-games "$(tune_validation_games)" \
+		--validation-seed "$(tune_validation_seed)" \
+		--optimizer-seed "$(tune_optimizer_seed)" \
+		--max-pieces "$(tune_max_pieces)" \
+		--max-nodes "$(tune_max_nodes)" \
+		--jobs "$(tune_jobs)"
+
+ai-compare: ai-build ## HardとExpertを同一seedで比較し95%信頼区間を表示する
+	./$(AI_BUILD_DIR)/ai_compare \
+		--games "$(compare_games)" \
+		--seed "$(compare_seed)" \
+		--max-pieces "$(compare_max_pieces)" \
+		--jobs "$(compare_jobs)" \
 		--think-ms "$(think_ms)"
 
 # --- テスト ---

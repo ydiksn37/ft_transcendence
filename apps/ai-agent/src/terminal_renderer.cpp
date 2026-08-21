@@ -89,6 +89,7 @@ void TerminalRenderer::render(std::size_t gameNumber, std::string_view model,
             << "  placed=" << result.piecesPlaced
             << "  lines=" << result.linesCleared
             << "  score=" << result.score
+            << "  attack=" << result.attacksSent
             << "  b2b=" << result.currentBackToBack << " (max="
             << result.maxBackToBack << ", breaks="
             << result.backToBackBreaks << ')'
