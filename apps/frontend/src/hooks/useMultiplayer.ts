@@ -164,6 +164,74 @@ export const useMultiplayer = ({
     });
   }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
 
+  const startVsAi = useCallback((difficulty: string) => {
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+    setGameMode('ONLINE_1V1'); // Reusing ONLINE_1V1 for game physics mode
+    setAppState('ONLINE_1V1'); // Reusing ONLINE_1V1 for UI state
+    setIsWaiting(true);
+    setOpponentStage(createStage(10));
+    setOpponentScore(0);
+    setPendingGarbage([]);
+    pendingGarbageRef.current = [];
+
+    const newStage = createStage(10);
+    setStage(newStage);
+    stageRef.current = newStage;
+    resetPlayer(10, newStage);
+    resetHold();
+    setScore(0);
+    setLevel(1);
+    setLines(0);
+    setGameOver(false);
+    setMatchResult(null);
+
+    const newSocket = io('/', { forceNew: true });
+    setSocket(newSocket);
+    socketRef.current = newSocket;
+
+    newSocket.on('connect', () => {
+      newSocket.emit('game:start_vs_ai', { difficulty });
+    });
+
+    // バックエンドは match:found に seed を入れて送信する
+    newSocket.on('match:found', (data: { roomId: string; seed: number; vsAi: boolean }) => {
+      setRandomSeed(data.seed);
+      setIsWaiting(false);
+    });
+
+    // game:start でゲームを開始する（GameInstance.start() から emit される）
+    newSocket.on('game:start', () => {
+      setTimeout(() => startGame('ONLINE_1V1'), 100);
+    });
+
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+      setOpponentStage(data.stage);
+      setOpponentScore(data.score);
+    });
+
+    newSocket.on('receive_garbage', (data: { lines: number }) => {
+      pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
+      setPendingGarbage(pendingGarbageRef.current);
+    });
+
+    newSocket.on('opponent_game_over', () => {
+      setMatchResult(prev => prev === null ? 'WIN' : prev);
+      setGameOver(true);
+      setDropTime(null);
+    });
+
+    newSocket.on('disconnect', (reason: string) => {
+      if (!gameOver) {
+        setMatchResult(prev => prev === null ? 'WIN' : prev);
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
+  }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime, gameOver]);
+
   useEffect(() => {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
@@ -182,5 +250,5 @@ export const useMultiplayer = ({
     }
   }, [gameOver, socket, appState, matchResult]);
 
-  return { joinOnline, setupCustomRoomConnection };
+  return { joinOnline, setupCustomRoomConnection, startVsAi };
 };

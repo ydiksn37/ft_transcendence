@@ -5,6 +5,7 @@ import {
   AiDifficulty,
   ServerEvent,
   ClientEvent,
+  AI_BOT_CONFIGS,
 } from '@transcendence/shared';
 import { BagGenerator } from './engine/bag-generator';
 import {
@@ -21,7 +22,7 @@ import {
   BOARD_COLS,
 } from './engine/board';
 import { calcGarbage, calcScore, isPerfectClear } from './engine/garbage';
-import { calcAiMove } from './engine/ai-bot';
+import { AiAgentService } from './engine/ai-agent.service';
 
 const LOCK_DELAY_MS = 500;
 const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
@@ -62,6 +63,7 @@ export class GameInstance {
   private lockTimer: Map<string, NodeJS.Timeout> = new Map();
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
+  private aiAgentService?: AiAgentService;
 
   private onGameOver?: (
     roomId: string,
@@ -90,11 +92,13 @@ export class GameInstance {
       winnerId: string | null,
       stats: Record<string, any>,
     ) => void,
+    aiAgentService?: AiAgentService,
   ) {
     this.roomId = roomId;
     this.server = server;
     this.bag = new BagGenerator(seed);
     this.onGameOver = onGameOver;
+    this.aiAgentService = aiAgentService;
   }
 
   /** プレイヤーを追加 */
@@ -462,6 +466,21 @@ export class GameInstance {
     this.lockTimer.set(socketId, timer);
   }
 
+  public get isAiMatch(): boolean {
+    return this.aiDifficulty !== null;
+  }
+
+  public receiveGarbageFromClient(targetSocketId: string, lines: number): void {
+    const aiPlayer = this.players.get(`ai_${this.roomId}`);
+    if (aiPlayer && !aiPlayer.isGameOver) {
+      aiPlayer.garbageQueue += lines;
+    }
+  }
+
+  public handleClientGameOver(socketId: string): void {
+    this.handleGameOver(socketId);
+  }
+
   private clearLockTimer(socketId: string): void {
     const t = this.lockTimer.get(socketId);
     if (t) {
@@ -475,6 +494,11 @@ export class GameInstance {
     this.players.forEach((player, socketId) => {
       if (socketId !== senderSocketId && !player.isGameOver) {
         player.garbageQueue += lines;
+        
+        // AIがおじゃまを送った場合、人間のフロントエンドに送信
+        if (this.isAiMatch && senderSocketId === `ai_${this.roomId}` && socketId !== `ai_${this.roomId}`) {
+          this.server.to(socketId).emit('receive_garbage', { lines });
+        }
       }
     });
   }
@@ -528,8 +552,20 @@ export class GameInstance {
     };
 
     this.players.forEach((_, sid) => {
-      if (sid !== socketId)
+      if (sid !== socketId) {
         this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
+
+        // AIの盤面更新を、フロントエンドのP2P形式に合わせて送信（可視の下20行のみ）
+        if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
+          const visibleRows = player.board.slice(-20); // 40行ボードの下20行（可視部分）
+          const frontendStage = visibleRows.map(row => row.map(cell => {
+            if (cell === null) return [0, 'clear'];
+            if (cell === 'GARBAGE') return ['B', 'merged'];
+            return [cell, 'merged'];
+          }));
+          this.server.to(sid).emit('opponent_board_update', { stage: frontendStage, score: player.score });
+        }
+      }
     });
     this.spectators.forEach((sid) => {
       this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
@@ -579,34 +615,49 @@ export class GameInstance {
     const aiEntry = [...this.players.entries()].find(
       ([, p]) => p.userId === null,
     );
-    if (!aiEntry || !this.aiDifficulty) return;
+    if (!aiEntry || !this.aiDifficulty || !this.aiAgentService) return;
     const [aiSocketId, aiPlayer] = aiEntry;
 
+    // C++エージェントのアクション文字列からClientEventへのマッピング
+    const actionMap: Record<string, string> = {
+      'move_left': ClientEvent.MOVE_LEFT,
+      'move_right': ClientEvent.MOVE_RIGHT,
+      'rotate_cw': ClientEvent.ROTATE_CW,
+      'rotate_ccw': ClientEvent.ROTATE_CCW,
+      'rotate_180': ClientEvent.ROTATE_180,
+      'soft_drop': ClientEvent.SOFT_DROP,
+      'hard_drop': ClientEvent.HARD_DROP,
+      'hold': ClientEvent.HOLD,
+    };
+
     while (this.isRunning && !aiPlayer.isGameOver) {
-      const move = await calcAiMove(
-        aiPlayer.board,
-        aiPlayer.activeMino,
-        this.aiDifficulty,
-      );
+      // バックエンドのボードは40行（上部バッファ+可視部分）なので下20行のみ渡す
+      const visibleBoard = aiPlayer.board.slice(-20);
+      const decision = await this.aiAgentService.getDecision(this.aiDifficulty, {
+        board: visibleBoard,
+        piece: aiPlayer.activeMino,
+        next: this.bag.peek(5),
+        hold: aiPlayer.holdMino,
+        canHold: aiPlayer.canHold,
+        b2b: aiPlayer.b2b > 0,
+        spawn: { x: aiPlayer.activeX, y: Math.max(0, aiPlayer.activeY - 20), rotation: aiPlayer.activeRotation }
+      });
 
-      if (!this.isRunning) break;
+      if (!this.isRunning || aiPlayer.isGameOver) break;
 
-      // AI の移動を適用
-      const rotations = move.rotation - aiPlayer.activeRotation;
-      for (let i = 0; i < Math.abs(rotations); i++) {
-        this.applyInput(
-          aiSocketId,
-          rotations > 0 ? ClientEvent.ROTATE_CW : ClientEvent.ROTATE_CCW,
-        );
+      const delay = AI_BOT_CONFIGS[this.aiDifficulty].thinkDelayMs;
+      await new Promise(r => setTimeout(r, delay));
+
+      if (decision.actions) {
+        for (const action of decision.actions) {
+          const clientEvent = actionMap[action];
+          if (clientEvent) {
+            this.applyInput(aiSocketId, clientEvent);
+          }
+        }
+      } else {
+        break;
       }
-      const dx = move.x - aiPlayer.activeX;
-      for (let i = 0; i < Math.abs(dx); i++) {
-        this.applyInput(
-          aiSocketId,
-          dx > 0 ? ClientEvent.MOVE_RIGHT : ClientEvent.MOVE_LEFT,
-        );
-      }
-      this.applyInput(aiSocketId, ClientEvent.HARD_DROP);
     }
   }
 

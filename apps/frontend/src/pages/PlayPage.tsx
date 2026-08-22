@@ -32,7 +32,7 @@ const formatTime = (ms: number) => {
 
 
 const PlayPage = () => {
-  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' }>();
+  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'VS_AI' }>();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -110,12 +110,17 @@ const PlayPage = () => {
   const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
   const joinOnlineRef = useRef<(() => void) | null>(null);
   const setupCustomRoomConnectionRef = useRef<(() => void) | null>(null);
+  const startVsAiRef = useRef<((difficulty: string) => void) | null>(null);
 
   useEffect(() => {
     if (mode === 'ONLINE_1V1') {
       joinOnlineRef.current?.();
     } else if (mode === 'CUSTOM_ROOMS') {
       setupCustomRoomConnectionRef.current?.();
+    } else if (mode === 'VS_AI') {
+      const params = new URLSearchParams(window.location.search);
+      const difficulty = params.get('difficulty') || 'EASY';
+      startVsAiRef.current?.(difficulty);
     } else if (mode) {
       startGameRef.current?.(mode);
     }
@@ -644,13 +649,18 @@ const PlayPage = () => {
     };
   }, [appState, gameOver, countdown]);
 
-  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
+  const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting,
     setOpponentStage, setOpponentScore,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
   });
+
+  useEffect(() => { joinOnlineRef.current = joinOnline; }, [joinOnline]);
+  useEffect(() => { setupCustomRoomConnectionRef.current = setupCustomRoomConnection; }, [setupCustomRoomConnection]);
+  useEffect(() => { startVsAiRef.current = startVsAi; }, [startVsAi]);
+  useEffect(() => { startGameRef.current = startGame; }, [startGame]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const { heldKeys } = useKeyboardControls({

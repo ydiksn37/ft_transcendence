@@ -19,6 +19,7 @@ import {
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
+import { AiAgentService } from './engine/ai-agent.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -63,6 +64,7 @@ export class GameGateway
   constructor(
     private readonly gameService: GameService,
     private readonly chatService: ChatService,
+    private readonly aiAgentService: AiAgentService,
   ) {}
 
   afterInit() {
@@ -176,7 +178,7 @@ export class GameGateway
         this.rooms.delete(rId);
       };
 
-      const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+      const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
       // ユーザーIDはJWTから取得（実装簡略化のため socket.data を利用）
       const userId1 = (client.data?.userId as string) ?? null;
@@ -413,7 +415,7 @@ export class GameGateway
       }
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
     instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
     instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
 
@@ -441,7 +443,7 @@ export class GameGateway
       this.rooms.delete(rId);
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
     const userId = (client.data?.userId as string) ?? null;
     instance.addPlayer(client.id, userId);
@@ -522,6 +524,11 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('receive_garbage', data);
+
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.receiveGarbageFromClient(client.id, data.lines);
+    }
   }
 
   @SubscribeMessage('game_over')
@@ -529,6 +536,11 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('opponent_game_over');
+
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.handleClientGameOver(client.id);
+    }
   }
 
   // ── 観戦 ─────────────────────────────────────────────────
