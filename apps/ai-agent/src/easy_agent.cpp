@@ -6,6 +6,8 @@
 #include <tuple>
 #include <utility>
 
+#include "tetris/decision_context.hpp"
+
 namespace tetris {
 namespace {
 
@@ -104,7 +106,8 @@ std::optional<EasyDecision> decideEasy(const Board& board,
                                        PieceType type,
                                        int spawnX,
                                        int spawnY,
-                                       int spawnRotation) {
+                                       int spawnRotation,
+                                       const std::vector<int>& pendingGarbageGaps) {
   const ActivePiece spawn{type, spawnX, spawnY,
                           ((spawnRotation % 4) + 4) % 4};
   if (!isValidPosition(board, spawn)) return std::nullopt;
@@ -136,7 +139,9 @@ std::optional<EasyDecision> decideEasy(const Board& board,
     if (evaluatedPlacements.insert(keyFor(placement)).second) {
       const Board locked = lockMino(board, placement);
       const ClearResult cleared = clearLines(locked);
-      const BoardEvaluation evaluation = evaluateBoard(cleared.board);
+      const Board projectedBoard =
+          applyPendingGarbage(cleared.board, pendingGarbageGaps);
+      const BoardEvaluation evaluation = evaluateBoard(projectedBoard);
       std::vector<Action> actions = node.actions;
       actions.push_back(Action::HardDrop);
 

@@ -232,12 +232,11 @@ export const useMultiplayer = ({
     // バックエンドは match:found に seed を入れて送信する
     newSocket.on('match:found', (data: { roomId: string; seed: number; vsAi: boolean }) => {
       setRandomSeed(data.seed);
-      setIsWaiting(false);
     });
 
     // game:start でゲームを開始する（GameInstance.start() から emit される）
     newSocket.on('game:start', () => {
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
+      startGame('ONLINE_1V1');
     });
 
     newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {

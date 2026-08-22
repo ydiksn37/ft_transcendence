@@ -101,6 +101,7 @@ services:
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
       UPLOAD_DIR: /app/uploads
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      AI_AGENT_PATH: /usr/local/bin/ai_agent
     volumes:
       - ./apps/backend/src:/app/apps/backend/src:ro  # ホットリロード用
       - uploads_data:/app/uploads

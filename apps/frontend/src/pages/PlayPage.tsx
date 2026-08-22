@@ -37,6 +37,10 @@ const PlayPage = () => {
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
+  const requestedAiDifficulty = (queryParams.get('difficulty') || 'EASY').toUpperCase();
+  const aiDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedAiDifficulty)
+    ? requestedAiDifficulty
+    : 'EASY';
   const {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
@@ -648,12 +652,7 @@ const PlayPage = () => {
     } else if (mode === 'CUSTOM_ROOMS') {
       setupCustomRoomConnection();
     } else if (mode === 'VS_AI') {
-      const params = new URLSearchParams(location.search);
-      const requestedDifficulty = (params.get('difficulty') || 'EASY').toUpperCase();
-      const difficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedDifficulty)
-        ? requestedDifficulty
-        : 'EASY';
-      startVsAi(difficulty);
+      startVsAi(aiDifficulty);
     } else {
       startGame(mode);
     }
@@ -740,7 +739,8 @@ const PlayPage = () => {
       createStage={createStage}
       appState={appState}
       restartGame={() => startGame()}
-      joinOnline={joinOnline}
+      joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty) : joinOnline}
+      onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
       onHold={() => playerHold(stage[0].length, stage)}
     />
   );

@@ -4,7 +4,7 @@ RUN apk add --no-cache cmake make g++ git
 WORKDIR /app
 COPY apps/ai-agent ./apps/ai-agent
 RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build --parallel
+    && cmake --build build --parallel --target ai_agent
 
 # ─── 開発ステージ ─────────────────────────────
 FROM node:22-alpine AS development
@@ -54,6 +54,7 @@ RUN apk add --no-cache libstdc++
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV AI_AGENT_PATH=/usr/local/bin/ai_agent
 
 COPY --from=builder /app/apps/backend/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules

@@ -4,6 +4,8 @@ import {
   GameState,
   TetrominoType,
   AiDifficulty,
+  AiAgentModel,
+  AiPreviewStatus,
   ServerEvent,
   ClientEvent,
   AI_BOT_CONFIGS,
@@ -23,10 +25,29 @@ import {
   BOARD_COLS,
 } from './engine/board';
 import { calcGarbage, calcScore, isPerfectClear } from './engine/garbage';
+import { CppAgentProcess } from './headless/cpp-agent-process';
+import {
+  AgentAction,
+  AgentDecisionRequest,
+  AgentDecisionResponse,
+  AGENT_ACTIONS,
+  boardToAgentRows,
+  VISIBLE_ROW_OFFSET,
+} from './headless/headless-battle';
 import { AiAgentService } from './engine/ai-agent.service';
 
 const LOCK_DELAY_MS = 500;
 const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
+const AI_MATCH_COUNTDOWN_MS = 1000;
+const MAX_AI_ACTIONS = 1000;
+
+export interface CppAiPreviewOptions {
+  executable: string;
+  model: AiAgentModel;
+  thinkTimeMs: number;
+  responseTimeoutMs: number;
+  actionDelayMs: number;
+}
 
 export interface PlayerState {
   socketId: string;
@@ -46,6 +67,7 @@ export interface PlayerState {
   b2b: number;
   isGameOver: boolean;
   lastMoveWasRotation: boolean;
+  lastRotationKickIndex: number;
   // APM/PPS 計算
   startTime: number;
   attacksSent: number;
@@ -62,9 +84,13 @@ export class GameInstance {
   private players: Map<string, PlayerState> = new Map();
   private spectators: Set<string> = new Set();
   private gravityTimer: NodeJS.Timeout | null = null;
+  private simulationStartTimer: NodeJS.Timeout | null = null;
   private lockTimer: Map<string, NodeJS.Timeout> = new Map();
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
+  private cppAgent: CppAgentProcess | null = null;
+  private cppPreviewOptions: CppAiPreviewOptions | null = null;
+  private cppDecisionSequence = 0;
   private aiAgentService?: AiAgentService;
 
   private onGameOver?: (
@@ -124,6 +150,7 @@ export class GameInstance {
       b2b: 0,
       isGameOver: false,
       lastMoveWasRotation: false,
+      lastRotationKickIndex: 0,
       startTime: Date.now(),
       attacksSent: 0,
       piecesPlaced: 0,
@@ -152,34 +179,104 @@ export class GameInstance {
       this.broadcastState(socketId, player);
     });
 
-    // 重力タイマー開始
-    this.startGravity();
+    const beginSimulation = () => {
+      this.simulationStartTimer = null;
+      if (!this.isRunning) return;
 
-    // AI が存在する場合は非同期で動かす
-    if (this.aiDifficulty) {
-      void this.runAiLoop().catch((error: unknown) => {
-        this.logger.error(
-          `AI loop failed in room ${this.roomId}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-        this.server.to(this.roomId).emit(ServerEvent.ERROR, {
-          message: 'AI opponent stopped unexpectedly',
-        });
-
-        const aiSocketId = `ai_${this.roomId}`;
-        const aiPlayer = this.players.get(aiSocketId);
-        if (aiPlayer && !aiPlayer.isGameOver) {
-          this.handleGameOver(aiSocketId);
-        }
+      const startedAt = Date.now();
+      this.players.forEach((player) => {
+        player.startTime = startedAt;
       });
+      this.startGravity();
+
+      // AI が存在する場合は非同期で動かす
+      if (this.aiDifficulty) {
+        void this.runAiLoop().catch((error: unknown) => {
+          this.logger.error(
+            `AI loop failed in room ${this.roomId}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+          this.server.to(this.roomId).emit(ServerEvent.ERROR, {
+            message: 'AI opponent stopped unexpectedly',
+          });
+
+          const aiSocketId = `ai_${this.roomId}`;
+          const aiPlayer = this.players.get(aiSocketId);
+          if (aiPlayer && !aiPlayer.isGameOver) {
+            this.handleGameOver(aiSocketId);
+          }
+        });
+      }
+    };
+
+    // VS AIではブラウザ側のREADY表示と同じ1秒後にシミュレーションを始める。
+    if (this.aiDifficulty) {
+      this.simulationStartTimer = setTimeout(
+        beginSimulation,
+        AI_MATCH_COUNTDOWN_MS,
+      );
+    } else {
+      beginSimulation();
     }
+  }
+
+  /** C++ は探索だけを行い、返された操作はこのTSエンジンで再生する。 */
+  async startCppPreview(options: CppAiPreviewOptions): Promise<void> {
+    if (this.isRunning) this.stop();
+    this.isRunning = true;
+    this.aiDifficulty = null;
+    this.cppPreviewOptions = { ...options };
+    this.cppDecisionSequence = 0;
+    this.emitCppPreviewStatus('starting');
+
+    const agent = new CppAgentProcess({
+      executable: options.executable,
+      model: options.model,
+      thinkTimeMs: options.thinkTimeMs,
+      responseTimeoutMs: options.responseTimeoutMs,
+    });
+    this.cppAgent = agent;
+
+    try {
+      await agent.ready();
+      if (!this.isRunning || this.cppAgent !== agent) return;
+
+      this.server.to(this.roomId).emit(ServerEvent.GAME_START, {
+        roomId: this.roomId,
+        aiPreview: true,
+        model: options.model,
+      });
+      this.players.forEach((player, socketId) => {
+        player.startTime = Date.now();
+        this.broadcastState(socketId, player);
+      });
+      await this.runCppPreviewLoop(agent);
+    } catch (error) {
+      if (!this.isRunning || this.cppAgent !== agent) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.emitCppPreviewStatus('error', { message });
+      this.server.to(this.roomId).emit(ServerEvent.ERROR, { message });
+      this.stop();
+    }
+  }
+
+  setCppPreviewActionDelay(actionDelayMs: number): void {
+    if (!this.cppPreviewOptions) return;
+    this.cppPreviewOptions.actionDelayMs = Math.max(
+      0,
+      Math.min(1000, Math.trunc(actionDelayMs)),
+    );
+    this.emitCppPreviewStatus('executing');
   }
 
   /** 重力ループ */
   private startGravity(): void {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
-        if (player.isGameOver || (this.aiDifficulty && player.userId === null))
+        if (
+          player.isGameOver ||
+          (this.aiDifficulty && socketId === `ai_${this.roomId}`)
+        )
           return;
         this.applyGravity(socketId);
       });
@@ -248,6 +345,7 @@ export class GameInstance {
           player.activeY = result.y;
           player.activeRotation = result.rotation;
           player.lastMoveWasRotation = true;
+          player.lastRotationKickIndex = result.kickIndex;
           moved = true;
         }
         break;
@@ -265,6 +363,7 @@ export class GameInstance {
         ) {
           player.activeY += 1;
           player.score += 1;
+          player.lastMoveWasRotation = false;
           moved = true;
         }
         break;
@@ -309,6 +408,7 @@ export class GameInstance {
       )
     ) {
       player.activeY += 1;
+      player.lastMoveWasRotation = false;
       this.broadcastState(socketId, player);
     } else {
       this.scheduleLock(socketId);
@@ -330,6 +430,7 @@ export class GameInstance {
       dropY++;
       player.score += 2;
     }
+    if (dropY > player.activeY) player.lastMoveWasRotation = false;
     player.activeY = dropY;
     this.lockPiece(socketId, player);
   }
@@ -352,7 +453,15 @@ export class GameInstance {
   private lockPiece(socketId: string, player: PlayerState): void {
     this.clearLockTimer(socketId);
 
-    // T-Spin 判定
+    // ピースを固定し、消去行数を確定してから T-Spin を分類する。
+    const lockedBoard = lockMino(
+      player.board,
+      player.activeMino,
+      player.activeX,
+      player.activeY,
+      player.activeRotation,
+    );
+    const { board: clearedBoard, linesCleared } = clearLines(lockedBoard);
     const tspin = detectTSpin(
       player.board,
       player.activeMino,
@@ -360,6 +469,8 @@ export class GameInstance {
       player.activeY,
       player.activeRotation,
       player.lastMoveWasRotation,
+      player.lastRotationKickIndex,
+      linesCleared,
     );
 
     // Lock Out 判定用 (Vanish Zoneで完全に固定されたか)
@@ -373,16 +484,6 @@ export class GameInstance {
     for (const [r, c] of cells) {
       maxLockY = Math.max(maxLockY, r);
     }
-
-    // ピースを固定
-    player.board = lockMino(
-      player.board,
-      player.activeMino,
-      player.activeX,
-      player.activeY,
-      player.activeRotation,
-    );
-    const { board: clearedBoard, linesCleared } = clearLines(player.board);
 
     // Clutch ルール：ラインを消せなかった場合、かつピースが完全にVanish Zone(y < 20)に固定されたらLock Out
     if (linesCleared === 0 && maxLockY < 20) {
@@ -447,6 +548,7 @@ export class GameInstance {
     player.activeY = 17; // 1マス上にスポーン
     player.activeRotation = 0;
     player.lastMoveWasRotation = false;
+    player.lastRotationKickIndex = 0;
 
     // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
     if (
@@ -515,7 +617,7 @@ export class GameInstance {
     this.players.forEach((player, socketId) => {
       if (socketId !== senderSocketId && !player.isGameOver) {
         player.garbageQueue += lines;
-        
+
         // AIがおじゃまを送った場合、人間のフロントエンドに送信
         if (this.isAiMatch && senderSocketId === `ai_${this.roomId}` && socketId !== `ai_${this.roomId}`) {
           this.server.to(socketId).emit('receive_garbage', { lines });
@@ -652,30 +754,36 @@ export class GameInstance {
     const aiPlayer = this.players.get(aiSocketId);
     if (!aiPlayer || !this.aiDifficulty || !this.aiAgentService) return;
 
-    // C++エージェントのアクション文字列からClientEventへのマッピング
-    const actionMap: Record<string, string> = {
-      'move_left': ClientEvent.MOVE_LEFT,
-      'move_right': ClientEvent.MOVE_RIGHT,
-      'rotate_cw': ClientEvent.ROTATE_CW,
-      'rotate_ccw': ClientEvent.ROTATE_CCW,
-      'rotate_180': ClientEvent.ROTATE_180,
-      'soft_drop': ClientEvent.SOFT_DROP,
-      'hard_drop': ClientEvent.HARD_DROP,
-      'hold': ClientEvent.HOLD,
-    };
-
     while (this.isRunning && !aiPlayer.isGameOver) {
-      // バックエンドのボードは40行（上部バッファ+可視部分）なので下20行のみ渡す
-      const visibleBoard = aiPlayer.board.slice(-20);
-      const decision = await this.aiAgentService.getDecision(this.aiDifficulty, {
-        board: visibleBoard,
-        piece: aiPlayer.activeMino,
-        next: this.bag.peek(5),
-        hold: aiPlayer.holdMino,
-        canHold: aiPlayer.canHold,
-        b2b: aiPlayer.b2b > 0,
-        spawn: { x: aiPlayer.activeX, y: Math.max(0, aiPlayer.activeY - 20), rotation: aiPlayer.activeRotation }
-      });
+      const opponent = [...this.players.values()].find(
+        (player) => player.socketId !== aiSocketId,
+      );
+      const decision = await this.aiAgentService.getDecision(
+        this.aiDifficulty,
+        {
+          matchId: this.roomId,
+          playerId: aiSocketId,
+          board: boardToAgentRows(aiPlayer.board),
+          piece: aiPlayer.activeMino,
+          next: this.bag.peek(5),
+          hold: aiPlayer.holdMino,
+          canHold: aiPlayer.canHold,
+          b2b: aiPlayer.b2b,
+          combo: aiPlayer.combo,
+          garbageQueue: aiPlayer.garbageQueue,
+          spawn: {
+            x: aiPlayer.activeX,
+            y: aiPlayer.activeY - VISIBLE_ROW_OFFSET,
+            rotation: aiPlayer.activeRotation,
+          },
+          opponent: {
+            board: boardToAgentRows(opponent?.board ?? createEmptyBoard()),
+            garbageQueue: opponent?.garbageQueue ?? 0,
+            attacksSent: opponent?.attacksSent ?? 0,
+            piecesPlaced: opponent?.piecesPlaced ?? 0,
+          },
+        },
+      );
 
       if (!this.isRunning || aiPlayer.isGameOver) break;
 
@@ -687,25 +795,247 @@ export class GameInstance {
         break;
       }
 
-      if (Array.isArray(decision.actions) && decision.actions.length > 0) {
-        for (const action of decision.actions) {
-          const clientEvent = actionMap[action];
-          if (clientEvent) {
-            this.applyInput(aiSocketId, clientEvent);
-          }
-        }
-      } else {
-        throw new Error('AI agent returned no executable actions');
+      this.validateCppDecision(aiPlayer, decision, false);
+      for (const action of decision.actions) {
+        this.applyInput(aiSocketId, this.agentActionToClientEvent(action));
       }
     }
   }
 
+  private async runCppPreviewLoop(agent: CppAgentProcess): Promise<void> {
+    const aiEntry = [...this.players.entries()].find(
+      ([, player]) => player.userId === null,
+    );
+    if (!aiEntry) throw new Error('AI preview player is missing');
+    const [socketId, player] = aiEntry;
+
+    while (this.isRunning && !player.isGameOver && this.cppAgent === agent) {
+      const request = this.makeCppDecisionRequest(socketId, player);
+      this.emitCppPreviewStatus('thinking');
+      const startedAt = performance.now();
+      const decision = await agent.decide(request);
+      const decisionMs = performance.now() - startedAt;
+
+      if (!this.isRunning || this.cppAgent !== agent) return;
+      if (decision.gameOver) {
+        this.handleGameOver(socketId);
+        return;
+      }
+      this.validateCppDecision(player, decision);
+      this.emitCppPreviewStatus('executing', {
+        completedDepth: decision.completedDepth,
+        nodesVisited: decision.nodesVisited,
+        decisionMs: Math.round(decisionMs * 100) / 100,
+      });
+
+      for (const action of decision.actions) {
+        if (!this.isRunning || this.cppAgent !== agent || player.isGameOver)
+          return;
+        this.applyInput(socketId, this.agentActionToClientEvent(action));
+        const delay = this.cppPreviewOptions?.actionDelayMs ?? 0;
+        if (delay > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+  }
+
+  private makeCppDecisionRequest(
+    socketId: string,
+    player: PlayerState,
+  ): AgentDecisionRequest {
+    const emptyOpponent = createEmptyBoard();
+    return {
+      version: 1,
+      type: 'decide',
+      requestId: `${this.roomId}:${socketId}:${this.cppDecisionSequence++}`,
+      matchId: this.roomId,
+      playerId: socketId,
+      board: boardToAgentRows(player.board),
+      piece: player.activeMino,
+      next: this.bag.peek(5),
+      hold: player.holdMino,
+      canHold: player.canHold,
+      b2b: player.b2b,
+      combo: player.combo,
+      garbageQueue: player.garbageQueue,
+      spawn: {
+        x: player.activeX,
+        y: player.activeY - VISIBLE_ROW_OFFSET,
+        rotation: player.activeRotation,
+      },
+      opponent: {
+        board: boardToAgentRows(emptyOpponent),
+        garbageQueue: 0,
+        attacksSent: 0,
+        piecesPlaced: 0,
+      },
+    };
+  }
+
+  private validateCppDecision(
+    player: PlayerState,
+    decision: AgentDecisionResponse,
+    requirePlacement = true,
+  ): void {
+    if (
+      decision.actions.length === 0 ||
+      decision.actions.length > MAX_AI_ACTIONS ||
+      decision.actions.some(
+        (action) => !(AGENT_ACTIONS as readonly string[]).includes(action),
+      ) ||
+      decision.actions.at(-1) !== 'hard_drop' ||
+      decision.actions.slice(0, -1).includes('hard_drop')
+    ) {
+      throw new Error('C++ AI returned an invalid action sequence');
+    }
+
+    // hard_drop より前の操作を一時状態で再現し、C++の placement と照合する。
+    // C++ main は placement を常に返すため、TSとのルール差もここで検出できる。
+    if (!decision.placement && requirePlacement) {
+      throw new Error('C++ AI response has no placement');
+    }
+    if (!decision.placement) return;
+
+    const simulated = { ...player };
+    for (const action of decision.actions.slice(0, -1)) {
+      this.applyAgentActionToState(simulated, action);
+    }
+    const expectedY = calcGhostY(
+      simulated.board,
+      simulated.activeMino,
+      simulated.activeX,
+      simulated.activeY,
+      simulated.activeRotation,
+    );
+    if (
+      decision.placement.piece !== simulated.activeMino ||
+      decision.placement.x !== simulated.activeX ||
+      decision.placement.y !== expectedY - VISIBLE_ROW_OFFSET ||
+      decision.placement.rotation !== simulated.activeRotation
+    ) {
+      throw new Error(
+        `C++/TS placement mismatch: C++=${JSON.stringify(decision.placement)} ` +
+          `TS=${JSON.stringify({
+            piece: simulated.activeMino,
+            x: simulated.activeX,
+            y: expectedY - VISIBLE_ROW_OFFSET,
+            rotation: simulated.activeRotation,
+          })} actions=${JSON.stringify(decision.actions)}`,
+      );
+    }
+  }
+
+  private applyAgentActionToState(
+    player: PlayerState,
+    action: AgentAction,
+  ): void {
+    if (action === 'move_left' || action === 'move_right') {
+      const dx = action === 'move_left' ? -1 : 1;
+      if (
+        isValidPosition(
+          player.board,
+          player.activeMino,
+          player.activeX + dx,
+          player.activeY,
+          player.activeRotation,
+        )
+      ) {
+        player.activeX += dx;
+      }
+      return;
+    }
+    if (
+      action === 'rotate_cw' ||
+      action === 'rotate_ccw' ||
+      action === 'rotate_180'
+    ) {
+      const direction =
+        action === 'rotate_cw' ? 'CW' : action === 'rotate_ccw' ? 'CCW' : '180';
+      const rotated = tryRotate(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY,
+        player.activeRotation,
+        direction,
+      );
+      if (rotated) {
+        player.activeX = rotated.x;
+        player.activeY = rotated.y;
+        player.activeRotation = rotated.rotation;
+      }
+      return;
+    }
+    if (action === 'soft_drop') {
+      if (
+        isValidPosition(
+          player.board,
+          player.activeMino,
+          player.activeX,
+          player.activeY + 1,
+          player.activeRotation,
+        )
+      ) {
+        player.activeY++;
+      }
+      return;
+    }
+    if (action === 'hold' && player.canHold) {
+      const previousHold = player.holdMino;
+      player.holdMino = player.activeMino;
+      player.activeMino = previousHold ?? this.bag.peek(1)[0];
+      player.activeX = 3;
+      player.activeY = 18;
+      player.activeRotation = 0;
+      player.canHold = false;
+    }
+  }
+
+  private agentActionToClientEvent(action: AgentAction): string {
+    const events: Record<AgentAction, string> = {
+      move_left: ClientEvent.MOVE_LEFT,
+      move_right: ClientEvent.MOVE_RIGHT,
+      rotate_cw: ClientEvent.ROTATE_CW,
+      rotate_ccw: ClientEvent.ROTATE_CCW,
+      rotate_180: ClientEvent.ROTATE_180,
+      soft_drop: ClientEvent.SOFT_DROP,
+      hard_drop: ClientEvent.HARD_DROP,
+      hold: ClientEvent.HOLD,
+    };
+    return events[action];
+  }
+
+  private emitCppPreviewStatus(
+    phase: AiPreviewStatus['phase'],
+    details: Partial<AiPreviewStatus> = {},
+  ): void {
+    if (!this.cppPreviewOptions) return;
+    const status: AiPreviewStatus = {
+      phase,
+      model: this.cppPreviewOptions.model,
+      actionDelayMs: this.cppPreviewOptions.actionDelayMs,
+      ...details,
+    };
+    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATUS, status);
+  }
+
   /** ゲーム停止 */
   stop(): void {
+    const agent = this.cppAgent;
+    if (this.cppPreviewOptions && this.isRunning) {
+      this.emitCppPreviewStatus('stopped');
+    }
     this.isRunning = false;
+    this.cppAgent = null;
+    this.cppPreviewOptions = null;
+    if (this.simulationStartTimer) clearTimeout(this.simulationStartTimer);
+    this.simulationStartTimer = null;
     if (this.gravityTimer) clearInterval(this.gravityTimer);
+    this.gravityTimer = null;
     this.lockTimer.forEach((t) => clearTimeout(t));
     this.lockTimer.clear();
+    if (agent) void agent.close().catch(() => undefined);
   }
 
   getPlayers(): Map<string, PlayerState> {

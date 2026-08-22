@@ -104,7 +104,9 @@ void TerminalRenderer::render(std::size_t gameNumber, std::string_view model,
   }
   std::cout << "\n\n+--------------------+\n";
 
-  for (const Board::Row& row : board.cells()) {
+  for (int rowIndex = kBoardRows - kVisibleBoardRows;
+       rowIndex < kBoardRows; ++rowIndex) {
+    const Board::Row& row = board.cells()[rowIndex];
     std::cout << "|";
     for (const Cell cell : row) {
       std::cout << cellColor(cell) << "  ";

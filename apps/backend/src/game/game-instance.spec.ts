@@ -72,7 +72,10 @@ describe('GameInstance AI matches', () => {
     game.addPlayer(`ai_${roomId}`, null);
     game.start('EASY');
 
-    await jest.advanceTimersByTimeAsync(800);
+    await jest.advanceTimersByTimeAsync(999);
+    expect(aiAgent.getDecision).not.toHaveBeenCalled();
+
+    await jest.advanceTimersByTimeAsync(801);
 
     const gameOver = emissions.find(
       (emission) =>
@@ -102,7 +105,7 @@ describe('GameInstance AI matches', () => {
     game.addPlayer(`ai_${roomId}`, null);
     game.start('EASY');
 
-    await jest.advanceTimersByTimeAsync(800);
+    await jest.advanceTimersByTimeAsync(1800);
 
     const updates = emissions.filter(
       (emission) =>

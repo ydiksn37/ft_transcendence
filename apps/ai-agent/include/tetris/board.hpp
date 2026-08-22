@@ -7,8 +7,10 @@
 
 namespace tetris {
 
-constexpr int kBoardRows = 20;
+constexpr int kVisibleBoardRows = 20;
+constexpr int kBoardRows = 40;
 constexpr int kBoardCols = 10;
+constexpr int kSpawnY = kBoardRows - kVisibleBoardRows - 2;
 
 enum class PieceType { I, O, T, S, Z, J, L };
 
@@ -74,9 +76,11 @@ struct ClearResult {
 [[nodiscard]] Board lockMino(const Board& board, const ActivePiece& piece);
 [[nodiscard]] ClearResult clearLines(const Board& board);
 [[nodiscard]] std::optional<TSpin> detectTSpin(
-    const Board& board, const ActivePiece& piece, bool lastMoveWasRotation);
+    const Board& board, const ActivePiece& piece, bool lastMoveWasRotation,
+    int lastRotationKickIndex, int linesCleared);
 [[nodiscard]] std::optional<ActivePiece> tryRotate(
-    const Board& board, const ActivePiece& piece, RotationDirection direction);
+    const Board& board, const ActivePiece& piece, RotationDirection direction,
+    int* kickIndex = nullptr);
 
 // The TypeScript implementation chooses random holes. The C++ worker receives
 // the actual hole columns so its local board stays synchronized with the server.

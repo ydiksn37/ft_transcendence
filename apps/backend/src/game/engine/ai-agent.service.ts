@@ -5,20 +5,19 @@ import { AiDifficulty } from '@transcendence/shared';
 import * as crypto from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import type {
+  AgentDecisionRequest,
+  AgentDecisionResponse,
+} from '../headless/headless-battle';
 
-interface AiDecisionRequest {
-  board: any[][];
-  piece: string;
-  next?: string[];
-  hold?: string | null;
-  canHold?: boolean;
-  b2b?: boolean;
-  spawn?: { x: number; y: number; rotation: number };
-}
+type AiDecisionRequest = Omit<
+  AgentDecisionRequest,
+  'version' | 'type' | 'requestId'
+>;
 
 interface PendingRequest {
   difficulty: AiDifficulty;
-  resolve: (response: any) => void;
+  resolve: (response: AgentDecisionResponse) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
 }
@@ -69,7 +68,7 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
   private spawnAgent(difficulty: AiDifficulty, model: string, thinkMs: number) {
     const executable = this.resolveAgentExecutable();
     const agent = spawn(executable, ['--model', model, '--think-ms', thinkMs.toString()]);
-    
+
     const rl = readline.createInterface({ input: agent.stdout });
     rl.on('line', (line) => {
       try {
@@ -120,7 +119,10 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  public getDecision(difficulty: AiDifficulty, request: AiDecisionRequest): Promise<any> {
+  public getDecision(
+    difficulty: AiDifficulty,
+    request: AiDecisionRequest,
+  ): Promise<AgentDecisionResponse> {
     return new Promise((resolve, reject) => {
       if (!this.agents) return reject(new Error('AI Agents が初期化されていません'));
 
@@ -128,7 +130,7 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
       if (!agent || !agent.stdin.writable) {
         return reject(new Error(`AI Agent [${difficulty}] is unavailable`));
       }
-      
+
       const requestId = crypto.randomUUID();
       const timeout = setTimeout(() => {
         const pending = this.pendingRequests.get(requestId);
