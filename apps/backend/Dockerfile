@@ -19,7 +19,7 @@ COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/shared/package.json ./packages/shared/
 
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Prisma クライアントを生成
 COPY apps/backend/prisma ./apps/backend/prisma/
@@ -32,7 +32,7 @@ COPY . .
 COPY --from=ai-builder /app/build/ai_agent /usr/local/bin/ai_agent
 
 # 共有パッケージをビルド
-RUN npm run build --workspace=@transcendence/shared
+RUN --mount=type=cache,target=/app/node_modules/.cache npm run build --workspace=@transcendence/shared
 
 WORKDIR /app/apps/backend
 EXPOSE 3000
