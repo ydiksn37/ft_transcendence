@@ -41,6 +41,7 @@ const PlayPage = () => {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
     isWaiting, setIsWaiting,
+    connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,
@@ -107,24 +108,7 @@ const PlayPage = () => {
   const [actionText, setActionText] = useState<string | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
-  const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
-  const joinOnlineRef = useRef<(() => void) | null>(null);
-  const setupCustomRoomConnectionRef = useRef<(() => void) | null>(null);
-  const startVsAiRef = useRef<((difficulty: string) => void) | null>(null);
-
-  useEffect(() => {
-    if (mode === 'ONLINE_1V1') {
-      joinOnlineRef.current?.();
-    } else if (mode === 'CUSTOM_ROOMS') {
-      setupCustomRoomConnectionRef.current?.();
-    } else if (mode === 'VS_AI') {
-      const params = new URLSearchParams(window.location.search);
-      const difficulty = params.get('difficulty') || 'EASY';
-      startVsAiRef.current?.(difficulty);
-    } else if (mode) {
-      startGameRef.current?.(mode);
-    }
-  }, [mode]);
+  const initializeRouteRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current) return;
@@ -652,15 +636,38 @@ const PlayPage = () => {
   const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting,
+    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
     setOpponentStage, setOpponentScore,
-    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
+    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
 
-  useEffect(() => { joinOnlineRef.current = joinOnline; }, [joinOnline]);
-  useEffect(() => { setupCustomRoomConnectionRef.current = setupCustomRoomConnection; }, [setupCustomRoomConnection]);
-  useEffect(() => { startVsAiRef.current = startVsAi; }, [startVsAi]);
-  useEffect(() => { startGameRef.current = startGame; }, [startGame]);
+  initializeRouteRef.current = () => {
+    if (!mode) return;
+    if (mode === 'ONLINE_1V1') {
+      joinOnline();
+    } else if (mode === 'CUSTOM_ROOMS') {
+      setupCustomRoomConnection();
+    } else if (mode === 'VS_AI') {
+      const params = new URLSearchParams(location.search);
+      const requestedDifficulty = (params.get('difficulty') || 'EASY').toUpperCase();
+      const difficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedDifficulty)
+        ? requestedDifficulty
+        : 'EASY';
+      startVsAi(difficulty);
+    } else {
+      startGame(mode);
+    }
+  };
+
+  useEffect(() => {
+    initializeRouteRef.current?.();
+
+    // StrictModeの setup -> cleanup -> setup でも古い接続を残さない。
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, [mode, location.search, socketRef]);
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const { heldKeys } = useKeyboardControls({
@@ -693,10 +700,6 @@ const PlayPage = () => {
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
 
-  startGameRef.current = startGame;
-  joinOnlineRef.current = joinOnline;
-  setupCustomRoomConnectionRef.current = setupCustomRoomConnection;
-
   if (appState === 'CUSTOM_ROOMS') {
     return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
   }
@@ -718,6 +721,7 @@ const PlayPage = () => {
       nextPieceKeys={nextPieceKeys}
       holdInfo={holdInfo}
       isWaiting={isWaiting}
+      connectionError={connectionError}
       matchResult={matchResult}
       opponentStage={opponentStage}
       opponentScore={opponentScore}

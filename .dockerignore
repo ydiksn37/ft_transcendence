@@ -6,6 +6,7 @@ packages/*/node_modules
 
 # ─── ビルド成果物 ──────────────────────────────────────────────────────────
 dist
+build
 apps/*/dist
 packages/*/dist
 .turbo

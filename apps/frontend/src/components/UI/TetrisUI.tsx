@@ -26,6 +26,7 @@ type TetrisUIProps = {
   nextPieceKeys: string[];
   holdInfo: { tetromino: string | null; hasHeld: boolean };
   isWaiting: boolean;
+  connectionError: string | null;
   matchResult: 'WIN' | 'LOSE' | null;
   opponentStage: Cell[][] | null;
   opponentScore: number;
@@ -50,7 +51,7 @@ type TetrisUIProps = {
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
-  isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
+  isWaiting, connectionError, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   formatTime, createStage, appState, restartGame, joinOnline, onHold
 }) => {
@@ -134,6 +135,36 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     const randomLoader = loaders[Math.floor(Math.random() * loaders.length)];
     randomLoader().then(setBgImage);
   }, []);
+
+  if (gameMode === 'ONLINE_1V1' && connectionError) {
+    return (
+      <div style={{
+        width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+        backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
+        fontFamily: '"Press Start 2P", monospace', color: 'white'
+      }}>
+        <h1 style={{ fontSize: '36px', color: '#e74c3c', textShadow: '4px 4px 0px #000', marginBottom: '24px', textAlign: 'center', lineHeight: '1.5' }}>
+          CONNECTION ERROR
+        </h1>
+        <p style={{ fontSize: '14px', lineHeight: '1.8', textAlign: 'center' }}>{connectionError}</p>
+        <button
+          onClick={() => {
+            socketRef.current?.disconnect();
+            setSocket(null);
+            navigate('/lobby/MULTI_PLAY');
+          }}
+          style={{
+            fontFamily: '"Press Start 2P", monospace', padding: '16px 32px', marginTop: '24px',
+            backgroundColor: '#000', color: '#fff', border: '4px solid #fff', cursor: 'pointer'
+          }}
+        >
+          BACK
+        </button>
+      </div>
+    );
+  }
 
   if (gameMode === 'ONLINE_1V1' && isWaiting) {
     return (

@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import { Logger } from '@nestjs/common';
 import {
   GameState,
   TetrominoType,
@@ -54,6 +55,7 @@ export interface PlayerState {
 }
 
 export class GameInstance {
+  private readonly logger = new Logger(GameInstance.name);
   readonly roomId: string;
   private server: Server;
   private bag: BagGenerator;
@@ -145,12 +147,31 @@ export class GameInstance {
       roomId: this.roomId,
     });
 
+    // AI戦には盤面を送る第2のブラウザがないため、初期状態もサーバーから配信する。
+    this.players.forEach((player, socketId) => {
+      this.broadcastState(socketId, player);
+    });
+
     // 重力タイマー開始
     this.startGravity();
 
     // AI が存在する場合は非同期で動かす
     if (this.aiDifficulty) {
-      this.runAiLoop();
+      void this.runAiLoop().catch((error: unknown) => {
+        this.logger.error(
+          `AI loop failed in room ${this.roomId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        this.server.to(this.roomId).emit(ServerEvent.ERROR, {
+          message: 'AI opponent stopped unexpectedly',
+        });
+
+        const aiSocketId = `ai_${this.roomId}`;
+        const aiPlayer = this.players.get(aiSocketId);
+        if (aiPlayer && !aiPlayer.isGameOver) {
+          this.handleGameOver(aiSocketId);
+        }
+      });
     }
   }
 
@@ -555,14 +576,29 @@ export class GameInstance {
       if (sid !== socketId) {
         this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
 
-        // AIの盤面更新を、フロントエンドのP2P形式に合わせて送信（可視の下20行のみ）
+        // AIの盤面更新を、フロントエンドの40行ステージ形式に合わせて送信
         if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
-          const visibleRows = player.board.slice(-20); // 40行ボードの下20行（可視部分）
-          const frontendStage = visibleRows.map(row => row.map(cell => {
+          const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
             if (cell === null) return [0, 'clear'];
             if (cell === 'GARBAGE') return ['B', 'merged'];
             return [cell, 'merged'];
           }));
+
+          // 固定盤面には含まれない操作中ミノも重ねて、現在のAI状態を表示する。
+          if (!player.isGameOver) {
+            for (const [row, col] of getMinoCells(
+              player.activeMino,
+              player.activeX,
+              player.activeY,
+              player.activeRotation,
+            )) {
+              if (row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS) {
+                // GameBoard hides top-buffer stage cells with the "clear"
+                // status, so use the solid visual status for this snapshot.
+                frontendStage[row][col] = [player.activeMino, 'merged'];
+              }
+            }
+          }
           this.server.to(sid).emit('opponent_board_update', { stage: frontendStage, score: player.score });
         }
       }
@@ -612,11 +648,9 @@ export class GameInstance {
 
   /** AI ループ */
   private async runAiLoop(): Promise<void> {
-    const aiEntry = [...this.players.entries()].find(
-      ([, p]) => p.userId === null,
-    );
-    if (!aiEntry || !this.aiDifficulty || !this.aiAgentService) return;
-    const [aiSocketId, aiPlayer] = aiEntry;
+    const aiSocketId = `ai_${this.roomId}`;
+    const aiPlayer = this.players.get(aiSocketId);
+    if (!aiPlayer || !this.aiDifficulty || !this.aiAgentService) return;
 
     // C++エージェントのアクション文字列からClientEventへのマッピング
     const actionMap: Record<string, string> = {
@@ -648,7 +682,12 @@ export class GameInstance {
       const delay = AI_BOT_CONFIGS[this.aiDifficulty].thinkDelayMs;
       await new Promise(r => setTimeout(r, delay));
 
-      if (decision.actions) {
+      if (decision.gameOver) {
+        this.handleGameOver(aiSocketId);
+        break;
+      }
+
+      if (Array.isArray(decision.actions) && decision.actions.length > 0) {
         for (const action of decision.actions) {
           const clientEvent = actionMap[action];
           if (clientEvent) {
@@ -656,7 +695,7 @@ export class GameInstance {
           }
         }
       } else {
-        break;
+        throw new Error('AI agent returned no executable actions');
       }
     }
   }

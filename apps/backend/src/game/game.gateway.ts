@@ -10,6 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
   ServerEvent,
@@ -65,6 +66,7 @@ export class GameGateway
     private readonly gameService: GameService,
     private readonly chatService: ChatService,
     private readonly aiAgentService: AiAgentService,
+    private readonly jwtService: JwtService,
   ) {}
 
   afterInit() {
@@ -72,6 +74,15 @@ export class GameGateway
   }
 
   handleConnection(client: Socket) {
+    const token = client.handshake.auth?.token;
+    if (typeof token === 'string' && token.length > 0) {
+      try {
+        const payload = this.jwtService.verify<{ sub: string }>(token);
+        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+      } catch {
+        this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
+      }
+    }
     this.logger.log(`接続: ${client.id}`);
   }
 
@@ -435,6 +446,11 @@ export class GameGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { difficulty: AiDifficulty },
   ) {
+    if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
+      client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
+      return;
+    }
+
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
 
