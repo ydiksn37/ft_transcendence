@@ -16,13 +16,17 @@
 
 namespace {
 
+constexpr int visibleRow(int row) {
+  return tetris::kBoardRows - tetris::kVisibleBoardRows + row;
+}
+
 void expect(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
 
 tetris::Board makeTetrisWell() {
   tetris::Board board;
-  for (int row = 16; row < tetris::kBoardRows; ++row) {
+  for (int row = visibleRow(16); row < tetris::kBoardRows; ++row) {
     for (int col = 0; col < 9; ++col) {
       board.set(row, col, tetris::Cell::Garbage);
     }
@@ -56,25 +60,26 @@ void testEmptyBoardAndShapes() {
   const tetris::Board board;
   expect(board.empty(), "new board must be empty");
   expect(tetris::isValidPosition(
-             board, {tetris::PieceType::I, 6, 0, 0}),
+             board, {tetris::PieceType::I, 6, tetris::kSpawnY, 0}),
          "horizontal I must fit at x=6");
   expect(!tetris::isValidPosition(
-             board, {tetris::PieceType::I, 7, 0, 0}),
+             board, {tetris::PieceType::I, 7, tetris::kSpawnY, 0}),
          "horizontal I must not fit at x=7");
   expect(tetris::isValidPosition(
-             board, {tetris::PieceType::I, 3, -2, 0}),
+             board, {tetris::PieceType::I, 3, tetris::kSpawnY, 0}),
          "spawn cells above the visible board must match the TS engine");
   expect(tetris::calcGhostY(
-             board, {tetris::PieceType::O, 3, 0, 0}) == 18,
-         "O ghost position must be y=18 on an empty board");
+             board, {tetris::PieceType::O, 3, tetris::kSpawnY, 0}) ==
+             visibleRow(18),
+         "O ghost position must be on the bottom of an empty board");
 }
 
 void testLockAndClearLine() {
   tetris::Board board;
   for (int col = 4; col < tetris::kBoardCols; ++col) {
-    board.set(19, col, tetris::Cell::Garbage);
+    board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
-  const tetris::ActivePiece piece{tetris::PieceType::I, 0, 18, 0};
+  const tetris::ActivePiece piece{tetris::PieceType::I, 0, visibleRow(18), 0};
   expect(tetris::isValidPosition(board, piece), "I must fill the bottom row");
   const auto result = tetris::clearLines(tetris::lockMino(board, piece));
   expect(result.linesCleared == 1, "one full line must be cleared");
@@ -83,16 +88,18 @@ void testLockAndClearLine() {
 
 void testSrsIKick() {
   const tetris::Board board;
-  const tetris::ActivePiece vertical{tetris::PieceType::I, -2, 1, 1};
+  const tetris::ActivePiece vertical{tetris::PieceType::I, -2,
+                                     visibleRow(1), 1};
   expect(tetris::isValidPosition(board, vertical),
          "vertical I must be valid next to the left wall");
   const auto rotated = tetris::tryRotate(
       board, vertical, tetris::RotationDirection::Clockwise);
   expect(rotated.has_value(), "I rotation must succeed with an SRS kick");
-  expect(rotated->x == 0 && rotated->y == 1 && rotated->rotation == 2,
+  expect(rotated->x == 0 && rotated->y == visibleRow(1) &&
+             rotated->rotation == 2,
          "I rotation must use the same x/y kick offset as the frontend");
   expect(!tetris::tryRotate(
-              board, {tetris::PieceType::O, 3, 0, 0},
+              board, {tetris::PieceType::O, 3, tetris::kSpawnY, 0},
               tetris::RotationDirection::Clockwise)
               .has_value(),
          "O rotation must be ignored like the frontend");
@@ -100,10 +107,10 @@ void testSrsIKick() {
 
 void testTSpinDetection() {
   tetris::Board board;
-  board.set(17, 3, tetris::Cell::Garbage);
-  board.set(19, 3, tetris::Cell::Garbage);
-  board.set(19, 5, tetris::Cell::Garbage);
-  const tetris::ActivePiece piece{tetris::PieceType::T, 3, 17, 0};
+  board.set(visibleRow(17), 3, tetris::Cell::Garbage);
+  board.set(visibleRow(19), 3, tetris::Cell::Garbage);
+  board.set(visibleRow(19), 5, tetris::Cell::Garbage);
+  const tetris::ActivePiece piece{tetris::PieceType::T, 3, visibleRow(17), 0};
   expect(tetris::detectTSpin(board, piece, true, 0, 1) ==
              tetris::TSpin::Full,
          "two occupied front corners must be a full T-Spin");
@@ -111,9 +118,9 @@ void testTSpinDetection() {
          "last move must be a rotation for a T-Spin");
 
   tetris::Board miniBoard;
-  miniBoard.set(17, 3, tetris::Cell::Garbage);
-  miniBoard.set(17, 5, tetris::Cell::Garbage);
-  miniBoard.set(19, 3, tetris::Cell::Garbage);
+  miniBoard.set(visibleRow(17), 3, tetris::Cell::Garbage);
+  miniBoard.set(visibleRow(17), 5, tetris::Cell::Garbage);
+  miniBoard.set(visibleRow(19), 3, tetris::Cell::Garbage);
   expect(tetris::detectTSpin(miniBoard, piece, true, 0, 1) ==
              tetris::TSpin::Mini,
          "three corners with one front corner must be a Mini");
@@ -125,23 +132,23 @@ void testTSpinDetection() {
          "a two-line T-Spin must be full like the frontend");
 
   tetris::Board twoCorners;
-  twoCorners.set(17, 3, tetris::Cell::Garbage);
-  twoCorners.set(19, 5, tetris::Cell::Garbage);
+  twoCorners.set(visibleRow(17), 3, tetris::Cell::Garbage);
+  twoCorners.set(visibleRow(19), 5, tetris::Cell::Garbage);
   expect(!tetris::detectTSpin(twoCorners, piece, true, 0, 1).has_value(),
          "two occupied corners must not be classified as a T-Spin");
 }
 
 void testGarbageLines() {
   tetris::Board board;
-  board.set(2, 0, tetris::Cell::I);
+  board.set(visibleRow(2), 0, tetris::Cell::I);
   const tetris::Board result = tetris::addGarbageLines(board, {2, 7});
-  expect(result.at(0, 0) == tetris::Cell::I,
+  expect(result.at(visibleRow(0), 0) == tetris::Cell::I,
          "garbage must push existing cells upward");
-  expect(result.at(18, 2) == tetris::Cell::Empty &&
-             result.at(18, 1) == tetris::Cell::Garbage,
+  expect(result.at(visibleRow(18), 2) == tetris::Cell::Empty &&
+             result.at(visibleRow(18), 1) == tetris::Cell::Garbage,
          "first garbage row must use its specified gap");
-  expect(result.at(19, 7) == tetris::Cell::Empty &&
-             result.at(19, 8) == tetris::Cell::Garbage,
+  expect(result.at(visibleRow(19), 7) == tetris::Cell::Empty &&
+             result.at(visibleRow(19), 8) == tetris::Cell::Garbage,
          "second garbage row must use its specified gap");
 }
 
@@ -210,8 +217,8 @@ void testEveryDifficultyAcceptsDecisionContext() {
 
 void testEvaluationMatchesTypeScript() {
   tetris::Board board;
-  board.set(18, 0, tetris::Cell::I);
-  board.set(19, 1, tetris::Cell::O);
+  board.set(visibleRow(18), 0, tetris::Cell::I);
+  board.set(visibleRow(19), 1, tetris::Cell::O);
   const auto evaluation = tetris::evaluateBoard(board);
   expect(evaluation.aggregateHeight == 3, "aggregate height must be 3");
   expect(evaluation.holes == 1, "covered empty cell must count as a hole");
@@ -223,7 +230,7 @@ void testEvaluationMatchesTypeScript() {
 void testEasyAgentClearsAvailableLine() {
   tetris::Board board;
   for (int col = 4; col < tetris::kBoardCols; ++col) {
-    board.set(19, col, tetris::Cell::Garbage);
+    board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
   const auto decision = tetris::decideEasy(board, tetris::PieceType::I);
   expect(decision.has_value(), "easy agent must find a legal placement");
@@ -237,7 +244,7 @@ void testEasyAgentClearsAvailableLine() {
 
 void testEasyAgentReportsBlockedSpawn() {
   tetris::Board board;
-  board.set(0, 3, tetris::Cell::Garbage);
+  board.set(tetris::kSpawnY, 3, tetris::Cell::Garbage);
   expect(!tetris::decideEasy(board, tetris::PieceType::O).has_value(),
          "blocked spawn must produce no decision");
 }
@@ -326,10 +333,11 @@ void testExpertAgentChoosesTetris() {
 
 void testExpertTSpinDoublePatternFeatures() {
   tetris::Board ready;
-  ready.set(17, 3, tetris::Cell::Garbage);
+  ready.set(visibleRow(17), 3, tetris::Cell::Garbage);
   for (int col = 0; col < tetris::kBoardCols; ++col) {
-    if (col < 3 || col > 5) ready.set(18, col, tetris::Cell::Garbage);
-    if (col != 4) ready.set(19, col, tetris::Cell::Garbage);
+    if (col < 3 || col > 5)
+      ready.set(visibleRow(18), col, tetris::Cell::Garbage);
+    if (col != 4) ready.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
 
   const tetris::ExpertPatternFeatures readyFeatures =
@@ -342,26 +350,27 @@ void testExpertTSpinDoublePatternFeatures() {
 
   tetris::Board blocked = ready;
   for (int col = 2; col <= 6; ++col) {
-    blocked.set(16, col, tetris::Cell::Garbage);
+    blocked.set(visibleRow(16), col, tetris::Cell::Garbage);
   }
   expect(tetris::extractExpertPatternFeatures(blocked)
              .completedTSpinDoublePatterns == 0,
          "a visually complete TSD with a sealed entrance must be rejected");
 
   tetris::Board mirrored;
-  mirrored.set(17, 5, tetris::Cell::Garbage);
+  mirrored.set(visibleRow(17), 5, tetris::Cell::Garbage);
   for (int col = 0; col < tetris::kBoardCols; ++col) {
-    if (col < 3 || col > 5) mirrored.set(18, col, tetris::Cell::Garbage);
-    if (col != 4) mirrored.set(19, col, tetris::Cell::Garbage);
+    if (col < 3 || col > 5)
+      mirrored.set(visibleRow(18), col, tetris::Cell::Garbage);
+    if (col != 4) mirrored.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
   expect(tetris::extractExpertPatternFeatures(mirrored)
              .completedTSpinDoubleLines == 2,
          "completed TSD pattern must be detected after mirroring");
 
   tetris::Board fakeReady;
-  fakeReady.set(17, 3, tetris::Cell::Garbage);
-  fakeReady.set(19, 3, tetris::Cell::Garbage);
-  fakeReady.set(19, 5, tetris::Cell::Garbage);
+  fakeReady.set(visibleRow(17), 3, tetris::Cell::Garbage);
+  fakeReady.set(visibleRow(19), 3, tetris::Cell::Garbage);
+  fakeReady.set(visibleRow(19), 5, tetris::Cell::Garbage);
   const tetris::ExpertPatternFeatures fakeFeatures =
       tetris::extractExpertPatternFeatures(fakeReady);
   expect(fakeFeatures.preTSpinDoublePatterns >= 1 &&
@@ -400,7 +409,8 @@ void testExpertSevenBagTAvailability() {
 
 void testExpertRejectsBuriedTSpinSetups() {
   tetris::Board board;
-  for (const int row : {3, 9, 15}) {
+  for (const int visible : {3, 9, 15}) {
+    const int row = visibleRow(visible);
     board.set(row, 3, tetris::Cell::Garbage);
     for (int col = 0; col < tetris::kBoardCols; ++col) {
       if (col < 3 || col > 5) {
@@ -419,10 +429,11 @@ void testExpertRejectsBuriedTSpinSetups() {
 
 void testExpertExecutesReachableTSpinDouble() {
   tetris::Board board;
-  board.set(17, 3, tetris::Cell::Garbage);
+  board.set(visibleRow(17), 3, tetris::Cell::Garbage);
   for (int col = 0; col < tetris::kBoardCols; ++col) {
-    if (col < 3 || col > 5) board.set(18, col, tetris::Cell::Garbage);
-    if (col != 4) board.set(19, col, tetris::Cell::Garbage);
+    if (col < 3 || col > 5)
+      board.set(visibleRow(18), col, tetris::Cell::Garbage);
+    if (col != 4) board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
 
   tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 10000);
@@ -436,10 +447,11 @@ void testExpertExecutesReachableTSpinDouble() {
 
 void testExpertPreservesReachableTSpinDouble() {
   tetris::Board board;
-  board.set(17, 3, tetris::Cell::Garbage);
+  board.set(visibleRow(17), 3, tetris::Cell::Garbage);
   for (int col = 0; col < tetris::kBoardCols; ++col) {
-    if (col < 3 || col > 5) board.set(18, col, tetris::Cell::Garbage);
-    if (col != 4) board.set(19, col, tetris::Cell::Garbage);
+    if (col < 3 || col > 5)
+      board.set(visibleRow(18), col, tetris::Cell::Garbage);
+    if (col != 4) board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
 
   tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
@@ -460,7 +472,8 @@ void testExpertPreservesReachableTSpinDouble() {
 void testExpertWellDistanceFeature() {
   tetris::Board board;
   for (int col = 0; col < tetris::kBoardCols; ++col) {
-    if (col != 3) board.set(19, col, tetris::Cell::Garbage);
+    if (col != 3)
+      board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
   const tetris::ExpertPatternFeatures features =
       tetris::extractExpertPatternFeatures(board);
@@ -472,16 +485,16 @@ void testExpertWellDistanceFeature() {
 
 void testExpertBoardStabilityPenalizesBuriedHoles() {
   tetris::Board clean;
-  clean.set(19, 0, tetris::Cell::Garbage);
-  clean.set(19, 1, tetris::Cell::Garbage);
+  clean.set(visibleRow(19), 0, tetris::Cell::Garbage);
+  clean.set(visibleRow(19), 1, tetris::Cell::Garbage);
 
   tetris::Board oneHole;
-  oneHole.set(18, 0, tetris::Cell::Garbage);
-  oneHole.set(19, 1, tetris::Cell::Garbage);
+  oneHole.set(visibleRow(18), 0, tetris::Cell::Garbage);
+  oneHole.set(visibleRow(19), 1, tetris::Cell::Garbage);
 
   tetris::Board twoHoles;
-  twoHoles.set(17, 0, tetris::Cell::Garbage);
-  twoHoles.set(19, 1, tetris::Cell::Garbage);
+  twoHoles.set(visibleRow(17), 0, tetris::Cell::Garbage);
+  twoHoles.set(visibleRow(19), 1, tetris::Cell::Garbage);
 
   const double cleanValue = tetris::evaluateExpertBoard(clean).value;
   const double oneHoleValue = tetris::evaluateExpertBoard(oneHole).value;

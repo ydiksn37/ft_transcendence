@@ -244,7 +244,7 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
   const auto gameStartedAt = std::chrono::steady_clock::now();
 
   while (result.piecesPlaced < maxPieces) {
-    const ActivePiece spawn{activeType, 3, 0, 0};
+    const ActivePiece spawn{activeType, 3, kSpawnY, 0};
     if (!isValidPosition(board, spawn)) {
       result.gameOver = true;
       break;

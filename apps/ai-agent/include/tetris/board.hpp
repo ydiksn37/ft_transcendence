@@ -7,8 +7,10 @@
 
 namespace tetris {
 
-constexpr int kBoardRows = 20;
+constexpr int kVisibleBoardRows = 20;
+constexpr int kBoardRows = 40;
 constexpr int kBoardCols = 10;
+constexpr int kSpawnY = kBoardRows - kVisibleBoardRows - 2;
 
 enum class PieceType { I, O, T, S, Z, J, L };
 

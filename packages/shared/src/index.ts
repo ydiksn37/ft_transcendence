@@ -6,7 +6,7 @@ export type TetrominoType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 /** 盤面のセル: null=空, string=ミノ種別 or ガーベージ */
 export type Cell = TetrominoType | 'GARBAGE' | null;
 
-/** テトリス盤面: 20行×10列 */
+/** テトリス盤面: バッファ20行 + 表示20行の40行×10列 */
 export type Board = Cell[][];
 
 /** アクティブなミノの状態 */

@@ -45,7 +45,7 @@ using EasyDecision = AgentDecision;
 // Searches every placement reachable with normal moves for the current piece
 // only. Lower evaluation scores are better, matching the existing TypeScript AI.
 [[nodiscard]] std::optional<EasyDecision> decideEasy(
-    const Board& board, PieceType type, int spawnX = 3, int spawnY = 0,
+    const Board& board, PieceType type, int spawnX = 3, int spawnY = kSpawnY,
     int spawnRotation = 0,
     const std::vector<int>& pendingGarbageGaps = {});
 

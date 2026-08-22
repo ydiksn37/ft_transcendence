@@ -5,7 +5,7 @@ board rules plus Easy, Hard, and Expert search models.
 
 The board behavior mirrors the TypeScript backend:
 
-- 20 rows x 10 columns
+- 40 rows x 10 columns (20-row vanish-zone buffer + 20 visible rows)
 - the same seven tetromino shapes
 - SRS wall kicks (180-degree rotation has no kicks)
 - collision, ghost, lock and line-clear rules

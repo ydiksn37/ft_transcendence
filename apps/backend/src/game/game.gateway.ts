@@ -11,6 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { resolve } from 'node:path';
+import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
   ServerEvent,
@@ -24,6 +25,7 @@ import type {
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
+import { AiAgentService } from './engine/ai-agent.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -68,6 +70,8 @@ export class GameGateway
   constructor(
     private readonly gameService: GameService,
     private readonly chatService: ChatService,
+    private readonly aiAgentService: AiAgentService,
+    private readonly jwtService: JwtService,
   ) {}
 
   afterInit() {
@@ -75,6 +79,15 @@ export class GameGateway
   }
 
   handleConnection(client: Socket) {
+    const token = client.handshake.auth?.token;
+    if (typeof token === 'string' && token.length > 0) {
+      try {
+        const payload = this.jwtService.verify<{ sub: string }>(token);
+        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+      } catch {
+        this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
+      }
+    }
     this.logger.log(`接続: ${client.id}`);
   }
 
@@ -181,7 +194,7 @@ export class GameGateway
         this.rooms.delete(rId);
       };
 
-      const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+      const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
       // ユーザーIDはJWTから取得（実装簡略化のため socket.data を利用）
       const userId1 = (client.data?.userId as string) ?? null;
@@ -418,7 +431,7 @@ export class GameGateway
       }
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
     instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
     instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
 
@@ -438,6 +451,11 @@ export class GameGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { difficulty: AiDifficulty },
   ) {
+    if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
+      client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
+      return;
+    }
+
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
 
@@ -446,7 +464,7 @@ export class GameGateway
       this.rooms.delete(rId);
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
     const userId = (client.data?.userId as string) ?? null;
     instance.addPlayer(client.id, userId);
@@ -627,6 +645,11 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('receive_garbage', data);
+
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.receiveGarbageFromClient(client.id, data.lines);
+    }
   }
 
   @SubscribeMessage('game_over')
@@ -634,6 +657,11 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('opponent_game_over');
+
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.handleClientGameOver(client.id);
+    }
   }
 
   // ── 観戦 ─────────────────────────────────────────────────

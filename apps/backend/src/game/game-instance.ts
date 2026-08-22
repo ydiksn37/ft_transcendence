@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import { Logger } from '@nestjs/common';
 import {
   GameState,
   TetrominoType,
@@ -7,6 +8,7 @@ import {
   AiPreviewStatus,
   ServerEvent,
   ClientEvent,
+  AI_BOT_CONFIGS,
 } from '@transcendence/shared';
 import { BagGenerator } from './engine/bag-generator';
 import {
@@ -23,7 +25,6 @@ import {
   BOARD_COLS,
 } from './engine/board';
 import { calcGarbage, calcScore, isPerfectClear } from './engine/garbage';
-import { calcAiMove } from './engine/ai-bot';
 import { CppAgentProcess } from './headless/cpp-agent-process';
 import {
   AgentAction,
@@ -33,9 +34,11 @@ import {
   boardToAgentRows,
   VISIBLE_ROW_OFFSET,
 } from './headless/headless-battle';
+import { AiAgentService } from './engine/ai-agent.service';
 
 const LOCK_DELAY_MS = 500;
 const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
+const AI_MATCH_COUNTDOWN_MS = 1000;
 const MAX_AI_ACTIONS = 1000;
 
 export interface CppAiPreviewOptions {
@@ -74,18 +77,21 @@ export interface PlayerState {
 }
 
 export class GameInstance {
+  private readonly logger = new Logger(GameInstance.name);
   readonly roomId: string;
   private server: Server;
   private bag: BagGenerator;
   private players: Map<string, PlayerState> = new Map();
   private spectators: Set<string> = new Set();
   private gravityTimer: NodeJS.Timeout | null = null;
+  private simulationStartTimer: NodeJS.Timeout | null = null;
   private lockTimer: Map<string, NodeJS.Timeout> = new Map();
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
   private cppAgent: CppAgentProcess | null = null;
   private cppPreviewOptions: CppAiPreviewOptions | null = null;
   private cppDecisionSequence = 0;
+  private aiAgentService?: AiAgentService;
 
   private onGameOver?: (
     roomId: string,
@@ -114,11 +120,13 @@ export class GameInstance {
       winnerId: string | null,
       stats: Record<string, any>,
     ) => void,
+    aiAgentService?: AiAgentService,
   ) {
     this.roomId = roomId;
     this.server = server;
     this.bag = new BagGenerator(seed);
     this.onGameOver = onGameOver;
+    this.aiAgentService = aiAgentService;
   }
 
   /** プレイヤーを追加 */
@@ -166,12 +174,49 @@ export class GameInstance {
       roomId: this.roomId,
     });
 
-    // 重力タイマー開始
-    this.startGravity();
+    // AI戦には盤面を送る第2のブラウザがないため、初期状態もサーバーから配信する。
+    this.players.forEach((player, socketId) => {
+      this.broadcastState(socketId, player);
+    });
 
-    // AI が存在する場合は非同期で動かす
+    const beginSimulation = () => {
+      this.simulationStartTimer = null;
+      if (!this.isRunning) return;
+
+      const startedAt = Date.now();
+      this.players.forEach((player) => {
+        player.startTime = startedAt;
+      });
+      this.startGravity();
+
+      // AI が存在する場合は非同期で動かす
+      if (this.aiDifficulty) {
+        void this.runAiLoop().catch((error: unknown) => {
+          this.logger.error(
+            `AI loop failed in room ${this.roomId}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+          this.server.to(this.roomId).emit(ServerEvent.ERROR, {
+            message: 'AI opponent stopped unexpectedly',
+          });
+
+          const aiSocketId = `ai_${this.roomId}`;
+          const aiPlayer = this.players.get(aiSocketId);
+          if (aiPlayer && !aiPlayer.isGameOver) {
+            this.handleGameOver(aiSocketId);
+          }
+        });
+      }
+    };
+
+    // VS AIではブラウザ側のREADY表示と同じ1秒後にシミュレーションを始める。
     if (this.aiDifficulty) {
-      this.runAiLoop();
+      this.simulationStartTimer = setTimeout(
+        beginSimulation,
+        AI_MATCH_COUNTDOWN_MS,
+      );
+    } else {
+      beginSimulation();
     }
   }
 
@@ -228,7 +273,10 @@ export class GameInstance {
   private startGravity(): void {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
-        if (player.isGameOver || (this.aiDifficulty && player.userId === null))
+        if (
+          player.isGameOver ||
+          (this.aiDifficulty && socketId === `ai_${this.roomId}`)
+        )
           return;
         this.applyGravity(socketId);
       });
@@ -541,6 +589,21 @@ export class GameInstance {
     this.lockTimer.set(socketId, timer);
   }
 
+  public get isAiMatch(): boolean {
+    return this.aiDifficulty !== null;
+  }
+
+  public receiveGarbageFromClient(targetSocketId: string, lines: number): void {
+    const aiPlayer = this.players.get(`ai_${this.roomId}`);
+    if (aiPlayer && !aiPlayer.isGameOver) {
+      aiPlayer.garbageQueue += lines;
+    }
+  }
+
+  public handleClientGameOver(socketId: string): void {
+    this.handleGameOver(socketId);
+  }
+
   private clearLockTimer(socketId: string): void {
     const t = this.lockTimer.get(socketId);
     if (t) {
@@ -554,6 +617,11 @@ export class GameInstance {
     this.players.forEach((player, socketId) => {
       if (socketId !== senderSocketId && !player.isGameOver) {
         player.garbageQueue += lines;
+
+        // AIがおじゃまを送った場合、人間のフロントエンドに送信
+        if (this.isAiMatch && senderSocketId === `ai_${this.roomId}` && socketId !== `ai_${this.roomId}`) {
+          this.server.to(socketId).emit('receive_garbage', { lines });
+        }
       }
     });
   }
@@ -607,8 +675,35 @@ export class GameInstance {
     };
 
     this.players.forEach((_, sid) => {
-      if (sid !== socketId)
+      if (sid !== socketId) {
         this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
+
+        // AIの盤面更新を、フロントエンドの40行ステージ形式に合わせて送信
+        if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
+          const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
+            if (cell === null) return [0, 'clear'];
+            if (cell === 'GARBAGE') return ['B', 'merged'];
+            return [cell, 'merged'];
+          }));
+
+          // 固定盤面には含まれない操作中ミノも重ねて、現在のAI状態を表示する。
+          if (!player.isGameOver) {
+            for (const [row, col] of getMinoCells(
+              player.activeMino,
+              player.activeX,
+              player.activeY,
+              player.activeRotation,
+            )) {
+              if (row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS) {
+                // GameBoard hides top-buffer stage cells with the "clear"
+                // status, so use the solid visual status for this snapshot.
+                frontendStage[row][col] = [player.activeMino, 'merged'];
+              }
+            }
+          }
+          this.server.to(sid).emit('opponent_board_update', { stage: frontendStage, score: player.score });
+        }
+      }
     });
     this.spectators.forEach((sid) => {
       this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
@@ -655,37 +750,55 @@ export class GameInstance {
 
   /** AI ループ */
   private async runAiLoop(): Promise<void> {
-    const aiEntry = [...this.players.entries()].find(
-      ([, p]) => p.userId === null,
-    );
-    if (!aiEntry || !this.aiDifficulty) return;
-    const [aiSocketId, aiPlayer] = aiEntry;
+    const aiSocketId = `ai_${this.roomId}`;
+    const aiPlayer = this.players.get(aiSocketId);
+    if (!aiPlayer || !this.aiDifficulty || !this.aiAgentService) return;
 
     while (this.isRunning && !aiPlayer.isGameOver) {
-      const move = await calcAiMove(
-        aiPlayer.board,
-        aiPlayer.activeMino,
+      const opponent = [...this.players.values()].find(
+        (player) => player.socketId !== aiSocketId,
+      );
+      const decision = await this.aiAgentService.getDecision(
         this.aiDifficulty,
+        {
+          matchId: this.roomId,
+          playerId: aiSocketId,
+          board: boardToAgentRows(aiPlayer.board),
+          piece: aiPlayer.activeMino,
+          next: this.bag.peek(5),
+          hold: aiPlayer.holdMino,
+          canHold: aiPlayer.canHold,
+          b2b: aiPlayer.b2b,
+          combo: aiPlayer.combo,
+          garbageQueue: aiPlayer.garbageQueue,
+          spawn: {
+            x: aiPlayer.activeX,
+            y: aiPlayer.activeY - VISIBLE_ROW_OFFSET,
+            rotation: aiPlayer.activeRotation,
+          },
+          opponent: {
+            board: boardToAgentRows(opponent?.board ?? createEmptyBoard()),
+            garbageQueue: opponent?.garbageQueue ?? 0,
+            attacksSent: opponent?.attacksSent ?? 0,
+            piecesPlaced: opponent?.piecesPlaced ?? 0,
+          },
+        },
       );
 
-      if (!this.isRunning) break;
+      if (!this.isRunning || aiPlayer.isGameOver) break;
 
-      // AI の移動を適用
-      const rotations = move.rotation - aiPlayer.activeRotation;
-      for (let i = 0; i < Math.abs(rotations); i++) {
-        this.applyInput(
-          aiSocketId,
-          rotations > 0 ? ClientEvent.ROTATE_CW : ClientEvent.ROTATE_CCW,
-        );
+      const delay = AI_BOT_CONFIGS[this.aiDifficulty].thinkDelayMs;
+      await new Promise(r => setTimeout(r, delay));
+
+      if (decision.gameOver) {
+        this.handleGameOver(aiSocketId);
+        break;
       }
-      const dx = move.x - aiPlayer.activeX;
-      for (let i = 0; i < Math.abs(dx); i++) {
-        this.applyInput(
-          aiSocketId,
-          dx > 0 ? ClientEvent.MOVE_RIGHT : ClientEvent.MOVE_LEFT,
-        );
+
+      this.validateCppDecision(aiPlayer, decision, false);
+      for (const action of decision.actions) {
+        this.applyInput(aiSocketId, this.agentActionToClientEvent(action));
       }
-      this.applyInput(aiSocketId, ClientEvent.HARD_DROP);
     }
   }
 
@@ -763,6 +876,7 @@ export class GameInstance {
   private validateCppDecision(
     player: PlayerState,
     decision: AgentDecisionResponse,
+    requirePlacement = true,
   ): void {
     if (
       decision.actions.length === 0 ||
@@ -778,9 +892,10 @@ export class GameInstance {
 
     // hard_drop より前の操作を一時状態で再現し、C++の placement と照合する。
     // C++ main は placement を常に返すため、TSとのルール差もここで検出できる。
-    if (!decision.placement) {
+    if (!decision.placement && requirePlacement) {
       throw new Error('C++ AI response has no placement');
     }
+    if (!decision.placement) return;
 
     const simulated = { ...player };
     for (const action of decision.actions.slice(0, -1)) {
@@ -806,7 +921,7 @@ export class GameInstance {
             x: simulated.activeX,
             y: expectedY - VISIBLE_ROW_OFFSET,
             rotation: simulated.activeRotation,
-          })}`,
+          })} actions=${JSON.stringify(decision.actions)}`,
       );
     }
   }
@@ -914,6 +1029,8 @@ export class GameInstance {
     this.isRunning = false;
     this.cppAgent = null;
     this.cppPreviewOptions = null;
+    if (this.simulationStartTimer) clearTimeout(this.simulationStartTimer);
+    this.simulationStartTimer = null;
     if (this.gravityTimer) clearInterval(this.gravityTimer);
     this.gravityTimer = null;
     this.lockTimer.forEach((t) => clearTimeout(t));

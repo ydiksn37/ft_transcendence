@@ -66,9 +66,9 @@ describe('HeadlessBattle', () => {
       type: 'decide',
       playerId: 'player-1',
       canHold: true,
-      spawn: { x: 3, y: -2, rotation: 0 },
+      spawn: { x: 3, y: 18, rotation: 0 },
     });
-    expect(left.requests[0].board).toHaveLength(20);
+    expect(left.requests[0].board).toHaveLength(40);
     expect(left.requests[0].board[0]).toHaveLength(10);
     expect(left.requests[0].next).toHaveLength(5);
   });

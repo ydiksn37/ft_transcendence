@@ -25,10 +25,10 @@ or spawn collision ends the match as a loss for that agent.
 
 `/ai-preview` uses the same JSON Lines process adapter. The backend owns the
 40-row board, seven-bag, hold, scoring, line clears, T-Spin detection, garbage,
-and game-over rules. Only the visible 20 rows are sent to the C++ process; the
-TS spawn row is translated to `y = -2`. C++ returns an `actions` array and the
-backend replays each action through `GameInstance.applyInput`, broadcasting a
-new `game:state` after every successful movement.
+and game-over rules. All 40 rows, including the vanish-zone buffer, and the TS
+internal spawn row (`y = 18`) are sent to C++. C++ returns an `actions` array
+and the backend replays each action through `GameInstance.applyInput`,
+broadcasting a new `game:state` after every successful movement.
 
 Build and restart the Docker services before opening the page so `ai_agent` is
 present in the backend image:

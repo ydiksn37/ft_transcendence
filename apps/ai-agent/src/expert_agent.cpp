@@ -146,7 +146,7 @@ bool canReachTSpinDouble(const Board& board,
                          int linesCleared) {
   if (linesCleared != 2 || calcGhostY(board, target) != target.y) return false;
 
-  const ActivePiece spawn{PieceType::T, 3, 0, 0};
+  const ActivePiece spawn{PieceType::T, 3, kSpawnY, 0};
   if (!isValidPosition(board, spawn)) return false;
 
   static constexpr std::array<Action, 6> kReachabilityActions{
@@ -723,8 +723,11 @@ std::optional<AgentDecision> ExpertAgent::decide(
   if (canHold && (holdPiece || !nextPieces.empty())) {
     const PieceType heldActive = holdPiece ? *holdPiece : nextPieces.front();
     const std::size_t nextIndexAfterHold = holdPiece ? 0U : 1U;
+    // HOLD respawns in TS at the spawn height from the request. Keeping y=0
+    // here produced operation sequences that replayed 18 rows higher than the
+    // TS internal spawn, especially before wall-side rotations.
     std::vector<PlacementOption> heldPlacements = enumeratePlacements(
-        board, heldActive, 3, 0, 0, limit, timedOut, nodesVisited);
+        board, heldActive, 3, spawnY, 0, limit, timedOut, nodesVisited);
     if (timedOut) {
       AgentDecision decision = *fallback;
       decision.nodesVisited = nodesVisited;

@@ -35,10 +35,20 @@ export class UsersService {
 
   // ── ゲーム設定更新 ──────────────────────────────────────
   async updateGameSettings(userId: string, data: any) {
+    const { touchFlick, ...safeData } = data; // touchFlickを除外
     return this.prisma.userGameSettings.upsert({
-      where: { userId },
-      update: data,
-      create: { userId, ...data },
+      where: {
+        userId,
+      },
+      update: {
+        ...safeData,
+        keyBindings: safeData.keyBindings ? safeData.keyBindings : undefined,
+      },
+      create: {
+        userId,
+        ...safeData,
+        keyBindings: safeData.keyBindings ? safeData.keyBindings : undefined,
+      },
     });
   }
 

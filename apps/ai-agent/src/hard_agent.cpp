@@ -405,8 +405,11 @@ std::optional<AgentDecision> HardAgent::decide(
   if (canHold && (holdPiece || !nextPieces.empty())) {
     const PieceType heldActive = holdPiece ? *holdPiece : nextPieces.front();
     const std::size_t nextIndexAfterHold = holdPiece ? 0 : 1;
+    // TS resets a held piece to the same spawn height supplied in the request.
+    // Starting at y=0 here made long soft-drop routes diverge from the
+    // authoritative TS replay, whose internal spawn row is y=18.
     auto heldPlacements = enumeratePlacements(
-        board, heldActive, 3, 0, 0, deadline, timedOut, nodesVisited);
+        board, heldActive, 3, spawnY, 0, deadline, timedOut, nodesVisited);
     if (timedOut) {
       AgentDecision decision = *fallback;
       decision.nodesVisited = nodesVisited;

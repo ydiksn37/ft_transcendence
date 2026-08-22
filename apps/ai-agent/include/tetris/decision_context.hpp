@@ -24,7 +24,7 @@ struct DecisionContext {
   std::optional<PieceType> hold;
   bool canHold = true;
   int spawnX = 3;
-  int spawnY = 0;
+  int spawnY = kSpawnY;
   int spawnRotation = 0;
   int backToBack = 0;
   int combo = -1;

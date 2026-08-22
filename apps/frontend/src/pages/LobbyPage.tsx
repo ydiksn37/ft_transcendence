@@ -16,7 +16,7 @@ export default function LobbyPage() {
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume } = useConfig();
 
   useEffect(() => {
-    if (mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS') {
+    if (mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS' || mode === 'VS_AI') {
       navigate('/lobby/MULTI_PLAY', { replace: true });
     }
   }, [mode, navigate]);
@@ -237,20 +237,41 @@ export default function LobbyPage() {
         })()}
 
         {mode === 'MULTI_PLAY' && (
-          <div className="multi-play-buttons" style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
-            <button 
-              className="start-game-btn" 
+          <div className="multi-play-buttons" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '20px', marginBottom: '40px' }}>
+            <button
+              className="start-game-btn"
               onClick={() => navigate(`/play/ONLINE_1V1`)}
               style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c`, marginBottom: 0 }}
             >
               RANDOM MATCH
             </button>
-            <button 
-              className="start-game-btn" 
+            <button
+              className="start-game-btn"
               onClick={() => navigate(`/play/CUSTOM_ROOMS`)}
               style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400', marginBottom: 0 }}
             >
               CUSTOM ROOMS
+            </button>
+            <button
+              className="start-game-btn"
+              onClick={() => navigate(`/play/VS_AI?difficulty=EASY`)}
+              style={{ borderColor: '#2ecc71', boxShadow: `0 0 20px #2ecc71`, color: '#2ecc71', marginBottom: 0, fontSize: '12px' }}
+            >
+              VS AI (EASY)
+            </button>
+            <button
+              className="start-game-btn"
+              onClick={() => navigate(`/play/VS_AI?difficulty=MEDIUM`)}
+              style={{ borderColor: '#f1c40f', boxShadow: `0 0 20px #f1c40f`, color: '#f1c40f', marginBottom: 0, fontSize: '12px' }}
+            >
+              VS AI (MEDIUM)
+            </button>
+            <button
+              className="start-game-btn"
+              onClick={() => navigate(`/play/VS_AI?difficulty=HARD`)}
+              style={{ borderColor: '#9b59b6', boxShadow: `0 0 20px #9b59b6`, color: '#9b59b6', marginBottom: 0, fontSize: '12px' }}
+            >
+              VS AI (HARD)
             </button>
           </div>
         )}

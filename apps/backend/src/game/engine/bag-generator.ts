@@ -29,7 +29,10 @@ export class BagGenerator {
   }
 
   private refill(): void {
-    this.bag = this.shuffle([...PIECE_TYPES]);
+    // `next()` consumes from the end of the array. When peek() crosses a bag
+    // boundary, put the new bag before the unconsumed current bag so those
+    // remaining pieces are still returned first.
+    this.bag = [...this.shuffle([...PIECE_TYPES]), ...this.bag];
   }
 
   /** 次のミノを取得 */

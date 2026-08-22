@@ -16,7 +16,8 @@ using json = nlohmann::json;
 
 tetris::Board parseBoard(const json& value) {
   if (!value.is_array() || value.size() != tetris::kBoardRows) {
-    throw std::invalid_argument("board must contain exactly 20 rows");
+    throw std::invalid_argument("board must contain exactly " +
+                                std::to_string(tetris::kBoardRows) + " rows");
   }
 
   tetris::Board board;

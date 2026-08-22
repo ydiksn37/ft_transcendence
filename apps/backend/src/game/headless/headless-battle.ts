@@ -30,7 +30,10 @@ export const AGENT_ACTIONS = [
 
 export type AgentAction = (typeof AGENT_ACTIONS)[number];
 
-export const AGENT_BOARD_ROWS = 20;
+// C++ receives the complete authoritative TS board, including the 20-row
+// vanish-zone buffer. Omitting it makes collision and wall-kick replay diverge
+// once blocks rise above the visible playfield.
+export const AGENT_BOARD_ROWS = BOARD_ROWS;
 export const VISIBLE_ROW_OFFSET = BOARD_ROWS - AGENT_BOARD_ROWS;
 const SPAWN_Y = 18;
 const AGENT_SPAWN_Y = SPAWN_Y - VISIBLE_ROW_OFFSET;

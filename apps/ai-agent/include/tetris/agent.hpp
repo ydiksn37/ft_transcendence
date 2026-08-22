@@ -25,7 +25,7 @@ class Agent {
       const Board& board, PieceType type,
       const std::vector<PieceType>& nextPieces = {},
       std::optional<PieceType> holdPiece = std::nullopt,
-      bool canHold = true, int spawnX = 3, int spawnY = 0,
+      bool canHold = true, int spawnX = 3, int spawnY = kSpawnY,
       int spawnRotation = 0, bool backToBackActive = false);
 };
 
