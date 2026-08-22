@@ -46,7 +46,41 @@ export const useConfig = () => {
         setIsInitialized(true);
         return;
       }
+      
       try {
+        // --- Migration & Cleanup Logic ---
+        const localTuning = localStorage.getItem('tetrisTuning');
+        const localVolume = localStorage.getItem('tetrisVolume');
+        const localKeyConfig = localStorage.getItem('tetrisKeyConfig');
+        
+        if (localTuning || localVolume || localKeyConfig) {
+          // Push guest settings to the DB
+          await fetch('/api/users/me/settings', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              das: tuningRef.current.das,
+              arr: tuningRef.current.arr,
+              dcd: tuningRef.current.dcd,
+              sdf: tuningRef.current.sdf,
+              touchFlick: tuningRef.current.touchFlick,
+              keyBindings: keyConfigRef.current,
+              volume: Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100,
+              sfxEnabled: volumeRef.current.se > 0,
+              musicEnabled: volumeRef.current.bgm > 0
+            })
+          });
+
+          // Cleanup localStorage
+          localStorage.removeItem('tetrisTuning');
+          localStorage.removeItem('tetrisVolume');
+          localStorage.removeItem('tetrisKeyConfig');
+        }
+        // ---------------------------------
+
         const res = await fetch('/api/users/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -71,17 +105,20 @@ export const useConfig = () => {
   // Save changes
   useEffect(() => {
     if (!isInitialized) return;
-    localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
+
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
+      localStorage.setItem('tetrisVolume', JSON.stringify(volume));
+      localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
+    }
+
     tuningRef.current = tuning;
-
-    localStorage.setItem('tetrisVolume', JSON.stringify(volume));
     volumeRef.current = volume;
-
-    localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
     keyConfigRef.current = keyConfig;
 
     const saveToDB = async () => {
-      const token = localStorage.getItem('token');
       if (!token) return;
       try {
         await fetch('/api/users/me/settings', {

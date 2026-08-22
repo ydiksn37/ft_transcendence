@@ -530,7 +530,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                   >
-                    FIND NEW MATCH (ENTER)
+                    {isMobileView ? 'FIND NEW MATCH' : 'FIND NEW MATCH (ENTER)'}
                   </button>
                 ) : (
                   <button 
@@ -542,7 +542,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                   >
-                    RETRY (ENTER)
+                    {isMobileView ? 'RETRY' : 'RETRY (ENTER)'}
                   </button>
                 )}
                 
@@ -554,7 +554,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                 >
-                  QUIT (ESC)
+                  {isMobileView ? 'QUIT' : 'QUIT (ESC)'}
                 </button>
               </div>
             </div>

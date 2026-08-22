@@ -15,6 +15,25 @@ export default function LobbyPage() {
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume } = useConfig();
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [showMobileConfig, setShowMobileConfig] = useState(false);
+  const [targetPlayPath, setTargetPlayPath] = useState('');
+
+  const handleStartGame = (path: string) => {
+    if (isMobile) {
+      setTargetPlayPath(path);
+      setShowMobileConfig(true);
+    } else {
+      navigate(path);
+    }
+  };
+
   useEffect(() => {
     if (mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS' || mode === 'VS_AI') {
       navigate('/lobby/MULTI_PLAY', { replace: true });
@@ -231,7 +250,9 @@ export default function LobbyPage() {
               <div style={{ fontSize: '24px', color: '#fff', textShadow: '2px 2px 0 #00FFFF', marginTop: '15px' }}>
                 {startLevel}
               </div>
-              <span style={{ fontSize: '10px', color: '#888', marginTop: '-5px' }}>USE ← / → KEYS TO STRETCH</span>
+              {!isMobile && (
+                <span style={{ fontSize: '10px', color: '#888', marginTop: '-5px' }}>USE ← / → KEYS TO STRETCH</span>
+              )}
             </div>
           );
         })()}
@@ -240,35 +261,35 @@ export default function LobbyPage() {
           <div className="multi-play-buttons" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '20px', marginBottom: '40px' }}>
             <button 
               className="start-game-btn" 
-              onClick={() => navigate(`/play/ONLINE_1V1`)}
+              onClick={() => handleStartGame(`/play/ONLINE_1V1`)}
               style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c`, marginBottom: 0 }}
             >
               RANDOM MATCH
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => navigate(`/play/CUSTOM_ROOMS`)}
+              onClick={() => handleStartGame(`/play/CUSTOM_ROOMS`)}
               style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400', marginBottom: 0 }}
             >
               CUSTOM ROOMS
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => navigate(`/play/VS_AI?difficulty=EASY`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=EASY`)}
               style={{ borderColor: '#2ecc71', boxShadow: `0 0 20px #2ecc71`, color: '#2ecc71', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (EASY)
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => navigate(`/play/VS_AI?difficulty=MEDIUM`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=MEDIUM`)}
               style={{ borderColor: '#f1c40f', boxShadow: `0 0 20px #f1c40f`, color: '#f1c40f', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (MEDIUM)
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => navigate(`/play/VS_AI?difficulty=HARD`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=HARD`)}
               style={{ borderColor: '#9b59b6', boxShadow: `0 0 20px #9b59b6`, color: '#9b59b6', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (HARD)
@@ -278,17 +299,17 @@ export default function LobbyPage() {
 
         {mode !== 'CONFIG' && mode !== 'MULTI_PLAY' && (
           <button 
-            className={`start-game-btn ${selectedIndex === 0 ? 'selected' : ''}`} 
-            onClick={() => navigate(`/play/${mode}?level=${startLevel}`)}
+            className={`start-game-btn ${selectedIndex === 0 && !isMobile ? 'selected' : ''}`} 
+            onClick={() => handleStartGame(`/play/${mode}?level=${startLevel}`)}
             onMouseEnter={() => setSelectedIndex(0)}
             style={{ 
               borderColor: getModeColor(), 
               boxShadow: `0 0 20px ${getModeColor()}`,
               marginBottom: '40px',
-              ...(selectedIndex === 0 ? { backgroundColor: 'rgba(255,255,255,0.1)', transform: 'scale(1.05)' } : {})
+              ...(selectedIndex === 0 && !isMobile ? { backgroundColor: 'rgba(255,255,255,0.1)', transform: 'scale(1.05)' } : {})
             }}
           >
-            {selectedIndex === 0 ? `▶ ${mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME'}` : (mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME')}
+            {selectedIndex === 0 && !isMobile ? `▶ ${mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME'}` : (mode === 'ONLINE_1V1' ? 'FIND MATCH' : 'START GAME')}
           </button>
         )}
 
@@ -315,6 +336,58 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+
+      {showMobileConfig && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center',
+          alignItems: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#111', padding: '25px', borderRadius: '0px', border: '4px solid #fff',
+            color: 'white', width: '85%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '20px',
+            boxShadow: '8px 8px 0px rgba(0,0,0,0.8)'
+          }}>
+            <h3 style={{ margin: 0, textAlign: 'center', color: '#00FFFF', fontSize: '18px', fontFamily: '"Press Start 2P", monospace', textShadow: '2px 2px 0 #000', lineHeight: '1.4' }}>CONTROLS</h3>
+            <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '12px', padding: '15px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #444', paddingBottom: '6px' }}><span style={{ color: '#aaa' }}>Swipe L/R</span><span style={{ fontWeight: 'bold' }}>Move</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #444', paddingBottom: '6px' }}><span style={{ color: '#aaa' }}>Swipe Down</span><span style={{ fontWeight: 'bold' }}>Soft Drop</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #444', paddingBottom: '6px' }}><span style={{ color: '#aaa' }}>Flick Down</span><span style={{ fontWeight: 'bold', color: '#ff4444' }}>Hard Drop</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #444', paddingBottom: '6px' }}><span style={{ color: '#aaa' }}>Tap L/R Half</span><span style={{ fontWeight: 'bold', color: '#4caf50' }}>Rotate L/R</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #444', paddingBottom: '6px' }}><span style={{ color: '#aaa' }}>Flick Up</span><span style={{ fontWeight: 'bold', color: '#f1c40f' }}>Rotate 180</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#aaa' }}>Tap HOLD Btn</span><span style={{ fontWeight: 'bold', color: '#9b59b6' }}>Hold Piece</span></div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', gap: '15px' }}>
+              <button 
+                onClick={() => setShowMobileConfig(false)}
+                style={{ 
+                  fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', 
+                  color: '#fff', border: '4px solid #555', cursor: 'pointer', flex: 1, 
+                  fontSize: '12px', transition: 'transform 0.1s', boxShadow: '4px 4px 0px rgba(85,85,85,0.5)' 
+                }}
+                onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+              >
+                CANCEL
+              </button>
+              <button 
+                onClick={() => navigate(targetPlayPath)}
+                style={{ 
+                  fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', 
+                  color: '#fff', border: '4px solid #4caf50', cursor: 'pointer', flex: 1, 
+                  fontSize: '12px', transition: 'transform 0.1s', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)' 
+                }}
+                onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+              >
+                START
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

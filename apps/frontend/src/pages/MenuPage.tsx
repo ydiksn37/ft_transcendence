@@ -392,20 +392,22 @@ const MenuPage = () => {
           ))}
         </div>
 
-        <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none', zIndex: 20 }}>
-          <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
+        {!isMobile && (
+          <div style={{ position: 'absolute', top: '100px', left: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none', zIndex: 20 }}>
+            <h2 style={{ color: 'white', fontSize: '24px', letterSpacing: '2px', textShadow: '2px 2px 0px #333', backgroundColor: 'rgba(0,0,0,0.8)', padding: '15px 30px', border: '4px solid white', margin: 0 }}>DROP TO SELECT MODE</h2>
 
-          <div className="menu-page-controls-info">
-            <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
-              <div style={{ color: '#4caf50' }}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-              <div style={{ color: '#4caf50' }}>RIGHT:</div><div>{keyConfig.right?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-              <div style={{ color: '#4caf50' }}>ROTATE:</div><div>{keyConfig.rotateCW?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-              <div style={{ color: '#4caf50' }}>H-DROP:</div><div>{keyConfig.hardDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
-              <div style={{ color: '#4caf50' }}>S-DROP:</div><div>{keyConfig.softDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+            <div className="menu-page-controls-info">
+              <div style={{ color: '#fff', marginBottom: '8px', fontSize: '12px', borderBottom: '1px solid #555', paddingBottom: '4px' }}>CONTROLS</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '6px' }}>
+                <div style={{ color: '#4caf50' }}>LEFT:</div><div>{keyConfig.left?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+                <div style={{ color: '#4caf50' }}>RIGHT:</div><div>{keyConfig.right?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+                <div style={{ color: '#4caf50' }}>ROTATE:</div><div>{keyConfig.rotateCW?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+                <div style={{ color: '#4caf50' }}>H-DROP:</div><div>{keyConfig.hardDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+                <div style={{ color: '#4caf50' }}>S-DROP:</div><div>{keyConfig.softDrop?.replace('Arrow', '').replace('Key', '').toUpperCase() || ''}</div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="menu-page-mode-labels">
           <div style={{ color: '#3498db' }}>4-WIDE</div>
           <div style={{ color: '#ff9800' }}>40 LINES</div>
