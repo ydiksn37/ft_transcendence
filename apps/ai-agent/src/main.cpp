@@ -48,53 +48,131 @@ tetris::Board parseBoard(const json& value) {
   return board;
 }
 
+std::vector<tetris::PieceType> parseNextPieces(const json& state) {
+  std::vector<tetris::PieceType> nextPieces;
+  if (!state.contains("next")) return nextPieces;
+  if (!state.at("next").is_array()) {
+    throw std::invalid_argument("next must be an array of tetromino names");
+  }
+  for (const json& nextPiece : state.at("next")) {
+    nextPieces.push_back(
+        tetris::pieceTypeFromString(nextPiece.get<std::string>()));
+  }
+  return nextPieces;
+}
+
+void parseGarbageLine(const json& value, std::vector<int>& gaps) {
+  if (value.is_number_integer()) {
+    gaps.push_back(value.get<int>());
+    return;
+  }
+  if (value.is_object() && value.contains("hole")) {
+    gaps.push_back(value.at("hole").get<int>());
+    return;
+  }
+  throw std::invalid_argument(
+      "incomingGarbage entries must be hole integers or objects");
+}
+
+void parseIncomingGarbage(const json& state,
+                          tetris::DecisionContext& context) {
+  context.garbageQueue = state.value("garbageQueue", 0);
+  const json* incoming = nullptr;
+  if (state.contains("incomingGarbage")) {
+    incoming = &state.at("incomingGarbage");
+  } else if (state.contains("garbageGapColumns")) {
+    incoming = &state.at("garbageGapColumns");
+  }
+  if (!incoming) return;
+
+  if (incoming->is_array()) {
+    for (const json& line : *incoming) {
+      parseGarbageLine(line, context.garbageGapColumns);
+    }
+    if (!state.contains("garbageQueue")) {
+      context.garbageQueue =
+          static_cast<int>(context.garbageGapColumns.size());
+    }
+    return;
+  }
+  if (incoming->is_object()) {
+    context.garbageQueue = incoming->value("lines", context.garbageQueue);
+    if (incoming->contains("holes")) {
+      if (!incoming->at("holes").is_array()) {
+        throw std::invalid_argument("incomingGarbage.holes must be an array");
+      }
+      for (const json& hole : incoming->at("holes")) {
+        parseGarbageLine(hole, context.garbageGapColumns);
+      }
+    }
+    return;
+  }
+  throw std::invalid_argument("incomingGarbage must be an array or object");
+}
+
+tetris::DecisionContext parseDecisionContext(const json& request) {
+  const json& state = request.contains("state") ? request.at("state") : request;
+  if (!state.is_object()) {
+    throw std::invalid_argument("state must be an object");
+  }
+
+  tetris::DecisionContext context;
+  context.board = parseBoard(state.at("board"));
+  context.active = tetris::pieceTypeFromString(
+      state.at("piece").get<std::string>());
+  context.next = parseNextPieces(state);
+  if (state.contains("hold") && !state.at("hold").is_null()) {
+    context.hold = tetris::pieceTypeFromString(
+        state.at("hold").get<std::string>());
+  }
+  context.canHold = state.value("canHold", true);
+  context.combo = state.value("combo", -1);
+  if (state.contains("b2b")) {
+    context.backToBack = state.at("b2b").is_boolean()
+                              ? (state.at("b2b").get<bool>() ? 1 : 0)
+                              : state.at("b2b").get<int>();
+  } else {
+    context.backToBack = state.value("b2bActive", false) ? 1 : 0;
+  }
+  if (state.contains("spawn")) {
+    const json& spawn = state.at("spawn");
+    context.spawnX = spawn.value("x", context.spawnX);
+    context.spawnY = spawn.value("y", context.spawnY);
+    context.spawnRotation = spawn.value("rotation", context.spawnRotation);
+  }
+  parseIncomingGarbage(state, context);
+
+  const json* opponent = nullptr;
+  if (request.contains("opponent")) opponent = &request.at("opponent");
+  else if (state.contains("opponent")) opponent = &state.at("opponent");
+  if (opponent && opponent->is_object()) {
+    context.opponent.available = true;
+    if (opponent->contains("board")) {
+      context.opponent.board = parseBoard(opponent->at("board"));
+    }
+    context.opponent.garbageQueue = opponent->value("garbageQueue", 0);
+    context.opponent.backToBack = opponent->value("b2b", 0);
+    context.opponent.combo = opponent->value("combo", -1);
+    context.opponent.attacksSent = opponent->value("attacksSent", 0);
+    context.opponent.piecesPlaced = opponent->value("piecesPlaced", 0);
+  }
+  return context;
+}
+
 json makeResponse(const json& request, tetris::Agent& agent) {
   const std::string type = request.at("type").get<std::string>();
   if (type != "decide") {
     throw std::invalid_argument("unsupported message type: " + type);
   }
 
-  const tetris::Board board = parseBoard(request.at("board"));
-  const tetris::PieceType piece =
-      tetris::pieceTypeFromString(request.at("piece").get<std::string>());
-  std::vector<tetris::PieceType> nextPieces;
-  if (request.contains("next")) {
-    if (!request.at("next").is_array()) {
-      throw std::invalid_argument("next must be an array of tetromino names");
-    }
-    for (const json& nextPiece : request.at("next")) {
-      nextPieces.push_back(
-          tetris::pieceTypeFromString(nextPiece.get<std::string>()));
-    }
-  }
-  std::optional<tetris::PieceType> holdPiece;
-  if (request.contains("hold") && !request.at("hold").is_null()) {
-    holdPiece = tetris::pieceTypeFromString(
-        request.at("hold").get<std::string>());
-  }
-  const bool canHold = request.value("canHold", true);
-  bool backToBackActive = request.value("b2bActive", false);
-  if (request.contains("b2b")) {
-    backToBackActive = request.at("b2b").is_boolean()
-                           ? request.at("b2b").get<bool>()
-                           : request.at("b2b").get<int>() > 0;
-  }
-
-  int spawnX = 3;
-  int spawnY = 0;
-  int spawnRotation = 0;
-  if (request.contains("spawn")) {
-    const json& spawn = request.at("spawn");
-    spawnX = spawn.value("x", spawnX);
-    spawnY = spawn.value("y", spawnY);
-    spawnRotation = spawn.value("rotation", spawnRotation);
-  }
-
-  const auto decision = agent.decide(board, piece, nextPieces, holdPiece,
-                                     canHold, spawnX, spawnY, spawnRotation,
-                                     backToBackActive);
+  const tetris::DecisionContext context = parseDecisionContext(request);
+  const auto decision = agent.decide(context);
   json response{{"version", 1}, {"type", "decision"}};
   if (request.contains("requestId")) response["requestId"] = request["requestId"];
+  response["inputGarbageQueue"] = context.garbageQueue;
+  response["projectedGarbageHoles"] =
+      tetris::projectedGarbageGaps(context);
+  response["opponentAvailable"] = context.opponent.available;
 
   if (!decision) {
     response["gameOver"] = true;

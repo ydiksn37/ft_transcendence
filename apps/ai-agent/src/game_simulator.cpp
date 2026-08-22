@@ -26,7 +26,7 @@ enum class ClearKind {
 
 struct ReplayResult {
   ActivePiece placement;
-  bool lastMoveWasRotation;
+  int lastRotationKickIndex;
   int dropScore;
   bool valid;
 };
@@ -35,53 +35,58 @@ ReplayResult replayDecision(const Board& board, PieceType type,
                             const AgentDecision& decision,
                             std::size_t firstAction) {
   ActivePiece active{type, 3, 0, 0};
-  bool lastMoveWasRotation = false;
+  int lastRotationKickIndex = -1;
   int dropScore = 0;
   bool locked = false;
 
   for (std::size_t index = firstAction; index < decision.actions.size();
        ++index) {
     const Action action = decision.actions[index];
-    if (locked) return {active, lastMoveWasRotation, dropScore, false};
+    if (locked) return {active, lastRotationKickIndex, dropScore, false};
     ActivePiece moved = active;
     switch (action) {
       case Action::MoveLeft:
         --moved.x;
-        lastMoveWasRotation = false;
+        lastRotationKickIndex = -1;
         break;
       case Action::MoveRight:
         ++moved.x;
-        lastMoveWasRotation = false;
+        lastRotationKickIndex = -1;
         break;
       case Action::SoftDrop:
         ++moved.y;
         ++dropScore;
+        lastRotationKickIndex = -1;
         break;
       case Action::RotateClockwise: {
-        const auto rotated =
-            tryRotate(board, active, RotationDirection::Clockwise);
-        if (!rotated) return {active, lastMoveWasRotation, dropScore, false};
+        int kickIndex = -1;
+        const auto rotated = tryRotate(
+            board, active, RotationDirection::Clockwise, &kickIndex);
+        if (!rotated) return {active, lastRotationKickIndex, dropScore, false};
         active = *rotated;
-        lastMoveWasRotation = true;
+        lastRotationKickIndex = kickIndex;
         continue;
       }
       case Action::RotateCounterClockwise: {
-        const auto rotated =
-            tryRotate(board, active, RotationDirection::CounterClockwise);
-        if (!rotated) return {active, lastMoveWasRotation, dropScore, false};
+        int kickIndex = -1;
+        const auto rotated = tryRotate(
+            board, active, RotationDirection::CounterClockwise, &kickIndex);
+        if (!rotated) return {active, lastRotationKickIndex, dropScore, false};
         active = *rotated;
-        lastMoveWasRotation = true;
+        lastRotationKickIndex = kickIndex;
         continue;
       }
       case Action::Rotate180: {
-        const auto rotated =
-            tryRotate(board, active, RotationDirection::Rotate180);
-        if (!rotated) return {active, lastMoveWasRotation, dropScore, false};
+        int kickIndex = -1;
+        const auto rotated = tryRotate(
+            board, active, RotationDirection::Rotate180, &kickIndex);
+        if (!rotated) return {active, lastRotationKickIndex, dropScore, false};
         active = *rotated;
-        lastMoveWasRotation = true;
+        lastRotationKickIndex = kickIndex;
         continue;
       }
-      case Action::HardDrop:
+      case Action::HardDrop: {
+        const int startY = active.y;
         while (true) {
           ActivePiece below = active;
           ++below.y;
@@ -89,18 +94,20 @@ ReplayResult replayDecision(const Board& board, PieceType type,
           active = below;
           dropScore += 2;
         }
+        if (active.y > startY) lastRotationKickIndex = -1;
         locked = true;
         continue;
+      }
       case Action::Hold:
-        return {active, lastMoveWasRotation, dropScore, false};
+        return {active, lastRotationKickIndex, dropScore, false};
     }
     if (!isValidPosition(board, moved)) {
-      return {active, lastMoveWasRotation, dropScore, false};
+      return {active, lastRotationKickIndex, dropScore, false};
     }
     active = moved;
   }
 
-  return {active, lastMoveWasRotation, dropScore,
+  return {active, lastRotationKickIndex, dropScore,
           locked && active == decision.placement};
 }
 
@@ -251,9 +258,15 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
     }
 
     const auto decisionStartedAt = std::chrono::steady_clock::now();
-    const auto decision = agent.decide(board, activeType, nextPieces,
-                                       holdPiece, true, 3, 0, 0,
-                                       backToBackChain > 0);
+    DecisionContext context;
+    context.board = board;
+    context.active = activeType;
+    context.next = nextPieces;
+    context.hold = holdPiece;
+    context.canHold = true;
+    context.backToBack = backToBackChain;
+    context.combo = combo;
+    const auto decision = agent.decide(context);
     const double decisionMs = std::chrono::duration<double, std::milli>(
                                   std::chrono::steady_clock::now() -
                                   decisionStartedAt)
@@ -301,9 +314,10 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
     }
 
     result.score += replay.dropScore;
-    const auto tSpin =
-        detectTSpin(board, replay.placement, replay.lastMoveWasRotation);
     const ClearResult cleared = clearLines(lockMino(board, replay.placement));
+    const auto tSpin = detectTSpin(
+        board, replay.placement, replay.lastRotationKickIndex >= 0,
+        replay.lastRotationKickIndex, cleared.linesCleared);
     board = cleared.board;
     ++result.piecesPlaced;
 

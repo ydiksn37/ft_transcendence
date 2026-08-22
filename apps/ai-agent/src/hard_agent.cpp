@@ -33,7 +33,7 @@ struct HardBoardEvaluation {
 struct SearchNode {
   ActivePiece piece;
   std::vector<Action> actions;
-  bool lastMoveWasRotation;
+  int lastRotationKickIndex;
 };
 
 struct PlacementOption {
@@ -63,7 +63,7 @@ struct BeamState {
   int maximumHeight;
 };
 
-using StateKey = std::tuple<int, int, int, bool>;
+using StateKey = std::tuple<int, int, int, int>;
 using PlacementKey = std::tuple<int, int, int>;
 
 bool deadlineReached(const Deadline& deadline) noexcept {
@@ -72,7 +72,9 @@ bool deadlineReached(const Deadline& deadline) noexcept {
 
 std::optional<ActivePiece> applyAction(const Board& board,
                                        const ActivePiece& piece,
-                                       Action action) {
+                                       Action action,
+                                       int* kickIndex) {
+  *kickIndex = -1;
   ActivePiece moved = piece;
   switch (action) {
     case Action::MoveLeft:
@@ -85,11 +87,12 @@ std::optional<ActivePiece> applyAction(const Board& board,
       ++moved.y;
       break;
     case Action::RotateClockwise:
-      return tryRotate(board, piece, RotationDirection::Clockwise);
+      return tryRotate(board, piece, RotationDirection::Clockwise, kickIndex);
     case Action::RotateCounterClockwise:
-      return tryRotate(board, piece, RotationDirection::CounterClockwise);
+      return tryRotate(board, piece, RotationDirection::CounterClockwise,
+                       kickIndex);
     case Action::Rotate180:
-      return tryRotate(board, piece, RotationDirection::Rotate180);
+      return tryRotate(board, piece, RotationDirection::Rotate180, kickIndex);
     case Action::HardDrop:
     case Action::Hold:
       return std::nullopt;
@@ -284,8 +287,8 @@ std::vector<PlacementOption> enumeratePlacements(
   std::queue<SearchNode> pending;
   std::set<StateKey> visited;
   std::map<PlacementKey, PlacementOption> placements;
-  pending.push({spawn, {}, false});
-  visited.insert({spawn.x, spawn.y, spawn.rotation, false});
+  pending.push({spawn, {}, -1});
+  visited.insert({spawn.x, spawn.y, spawn.rotation, -1});
 
   while (!pending.empty()) {
     if ((nodesVisited & 63U) == 0U && deadlineReached(deadline)) {
@@ -300,9 +303,13 @@ std::vector<PlacementOption> enumeratePlacements(
     placement.y = calcGhostY(board, placement);
     const PlacementKey placementKey{placement.x, placement.y,
                                     placement.rotation};
-    const auto tSpin =
-        detectTSpin(board, placement, node.lastMoveWasRotation);
     const ClearResult cleared = clearLines(lockMino(board, placement));
+    // frontend の hard drop は1段以上落ちた場合、最後の操作を drop にする。
+    const int lockKickIndex =
+        placement.y == node.piece.y ? node.lastRotationKickIndex : -1;
+    const auto tSpin =
+        detectTSpin(board, placement, lockKickIndex >= 0, lockKickIndex,
+                    cleared.linesCleared);
     const bool perfectClear = cleared.linesCleared > 0 && cleared.board.empty();
     const double reward =
         placementReward(cleared.linesCleared, tSpin, perfectClear);
@@ -324,21 +331,15 @@ std::vector<PlacementOption> enumeratePlacements(
     }
 
     for (const Action action : kActions) {
-      const auto next = applyAction(board, node.piece, action);
+      int nextKickIndex = -1;
+      const auto next = applyAction(board, node.piece, action, &nextKickIndex);
       if (!next) continue;
-      bool lastRotation = node.lastMoveWasRotation;
-      if (action == Action::RotateClockwise ||
-          action == Action::RotateCounterClockwise ||
-          action == Action::Rotate180) {
-        lastRotation = true;
-      } else if (action == Action::MoveLeft || action == Action::MoveRight) {
-        lastRotation = false;
-      }
-      const StateKey stateKey{next->x, next->y, next->rotation, lastRotation};
+      const StateKey stateKey{next->x, next->y, next->rotation,
+                              nextKickIndex};
       if (!visited.insert(stateKey).second) continue;
       std::vector<Action> actions = node.actions;
       actions.push_back(action);
-      pending.push({*next, std::move(actions), lastRotation});
+      pending.push({*next, std::move(actions), nextKickIndex});
     }
   }
 
@@ -365,12 +366,19 @@ HardAgent::HardAgent(std::chrono::milliseconds thinkTime)
 std::string_view HardAgent::name() const noexcept { return "hard"; }
 
 std::optional<AgentDecision> HardAgent::decide(
-    const Board& board, PieceType type,
-    const std::vector<PieceType>& nextPieces,
-    std::optional<PieceType> holdPiece, bool canHold, int spawnX,
-    int spawnY, int spawnRotation, bool backToBackActive) {
-  const auto fallback =
-      decideEasy(board, type, spawnX, spawnY, spawnRotation);
+    const DecisionContext& context) {
+  const Board& board = context.board;
+  const PieceType type = context.active;
+  const std::vector<PieceType>& nextPieces = context.next;
+  const std::optional<PieceType> holdPiece = context.hold;
+  const bool canHold = context.canHold;
+  const int spawnX = context.spawnX;
+  const int spawnY = context.spawnY;
+  const int spawnRotation = context.spawnRotation;
+  const bool backToBackActive = context.backToBack > 0;
+  const std::vector<int> garbageGaps = projectedGarbageGaps(context);
+  const auto fallback = decideEasy(board, type, spawnX, spawnY,
+                                   spawnRotation, garbageGaps);
   if (!fallback) return std::nullopt;
 
   const Deadline deadline = Clock::now() + thinkTime_;
@@ -389,6 +397,7 @@ std::optional<AgentDecision> HardAgent::decide(
   std::vector<RootPlacement> rootPlacements;
   rootPlacements.reserve(currentPlacements.size() * 2);
   for (PlacementOption& placement : currentPlacements) {
+    placement.board = applyPendingGarbage(placement.board, garbageGaps);
     rootPlacements.push_back(
         {std::move(placement), holdPiece, 0});
   }
@@ -405,6 +414,7 @@ std::optional<AgentDecision> HardAgent::decide(
       return decision;
     }
     for (PlacementOption& placement : heldPlacements) {
+      placement.board = applyPendingGarbage(placement.board, garbageGaps);
       placement.actions.insert(placement.actions.begin(), Action::Hold);
       rootPlacements.push_back(
           {std::move(placement), type, nextIndexAfterHold});
@@ -419,9 +429,12 @@ std::optional<AgentDecision> HardAgent::decide(
     const auto& root = rootPlacements[index];
     const HardBoardEvaluation boardEvaluation =
         evaluateBoardForHard(root.placement.board);
+    const int dangerHeight = garbageGaps.empty()
+                                 ? initialBoardEvaluation.maximumHeight
+                                 : boardEvaluation.maximumHeight;
     const double reward = rewardWithBackToBack(
         root.placement, backToBackActive,
-        initialBoardEvaluation.maximumHeight);
+        dangerHeight);
     layer.push_back(
         {root.placement.board,
          reward,

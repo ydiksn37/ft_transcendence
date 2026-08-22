@@ -46,17 +46,37 @@ struct TunedParameter {
   WeightMember member;
 };
 
-constexpr std::array<TunedParameter, 14> kParameters{{
+constexpr std::array<TunedParameter, 26> kParameters{{
+    {"board_stability_multiplier",
+     &tetris::ExpertWeights::boardStabilityMultiplier},
     {"aggregate_height_penalty",
      &tetris::ExpertWeights::aggregateHeightPenalty},
     {"holes_penalty", &tetris::ExpertWeights::holesPenalty},
+    {"holes_quadratic_penalty",
+     &tetris::ExpertWeights::holesQuadraticPenalty},
     {"covered_hole_penalty", &tetris::ExpertWeights::coveredHolePenalty},
     {"bumpiness_penalty", &tetris::ExpertWeights::bumpinessPenalty},
     {"maximum_height_penalty",
      &tetris::ExpertWeights::maximumHeightPenalty},
+    {"clean_board_reward", &tetris::ExpertWeights::cleanBoardReward},
     {"well_reward", &tetris::ExpertWeights::wellReward},
     {"edge_well_reward", &tetris::ExpertWeights::edgeWellReward},
     {"ready_tsd_reward", &tetris::ExpertWeights::readyTSpinDoubleReward},
+    {"completed_tsd_pattern_reward",
+     &tetris::ExpertWeights::completedTSpinDoublePatternReward},
+    {"completed_tsd_break_penalty",
+     &tetris::ExpertWeights::completedTSpinDoubleBreakPenalty},
+    {"pre_tsd_reward", &tetris::ExpertWeights::preTSpinDoubleReward},
+    {"well_distance_0_penalty",
+     &tetris::ExpertWeights::wellDistance0Penalty},
+    {"well_distance_1_penalty",
+     &tetris::ExpertWeights::wellDistance1Penalty},
+    {"well_distance_2_reward",
+     &tetris::ExpertWeights::wellDistance2Reward},
+    {"well_distance_3_reward",
+     &tetris::ExpertWeights::wellDistance3Reward},
+    {"well_distance_4_reward",
+     &tetris::ExpertWeights::wellDistance4Reward},
     {"danger_quadratic_penalty",
      &tetris::ExpertWeights::dangerQuadraticPenalty},
     {"danger_linear_penalty",
@@ -66,6 +86,7 @@ constexpr std::array<TunedParameter, 14> kParameters{{
     {"b2b_continuation_reward",
      &tetris::ExpertWeights::backToBackContinuationReward},
     {"b2b_break_penalty", &tetris::ExpertWeights::backToBackBreakPenalty},
+    {"t_wasted_penalty", &tetris::ExpertWeights::tWastedPenalty},
 }};
 
 struct Evaluation {

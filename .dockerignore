@@ -8,6 +8,7 @@ packages/*/node_modules
 dist
 apps/*/dist
 packages/*/dist
+build
 .turbo
 
 # ─── 環境変数・シークレット ────────────────────────────────────────────────

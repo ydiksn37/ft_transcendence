@@ -25,6 +25,7 @@ add_library(ai_engine
   src/agent.cpp
   src/bag.cpp
   src/board.cpp
+  src/decision_context.cpp
   src/easy_agent.cpp
   src/expert_agent.cpp
   src/game_simulator.cpp

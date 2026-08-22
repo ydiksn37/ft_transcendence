@@ -46,6 +46,7 @@ using EasyDecision = AgentDecision;
 // only. Lower evaluation scores are better, matching the existing TypeScript AI.
 [[nodiscard]] std::optional<EasyDecision> decideEasy(
     const Board& board, PieceType type, int spawnX = 3, int spawnY = 0,
-    int spawnRotation = 0);
+    int spawnRotation = 0,
+    const std::vector<int>& pendingGarbageGaps = {});
 
 }  // namespace tetris

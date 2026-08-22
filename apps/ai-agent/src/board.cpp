@@ -12,7 +12,7 @@ using Rotations = std::array<Shape, 4>;
 
 constexpr std::array<Rotations, 7> kShapes{{
     // I
-    {{{{{0, 0}, {0, 1}, {0, 2}, {0, 3}}},
+    {{{{{1, 0}, {1, 1}, {1, 2}, {1, 3}}},
       {{{0, 2}, {1, 2}, {2, 2}, {3, 2}}},
       {{{2, 0}, {2, 1}, {2, 2}, {2, 3}}},
       {{{0, 1}, {1, 1}, {2, 1}, {3, 1}}}}},
@@ -58,8 +58,8 @@ constexpr int normalizeRotation(int rotation) noexcept {
 }
 
 struct Offset {
-  int dr;
-  int dc;
+  int dx;
+  int dy;
 };
 
 using KickList = std::array<Offset, 5>;
@@ -67,12 +67,12 @@ using KickList = std::array<Offset, 5>;
 constexpr KickList kDefaultKick{{{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}};
 
 const KickList& jlstzKicks(int from, int to) {
-  static constexpr KickList k01{{{0, 0}, {-1, 0}, {-1, 1}, {0, -2}, {-1, -2}}};
-  static constexpr KickList k10{{{0, 0}, {1, 0}, {1, -1}, {0, 2}, {1, 2}}};
+  static constexpr KickList k01{{{0, 0}, {-1, 0}, {-1, -1}, {0, 2}, {-1, 2}}};
+  static constexpr KickList k10{{{0, 0}, {1, 0}, {1, 1}, {0, -2}, {1, -2}}};
   static constexpr KickList k12 = k10;
   static constexpr KickList k21 = k01;
-  static constexpr KickList k23{{{0, 0}, {1, 0}, {1, 1}, {0, -2}, {1, -2}}};
-  static constexpr KickList k32{{{0, 0}, {-1, 0}, {-1, -1}, {0, 2}, {-1, 2}}};
+  static constexpr KickList k23{{{0, 0}, {1, 0}, {1, -1}, {0, 2}, {1, 2}}};
+  static constexpr KickList k32{{{0, 0}, {-1, 0}, {-1, 1}, {0, -2}, {-1, -2}}};
   static constexpr KickList k30 = k32;
   static constexpr KickList k03 = k23;
 
@@ -88,10 +88,10 @@ const KickList& jlstzKicks(int from, int to) {
 }
 
 const KickList& iKicks(int from, int to) {
-  static constexpr KickList k01{{{0, 0}, {-2, 0}, {1, 0}, {-2, -1}, {1, 2}}};
-  static constexpr KickList k10{{{0, 0}, {2, 0}, {-1, 0}, {2, 1}, {-1, -2}}};
-  static constexpr KickList k12{{{0, 0}, {-1, 0}, {2, 0}, {-1, 2}, {2, -1}}};
-  static constexpr KickList k21{{{0, 0}, {1, 0}, {-2, 0}, {1, -2}, {-2, 1}}};
+  static constexpr KickList k01{{{0, 0}, {-2, 0}, {1, 0}, {-2, 1}, {1, -2}}};
+  static constexpr KickList k10{{{0, 0}, {2, 0}, {-1, 0}, {2, -1}, {-1, 2}}};
+  static constexpr KickList k12{{{0, 0}, {-1, 0}, {2, 0}, {-1, -2}, {2, 1}}};
+  static constexpr KickList k21{{{0, 0}, {1, 0}, {-2, 0}, {1, 2}, {-2, -1}}};
   static constexpr KickList k23 = k10;
   static constexpr KickList k32 = k01;
   static constexpr KickList k30 = k21;
@@ -179,11 +179,12 @@ std::array<Point, 4> getMinoCells(const ActivePiece& piece) {
 
 bool isValidPosition(const Board& board, const ActivePiece& piece) noexcept {
   for (const Point cell : getMinoCells(piece)) {
-    if (cell.row < 0 || cell.row >= kBoardRows || cell.col < 0 ||
-        cell.col >= kBoardCols) {
+    if (cell.row >= kBoardRows || cell.col < 0 || cell.col >= kBoardCols) {
       return false;
     }
-    if (board.cells()[cell.row][cell.col] != Cell::Empty) return false;
+    if (cell.row >= 0 && board.cells()[cell.row][cell.col] != Cell::Empty) {
+      return false;
+    }
   }
   return true;
 }
@@ -232,7 +233,9 @@ ClearResult clearLines(const Board& board) {
 
 std::optional<TSpin> detectTSpin(const Board& board,
                                  const ActivePiece& piece,
-                                 bool lastMoveWasRotation) {
+                                 bool lastMoveWasRotation,
+                                 int lastRotationKickIndex,
+                                 int linesCleared) {
   if (piece.type != PieceType::T || !lastMoveWasRotation) return std::nullopt;
 
   const std::array<Point, 4> corners{{
@@ -250,14 +253,31 @@ std::optional<TSpin> detectTSpin(const Board& board,
       ++occupied;
     }
   }
-  if (occupied >= 3) return TSpin::Full;
-  if (occupied == 2) return TSpin::Mini;
-  return std::nullopt;
+  if (occupied < 3) return std::nullopt;
+
+  const auto occupiedAt = [&](int index) {
+    const Point corner = corners[static_cast<std::size_t>(index)];
+    return corner.row < 0 || corner.row >= kBoardRows || corner.col < 0 ||
+           corner.col >= kBoardCols ||
+           board.cells()[corner.row][corner.col] != Cell::Empty;
+  };
+  static constexpr std::array<std::array<int, 2>, 4> kFrontCorners{{
+      {{2, 3}}, {{0, 2}}, {{0, 1}}, {{1, 3}},
+  }};
+  const auto& front = kFrontCorners[normalizeRotation(piece.rotation)];
+  const int frontCorners = static_cast<int>(occupiedAt(front[0])) +
+                           static_cast<int>(occupiedAt(front[1]));
+  return frontCorners == 2 || lastRotationKickIndex == 4 || linesCleared >= 2
+             ? TSpin::Full
+             : TSpin::Mini;
 }
 
 std::optional<ActivePiece> tryRotate(const Board& board,
                                      const ActivePiece& piece,
-                                     RotationDirection direction) {
+                                     RotationDirection direction,
+                                     int* kickIndex) {
+  if (kickIndex != nullptr) *kickIndex = -1;
+  if (piece.type == PieceType::O) return std::nullopt;
   const int from = normalizeRotation(piece.rotation);
   int to = from;
   if (direction == RotationDirection::Clockwise) {
@@ -273,8 +293,11 @@ std::optional<ActivePiece> tryRotate(const Board& board,
   const int attempts = direction == RotationDirection::Rotate180 ? 1 : 5;
   for (int index = 0; index < attempts; ++index) {
     const Offset kick = kicks[index];
-    ActivePiece rotated{piece.type, piece.x + kick.dc, piece.y + kick.dr, to};
-    if (isValidPosition(board, rotated)) return rotated;
+    ActivePiece rotated{piece.type, piece.x + kick.dx, piece.y + kick.dy, to};
+    if (isValidPosition(board, rotated)) {
+      if (kickIndex != nullptr) *kickIndex = index;
+      return rotated;
+    }
   }
   return std::nullopt;
 }

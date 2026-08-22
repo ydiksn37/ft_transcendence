@@ -11,16 +11,29 @@ namespace tetris {
 
 std::string_view EasyAgent::name() const noexcept { return "easy"; }
 
-std::optional<AgentDecision> EasyAgent::decide(const Board& board,
-                                               PieceType type,
-                                               const std::vector<PieceType>&,
-                                               std::optional<PieceType>,
-                                               bool,
-                                               int spawnX,
-                                               int spawnY,
-                                               int spawnRotation,
-                                               bool) {
-  return decideEasy(board, type, spawnX, spawnY, spawnRotation);
+std::optional<AgentDecision> Agent::decide(
+    const Board& board, PieceType type,
+    const std::vector<PieceType>& nextPieces,
+    std::optional<PieceType> holdPiece, bool canHold, int spawnX,
+    int spawnY, int spawnRotation, bool backToBackActive) {
+  DecisionContext context;
+  context.board = board;
+  context.active = type;
+  context.next = nextPieces;
+  context.hold = holdPiece;
+  context.canHold = canHold;
+  context.spawnX = spawnX;
+  context.spawnY = spawnY;
+  context.spawnRotation = spawnRotation;
+  context.backToBack = backToBackActive ? 1 : 0;
+  return decide(context);
+}
+
+std::optional<AgentDecision> EasyAgent::decide(
+    const DecisionContext& context) {
+  const std::vector<int> garbageGaps = projectedGarbageGaps(context);
+  return decideEasy(context.board, context.active, context.spawnX,
+                    context.spawnY, context.spawnRotation, garbageGaps);
 }
 
 std::unique_ptr<Agent> createAgent(std::string_view modelName,

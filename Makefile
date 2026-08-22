@@ -84,6 +84,13 @@ compare_games ?= 100
 compare_seed ?= 3000000
 compare_max_pieces ?= 500
 compare_jobs ?= 1
+versus_model_a ?= hard
+versus_model_b ?= easy
+versus_games ?= 10
+versus_seed ?= $(seed)
+versus_max_pieces ?= 500
+versus_format ?= table
+versus_timeout_ms ?= $(shell expr $(think_ms) \* 4 + 500)
 
 ai-build: ## C++ AIをReleaseモードで設定・ビルドする
 	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
@@ -120,6 +127,19 @@ ai-compare: ai-build ## HardとExpertを同一seedで比較し95%信頼区間を
 		--max-pieces "$(compare_max_pieces)" \
 		--jobs "$(compare_jobs)" \
 		--think-ms "$(think_ms)"
+
+ai-versus: ai-build ## TSルールでC++ AI同士を対戦 (例: make ai-versus versus_model_a=hard versus_model_b=easy)
+	npm run build --workspace=@transcendence/shared
+	npm run headless --workspace=@transcendence/backend -- \
+		--agent "$(CURDIR)/$(AI_BUILD_DIR)/ai_agent" \
+		--model-a "$(versus_model_a)" \
+		--model-b "$(versus_model_b)" \
+		--games "$(versus_games)" \
+		--seed "$(versus_seed)" \
+		--max-pieces "$(versus_max_pieces)" \
+		--think-ms "$(think_ms)" \
+		--timeout-ms "$(versus_timeout_ms)" \
+		--format "$(versus_format)"
 
 # --- テスト ---
 test: ## 全ての単体テストを実行する
@@ -161,4 +181,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install ai-build ai-run test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install ai-build ai-run ai-versus test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check

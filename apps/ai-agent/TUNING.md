@@ -2,6 +2,11 @@
 
 Date: 2026-08-21
 
+> This report predates the completed/preceding TSD pattern, frontend-SRS slot
+> reachability, completed-slot break penalty, well-distance, and `tWasted`
+> features. It remains the historical baseline; run CEM again before treating
+> the new default weights as validated.
+
 ## Data split
 
 - training: seeds 10000-10049

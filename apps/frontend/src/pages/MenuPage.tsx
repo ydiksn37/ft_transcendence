@@ -283,6 +283,21 @@ const MenuPage = () => {
         </button>
         )}
         <div className="menu-page-controls-group">
+          <button
+            onClick={() => navigate('/ai-preview')}
+            style={{
+              padding: '12px 20px',
+              fontSize: '14px',
+              fontFamily: "'Press Start 2P', monospace",
+              backgroundColor: '#06343b',
+              color: 'white',
+              border: '4px solid #6cecff',
+              cursor: 'pointer',
+              boxShadow: '4px 4px 0px #000'
+            }}
+          >
+            AI PREVIEW
+          </button>
           {!isMobile && (
             <button
               onClick={() => setDropTime(dropTime ? null : 1000)}

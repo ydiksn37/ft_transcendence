@@ -119,8 +119,9 @@ continuation bonus, while an ordinary line clear receives a height-sensitive
 break penalty. The danger penalty still permits a rescue clear near the top of
 the board. The standalone simulator supplies eight known Next pieces. Hold is
 searched at every future turn; an empty Hold consumes the first Next piece,
-while an occupied Hold swaps pieces without consuming Next. Opponent garbage
-prediction is not part of this implementation.
+while an occupied Hold swaps pieces without consuming Next. All models apply
+the current `garbageQueue` after each candidate root placement, matching the
+backend's lock ordering. Future opponent attacks are not predicted yet.
 
 Benchmark output includes average/max completed search depth, visited nodes and
 the number of decisions that reached the time limit. Since the stopping point
@@ -138,9 +139,34 @@ known Next queue are searched at every depth.
 Unlike Hard, Expert ranks clears using the backend garbage table directly. Its
 search state carries B2B status, including the backend's T-Spin Mini and Perfect
 Clear behavior. The evaluator combines survival features with Tetris wells and
-completed T-Spin Double slots. TSD receives an efficiency bonus because it
-sends Tetris-level garbage with two cleared lines, while an ordinary clear gets
-a height-sensitive penalty when it breaks B2B.
+T-Spin Double setup features. In addition to the original completed-slot
+detector, it matches the completed `100/000/101` TSD terrain and its mirror,
+then runs the frontend-compatible movement and SRS search from spawn. A slot
+receives completed reward only when T can reach it and finish with a real final
+rotation; a sealed slot under stacked roof blocks receives no reward. Destroying
+a reachable completed slot before firing its TSD also has an explicit penalty.
+The preceding `000/101` pattern receives a smaller reward to keep a useful setup
+from being pruned before its roof is built. A five-category well-distance
+feature favors central wells, and placing a T without a detected T-Spin receives
+a small `tWasted` penalty. These three
+rewards are 7-bag-aware: the evaluator finds the distance to T in Hold/Next,
+values a completed slot most when T is immediately available, and values a
+preceding setup most when T is two to four moves away. If T is outside the
+visible queue, it keeps a discounted value because the next 7-bag still
+guarantees another T. Completed-slot reward saturates after two simultaneous
+TSD slots (after one when the board height reaches 12), so a third T-shaped
+reservation must justify its ordinary hole and height penalties. TSD receives
+an efficiency bonus because it sends Tetris-level garbage with two cleared
+lines, while an ordinary clear gets a height-sensitive penalty when it breaks
+B2B.
+
+Board stability and attack setup are evaluated separately. Buried holes have
+both linear and quadratic penalties, while a low board without holes receives
+a clean-board reward. Stability is weighted more heavily as maximum height
+rises. At the same time, high stacks discount only unfinished setup and well
+rewards; a completed TSD slot keeps its value because it may be an immediate
+rescue clear. This prevents a speculative T-Spin setup from outweighing several
+buried holes without suppressing an already available attack.
 
 ```sh
 make ai-run model=expert think_ms=50
@@ -156,11 +182,13 @@ operation sequence remains subject to replay by the authoritative game engine.
 ### Expert weight tuning
 
 `ai_tune` applies the Cross-Entropy Method (CEM) to the Expert evaluation
-weights. Every candidate receives the same piece seeds and a fixed search-node
-budget, so fitness comparisons are reproducible and do not depend on CPU
-timing. Fitness primarily rewards sent garbage per piece, then survival and B2B.
-An independently seeded validation set decides whether sampled weights are
-recommended.
+weights, including board-stability scaling, quadratic holes, the clean-board
+reward, completed/preceding TSD patterns, five well-distance categories, and
+`tWasted`. Every candidate receives the same piece seeds and a fixed
+search-node budget, so fitness comparisons are reproducible and do not depend
+on CPU timing. Fitness primarily rewards sent garbage per piece, then survival
+and B2B. An independently seeded validation set decides whether sampled weights
+are recommended.
 
 ```sh
 make ai-tune
@@ -174,9 +202,11 @@ make ai-tune \
 ```
 
 The command prints the baseline, best training result, holdout validation, and
-the recommended weights as JSON. The current defaults were selected from three
-optimizer seeds using 50 training and 50 validation seeds. The complete split,
-results, and final untouched 100-seed test are recorded in `TUNING.md`.
+the recommended weights as JSON. The original defaults were selected from
+three optimizer seeds using 50 training and 50 validation seeds. The newly
+added TSD-pattern weights start from conservative manual values and must be
+retuned on the same split. The complete historical split, results, and final
+untouched 100-seed test are recorded in `TUNING.md`.
 
 Use `ai_compare` for a paired Hard/Expert test. It reports the mean same-seed
 difference and its 95% confidence interval.
@@ -198,22 +228,36 @@ It first reports readiness:
 {"version":1,"type":"ready","difficulty":"easy"}
 ```
 
-A decision request contains the locked board and current piece. Hard and Expert
-read the optional `next`, `hold`, `canHold`, and `b2b` fields for multi-piece search.
-`b2b` may be the backend's numeric chain count or a boolean; `b2bActive` is also
-accepted. Board rows may be arrays in the same format as TypeScript (`null`,
-`"I"`, `"GARBAGE"`, etc.), or ten-character strings using `.` for empty and `#`
-for garbage.
+A decision request contains one shared `DecisionContext`. Easy, Hard, and
+Expert all read `garbageQueue`; Hard and Expert additionally use `next`,
+`hold`, `canHold`, and `b2b` for multi-piece search. `combo` and `opponent` are
+parsed into the common context for opponent-aware models. `b2b` may be the
+backend's numeric chain count or a boolean; `b2bActive` is also accepted. Board
+rows may be arrays in the same format as TypeScript (`null`, `"I"`,
+`"GARBAGE"`, etc.), or ten-character strings using `.` for empty and `#` for
+garbage.
 
 ```json
-{"version":1,"type":"decide","requestId":"move-1","board":["..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","....######"],"piece":"I","next":["T","O","S","Z","J"],"hold":"L","canHold":true,"b2b":3,"spawn":{"x":3,"y":0,"rotation":0}}
+{"version":1,"type":"decide","requestId":"move-1","board":["..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","..........","....######"],"piece":"I","next":["T","O","S","Z","J"],"hold":"L","canHold":true,"b2b":3,"combo":1,"garbageQueue":3,"incomingGarbage":[{"hole":2},{"hole":2},{"hole":7}],"spawn":{"x":3,"y":0,"rotation":0}}
 ```
+
+`incomingGarbage` is optional. When the backend knows the upcoming hole
+columns, it may send them as integers or `{ "hole": N }` objects. With only
+`garbageQueue`, the worker uses a deterministic projected hole sequence. The
+next request still starts from the server-supplied authoritative board, so an
+unknown prediction cannot cause persistent desynchronization. A version-2
+request may put these player fields under a `state` object while leaving
+`opponent` at the top level.
 
 The response contains a reachable operation sequence ending in `hard_drop`:
 
 ```json
 {"version":1,"type":"decision","requestId":"move-1","gameOver":false,"placement":{"piece":"I","x":0,"y":19,"rotation":0},"score":0.0,"linesCleared":1,"actions":["move_left","move_left","move_left","hard_drop"]}
 ```
+
+For diagnostics, the response also reports `inputGarbageQueue`,
+`projectedGarbageHoles`, and whether an opponent snapshot was available. These
+fields do not change the operation protocol and may be ignored by the backend.
 
 Send `{"type":"shutdown"}` to stop the worker cleanly.
 
