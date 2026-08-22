@@ -40,8 +40,8 @@ export interface GameRecordView {
 	id: string; // uuid
 	date: string; // createdAt
 	mode: GameMode;
-	score: number; // TODO: これDBに記録ないので確認
- 	level: number;  // TODO: これDBに記録ないので確認
+	apm: number;
+ 	pps: number;
 	result: MatchOutcome | null; // TODO: SOLOも記録するならnullが入る
 	lines: number;
 }

@@ -6,21 +6,15 @@ export class ExportService {
   constructor(private prisma: PrismaService) {}
 
   async exportUserData(userId: string) {
-    const [
-      user,
-      stats,
-      settings,
-      gameResultsP1,
-      gameResultsP2,
-      sprintRecords
-    ] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: userId } }),
-      this.prisma.userStats.findUnique({ where: { userId } }),
-      this.prisma.userGameSettings.findUnique({ where: { userId } }),
-      this.prisma.gameResult.findMany({ where: { player1Id: userId } }),
-      this.prisma.gameResult.findMany({ where: { player2Id: userId } }),
-      this.prisma.sprintRecord.findMany({ where: { userId } })
-    ]);
+    const [user, stats, settings, gameResultsP1, gameResultsP2, sprintRecords] =
+      await Promise.all([
+        this.prisma.user.findUnique({ where: { id: userId } }),
+        this.prisma.userStats.findUnique({ where: { userId } }),
+        this.prisma.userGameSettings.findUnique({ where: { userId } }),
+        this.prisma.gameResult.findMany({ where: { player1Id: userId } }),
+        this.prisma.gameResult.findMany({ where: { player2Id: userId } }),
+        this.prisma.sprintRecord.findMany({ where: { userId } }),
+      ]);
 
     // GDPA Data Export Payload
     return {
@@ -41,7 +35,7 @@ export class ExportService {
         userId,
         status: 'READY',
         processedAt: new Date(),
-      }
+      },
     });
     return data;
   }

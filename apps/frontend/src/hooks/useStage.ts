@@ -7,12 +7,15 @@ export type LockEvent = {
   lines: number;
   tSpinType: 'none' | 't-spin' | 'mini-t-spin';
   perfectClear: boolean;
+  lockedX: number;
+  lockedY: number;
 };
 
 export const useStage = (
   player: Player,
-  resetPlayer: (width?: number) => void,
-  checkGameOver: (stage: Cell[][]) => boolean
+  resetPlayer: (width?: number, stage?: Cell[][]) => void,
+  checkGameOver: (stage: Cell[][], isLockOut?: boolean) => boolean,
+  disableSweep: boolean = false
 ) => {
   const [stage, setStage] = useState<Cell[][]>(createStage());
   const [lockEvent, setLockEvent] = useState<LockEvent | null>(null);
@@ -43,18 +46,20 @@ export const useStage = (
 
     // 2. If collided, bake the active piece into the stage
     if (player.collided) {
+      let isLockOut = true;
       player.tetromino.forEach((row, y) => {
         row.forEach((value, x) => {
           if (value !== 0) {
             const pY = y + player.pos.y;
             const pX = x + player.pos.x;
+            if (pY >= 18) isLockOut = false;
             if (pY >= 0 && pY < newStage.length && pX >= 0 && pX < newStage[0].length) {
               newStage[pY][pX] = [value, 'merged'] as Cell;
             }
           }
         });
       });
-      const { swept, cleared } = sweepRows(newStage);
+      const { swept, cleared } = disableSweep ? { swept: newStage, cleared: 0 } : sweepRows(newStage);
 
       let tSpinType: 'none' | 't-spin' | 'mini-t-spin' = 'none';
       if (
@@ -111,11 +116,13 @@ export const useStage = (
         id: lockEventIdRef.current,
         lines: cleared,
         tSpinType,
-        perfectClear
+        perfectClear,
+        lockedX: player.pos.x,
+        lockedY: player.pos.y
       });
       
-      if (!checkGameOver(swept)) {
-        resetPlayer(newStage[0].length);
+      if (!checkGameOver(swept, isLockOut)) {
+        resetPlayer(newStage[0].length, swept);
       }
     } else {
       stageRef.current = newStage;

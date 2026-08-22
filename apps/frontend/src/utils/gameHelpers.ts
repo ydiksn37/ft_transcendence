@@ -1,7 +1,7 @@
 import type { Player } from '../hooks/usePlayer';
 
 export const STAGE_WIDTH = 10;
-export const STAGE_HEIGHT = 22;
+export const STAGE_HEIGHT = 40;
 
 export type CellStatus = 'clear' | 'merged' | 'ghost';
 export type Cell = [string | 0, CellStatus];
@@ -22,8 +22,8 @@ export const checkCollision = (
         const nextY = y + player.pos.y + moveY;
         const nextX = x + player.pos.x + moveX;
 
-        // Ceiling collision
-        if (nextY < 0) return true;
+        // Allow pieces to exist in skyline (y < 0) for advanced rotation setups
+        // if (nextY < 0) return true;
 
         // Floor collision
         if (nextY >= STAGE_HEIGHT) return true;

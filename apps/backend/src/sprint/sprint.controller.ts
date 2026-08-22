@@ -1,10 +1,24 @@
-import { Controller, Get, Post, Body, Request, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Request,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { SprintService } from './sprint.service';
 import { SaveSprintDto } from './dto/save-sprint.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 // TODO: Ensure JwtAuthGuard is imported correctly based on your auth module
 // Assuming standard Passport JWT Guard setup in this project
 import { AuthGuard } from '@nestjs/passport';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Sprint (40 Lines)')
 @Controller('sprint')
@@ -22,6 +36,7 @@ export class SprintController {
     return this.sprintService.saveRecord(req.user.id, dto);
   }
 
+  @Public()
   @Get('leaderboard')
   @ApiOperation({ summary: 'グローバルランキングを取得 (Top 10)' })
   @ApiResponse({ status: 200, description: 'ランキングデータを返します。' })
@@ -33,7 +48,10 @@ export class SprintController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: '自分の記録ランキングを取得 (Top 10)' })
-  @ApiResponse({ status: 200, description: '個人のランキングデータを返します。' })
+  @ApiResponse({
+    status: 200,
+    description: '個人のランキングデータを返します。',
+  })
   async getMyRecords(@Request() req: any) {
     return this.sprintService.getMyRecords(req.user.id, 10);
   }

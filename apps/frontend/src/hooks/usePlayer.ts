@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { checkCollision, STAGE_WIDTH, type Cell } from '../utils/gameHelpers';
 import { randomTetromino, peekNextTetrominoKeys, TETROMINOS } from '../utils/tetrominos';
+import { WALL_KICKS_NORMAL, WALL_KICKS_I } from '@transcendence/shared';
 
 export type Player = {
   pos: { x: number; y: number };
@@ -10,30 +11,6 @@ export type Player = {
   spawnCount: number;
   lastAction?: 'move' | 'rotate' | 'drop' | 'spawn';
   kickIndex?: number;
-};
-
-// SRS wall-kick data (normal pieces)
-const WALL_KICKS_NORMAL: Record<string, number[][]> = {
-  '0->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-  '1->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-  '1->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-  '2->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-  '2->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-  '3->2': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-  '3->0': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-  '0->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-};
-
-// SRS wall-kick data (I piece)
-const WALL_KICKS_I: Record<string, number[][]> = {
-  '0->1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
-  '1->0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
-  '1->2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
-  '2->1': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
-  '2->3': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
-  '3->2': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
-  '3->0': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
-  '0->3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
 };
 
 const rotate = (matrix: (string | number)[][], dir: number): (string | number)[][] => {
@@ -47,7 +24,7 @@ const rotate = (matrix: (string | number)[][], dir: number): (string | number)[]
 
 export const usePlayer = () => {
   const [player, setPlayer] = useState<Player>({
-    pos: { x: 0, y: 0 },
+    pos: { x: 0, y: 18 },
     tetromino: TETROMINOS[0].shape,
     collided: false,
     rotationIndex: 0,
@@ -103,17 +80,23 @@ export const usePlayer = () => {
     });
   }, []);
 
-  const resetPlayer = useCallback((width: number = STAGE_WIDTH) => {
+  const resetPlayer = useCallback((width: number = STAGE_WIDTH, stage?: Cell[][]) => {
     const nextTetromino = randomTetromino().shape;
-    setPlayer(prev => ({
-      pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
-      tetromino: nextTetromino,
-      collided: false,
-      rotationIndex: 0,
-      spawnCount: prev.spawnCount + 1,
-      lastAction: 'spawn',
-      kickIndex: 0,
-    }));
+    setPlayer(prev => {
+      const newPlayer = {
+        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 17 },
+        tetromino: nextTetromino,
+        collided: false,
+        rotationIndex: 0 as 0 | 1 | 2 | 3,
+        spawnCount: prev.spawnCount + 1,
+        lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+        kickIndex: 0,
+      };
+      if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+        newPlayer.pos.y = 18;
+      }
+      return newPlayer;
+    });
     setNextPieceKeys(peekNextTetrominoKeys(5)); // peek at new next pieces
     setHoldInfo(prev => ({ ...prev, hasHeld: false }));
   }, []);
@@ -122,7 +105,7 @@ export const usePlayer = () => {
     setHoldInfo({ tetromino: null, hasHeld: false });
   }, []);
 
-  const playerHold = useCallback((width: number = STAGE_WIDTH) => {
+  const playerHold = useCallback((width: number = STAGE_WIDTH, stage?: Cell[][]) => {
     if (holdInfo.hasHeld) return;
 
     const currentType = player.tetromino.flat().find(cell => cell !== 0) as string;
@@ -131,27 +114,39 @@ export const usePlayer = () => {
     if (holdInfo.tetromino) {
       // Swap with existing hold — does NOT consume next piece
       const heldTetromino = TETROMINOS[holdInfo.tetromino as keyof typeof TETROMINOS].shape;
-      setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 0 },
-        tetromino: heldTetromino,
-        collided: false,
-        rotationIndex: 0,
-        spawnCount: prev.spawnCount + 1,
-        lastAction: 'spawn',
-        kickIndex: 0,
-      }));
+      setPlayer(prev => {
+        const newPlayer = {
+          pos: { x: Math.floor(width / 2) - Math.ceil(heldTetromino[0].length / 2), y: 17 },
+          tetromino: heldTetromino,
+          collided: false,
+          rotationIndex: 0 as 0 | 1 | 2 | 3,
+          spawnCount: prev.spawnCount + 1,
+          lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+          kickIndex: 0,
+        };
+        if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+          newPlayer.pos.y = 18;
+        }
+        return newPlayer;
+      });
     } else {
       // No hold piece yet — consume next piece from bag
       const nextTetromino = randomTetromino().shape;
-      setPlayer(prev => ({
-        pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 0 },
-        tetromino: nextTetromino,
-        collided: false,
-        rotationIndex: 0,
-        spawnCount: prev.spawnCount + 1,
-        lastAction: 'spawn',
-        kickIndex: 0,
-      }));
+      setPlayer(prev => {
+        const newPlayer = {
+          pos: { x: Math.floor(width / 2) - Math.ceil(nextTetromino[0].length / 2), y: 17 },
+          tetromino: nextTetromino,
+          collided: false,
+          rotationIndex: 0 as 0 | 1 | 2 | 3,
+          spawnCount: prev.spawnCount + 1,
+          lastAction: 'spawn' as 'spawn' | 'move' | 'rotate',
+          kickIndex: 0,
+        };
+        if (stage && !checkCollision(newPlayer, stage, { x: 0, y: 1 })) {
+          newPlayer.pos.y = 18;
+        }
+        return newPlayer;
+      });
       setNextPieceKeys(peekNextTetrominoKeys(5));
     }
 
@@ -162,8 +157,10 @@ export const usePlayer = () => {
     setPlayer(prev => {
       const clonedPlayer: Player = JSON.parse(JSON.stringify(prev));
 
-      // O-piece (2×2): no rotation
-      if (clonedPlayer.tetromino.length === 2) return prev;
+      // O-piece (2×2): no rotation, but still trigger 'rotate' action for lock delay reset
+      if (clonedPlayer.tetromino.length === 2) {
+        return { ...prev, lastAction: 'rotate' };
+      }
 
       const currentIdx = clonedPlayer.rotationIndex;
       const nextIdx = (currentIdx + dir + 4) % 4;

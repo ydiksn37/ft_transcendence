@@ -3,6 +3,7 @@ import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import type { Player } from './usePlayer';
 import type { Cell } from '../utils/gameHelpers';
 import type { Socket } from 'socket.io-client';
+import { soundManager } from '../utils/soundManager';
 
 type UseKeyboardControlsProps = {
   player: Player;
@@ -11,7 +12,7 @@ type UseKeyboardControlsProps = {
   keyConfigRef: MutableRefObject<Record<string, string>>;
   gameOver: boolean;
   dropTime: number | null;
-  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1'>;
+  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>;
   countdownRef: MutableRefObject<string | null>;
   listeningActionRef: MutableRefObject<string | null>;
   setKeyConfig: Dispatch<SetStateAction<Record<string, string>>>;
@@ -20,20 +21,20 @@ type UseKeyboardControlsProps = {
   softDrop: () => void;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
-  playerHold: (width: number) => void;
+  playerHold: (width: number, stage?: Cell[][]) => void;
   startGame: (mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   socketRef: MutableRefObject<Socket | null>;
   setSocket: (s: Socket | null) => void;
   setIsWaiting: (w: boolean) => void;
   setDropTime: (t: number | null) => void;
-  setAppState: (s: 'MENU') => void;
+  quitGame: () => void;
 };
 
 export const useKeyboardControls = ({
   player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
   countdownRef, listeningActionRef, setKeyConfig, setListeningAction,
   movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-  socketRef, setSocket, setIsWaiting, setDropTime, setAppState
+  socketRef, setSocket, setIsWaiting, setDropTime, quitGame
 }: UseKeyboardControlsProps) => {
   const heldKeys = useRef<Set<string>>(new Set());
   const horizKeys = useRef<string[]>([]);
@@ -127,18 +128,25 @@ export const useKeyboardControls = ({
         return;
       }
 
-      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1') return;
+      if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') return;
 
       if (Object.values(conf).includes(code)) {
         e.preventDefault();
       }
 
       if (code === conf.restart) {
-        if (!e.repeat && appStateRef.current !== 'ONLINE_1V1') startGame();
+        if (!e.repeat) {
+          if (appStateRef.current === 'MENU') {
+            setDropTime(dropTime ? null : 1000);
+          } else if (appStateRef.current !== 'ONLINE_1V1') {
+            startGame();
+          }
+        }
         return;
       }
 
       if (code === conf.quitToMenu) {
+        if (gameOver) return;
         if (!e.repeat) {
           if (socketRef.current) {
             socketRef.current.disconnect();
@@ -146,7 +154,7 @@ export const useKeyboardControls = ({
           }
           setIsWaiting(false);
           setDropTime(null);
-          setAppState('MENU');
+          quitGame();
         }
         return;
       }
@@ -162,6 +170,7 @@ export const useKeyboardControls = ({
             heldKeys.current.add(code);
             horizKeys.current.push(code);
             movePlayerRef.current(dir, stageRef.current, false);
+            soundManager.playSe('move');
             startDASARR();
           }
           break;
@@ -173,23 +182,38 @@ export const useKeyboardControls = ({
           softDrop();
           break;
         case conf.hardDrop:
-          if (!e.repeat) hardDrop();
+          if (!e.repeat) {
+            hardDrop();
+            soundManager.playSe('drop');
+          }
           break;
         case conf.rotateCW:
-          if (!e.repeat) playerRotate(stageRef.current, 1);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, 1);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.rotateCCW:
-          if (!e.repeat) playerRotate(stageRef.current, -1);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, -1);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.rotate180:
-          if (!e.repeat) playerRotate(stageRef.current, 2);
+          if (!e.repeat) {
+            playerRotate(stageRef.current, 2);
+            soundManager.playSe('rotate');
+          }
           break;
         case conf.hold:
-          if (!e.repeat) playerHold(stageRef.current[0].length);
+          if (!e.repeat) {
+            playerHold(stageRef.current[0].length, stageRef.current);
+            soundManager.playSe('hold');
+          }
           break;
       }
     },
-    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, setAppState, countdownRef]
+    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, quitGame, countdownRef]
   );
 
   const handleKeyUp = useCallback(

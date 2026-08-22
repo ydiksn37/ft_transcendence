@@ -1,29 +1,13 @@
-import { TetrominoType, TETROMINO_SHAPES, Board, Cell } from '@transcendence/shared';
+import {
+  TetrominoType,
+  TETROMINO_SHAPES,
+  Board,
+  Cell,
+  WALL_KICKS_NORMAL,
+  WALL_KICKS_I,
+} from '@transcendence/shared';
 
-/** SRS（Super Rotation System）壁蹴りオフセットテーブル */
-const WALL_KICK_JLSTZ: Record<string, [number, number][]> = {
-  '0->1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-  '1->0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-  '1->2': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-  '2->1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-  '2->3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-  '3->2': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-  '3->0': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-  '0->3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-};
-
-const WALL_KICK_I: Record<string, [number, number][]> = {
-  '0->1': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-  '1->0': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-  '1->2': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-  '2->1': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-  '2->3': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-  '3->2': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-  '3->0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-  '0->3': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-};
-
-export const BOARD_ROWS = 20;
+export const BOARD_ROWS = 40;
 export const BOARD_COLS = 10;
 
 /** 空の盤面を生成 */
@@ -56,8 +40,8 @@ export function isValidPosition(
 ): boolean {
   const cells = getMinoCells(type, x, y, rotation);
   for (const [row, col] of cells) {
-    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return false;
-    if (board[row][col] !== null) return false;
+    if (row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return false;
+    if (row >= 0 && board[row][col] !== null) return false;
   }
   return true;
 }
@@ -86,16 +70,21 @@ export function lockMino(
   const newBoard = cloneBoard(board);
   const cells = getMinoCells(type, x, y, rotation);
   for (const [row, col] of cells) {
-    if (row >= 0 && row < BOARD_ROWS) newBoard[row][col] = type as Cell;
+    if (row >= 0 && row < BOARD_ROWS) newBoard[row][col] = type;
   }
   return newBoard;
 }
 
 /** ライン消去 — 消去ライン数を返す */
-export function clearLines(board: Board): { board: Board; linesCleared: number } {
+export function clearLines(board: Board): {
+  board: Board;
+  linesCleared: number;
+} {
   const newBoard = board.filter((row) => row.some((cell) => cell === null));
   const linesCleared = BOARD_ROWS - newBoard.length;
-  const emptyRows = Array.from({ length: linesCleared }, () => Array(BOARD_COLS).fill(null));
+  const emptyRows = Array.from({ length: linesCleared }, () =>
+    Array(BOARD_COLS).fill(null),
+  );
   return { board: [...emptyRows, ...newBoard], linesCleared };
 }
 
@@ -118,7 +107,13 @@ export function detectTSpin(
   ];
 
   const occupied = corners.filter(([r, c]) => {
-    return r < 0 || r >= BOARD_ROWS || c < 0 || c >= BOARD_COLS || board[r]?.[c] !== null;
+    return (
+      r < 0 ||
+      r >= BOARD_ROWS ||
+      c < 0 ||
+      c >= BOARD_COLS ||
+      board[r]?.[c] !== null
+    );
   }).length;
 
   if (occupied >= 3) return 'tspin';
@@ -136,17 +131,19 @@ export function tryRotate(
   direction: 'CW' | 'CCW' | '180',
 ): { x: number; y: number; rotation: 0 | 1 | 2 | 3 } | null {
   let newRotation: 0 | 1 | 2 | 3;
-  if (direction === 'CW') newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
-  else if (direction === 'CCW') newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
+  if (direction === 'CW')
+    newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
+  else if (direction === 'CCW')
+    newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
   else newRotation = ((currentRotation + 2) % 4) as 0 | 1 | 2 | 3;
 
-  const kickTable = type === 'I' ? WALL_KICK_I : WALL_KICK_JLSTZ;
+  const kickTable = type === 'I' ? WALL_KICKS_I : WALL_KICKS_NORMAL;
   const kickKey = `${currentRotation}->${newRotation}`;
   const kicks = kickTable[kickKey] ?? [[0, 0]];
 
-  for (const [dr, dc] of kicks) {
-    const newX = x + dc;
-    const newY = y + dr;
+  for (const [dx, dy] of kicks) {
+    const newX = x + dx;
+    const newY = y + dy;
     if (isValidPosition(board, type, newX, newY, newRotation)) {
       return { x: newX, y: newY, rotation: newRotation };
     }

@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils"
-
 export interface AvatarIconProps extends React.HTMLAttributes<HTMLDivElement> {
 	color: string
 	symbol?: string
@@ -7,14 +5,16 @@ export interface AvatarIconProps extends React.HTMLAttributes<HTMLDivElement> {
 	size?: number
 }
 
-export function AvatarIcon({ color, symbol, photo, size = 40, className, style, ...props }: AvatarIconProps) {
+export function AvatarIcon({ color, symbol, photo, size = 40, style, ...props }: AvatarIconProps) {
 	return (
 		<div
-			className={cn(
-				"inline-flex shrink-0 items-center justify-center overflow-hidden border-2",
-				className,
-			)}
 			style={{
+				display: 'inline-flex',
+				flexShrink: 0,
+				alignItems: 'center',
+				justifyContent: 'center',
+				overflow: 'hidden',
+				border: '2px solid',
 				width: size,
 				height: size,
 				borderColor: color,
@@ -25,13 +25,12 @@ export function AvatarIcon({ color, symbol, photo, size = 40, className, style, 
 			{...props}	
 		>
 			{photo ? (
-				<img src={photo} alt="avatar" className="h-full w-full object-cover" />
+				<img src={photo} alt="avatar" style={{ height: '100%', width: '100%', objectFit: 'cover' }} />
 			) : (
 				<span style={{color: color, fontSize: size * 0.38, textShadow: `0 0 6px ${color}`}}>
 					{symbol}
 				</span>
 			)}
-
 		</div>
 	)
 }

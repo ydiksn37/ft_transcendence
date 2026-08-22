@@ -1,4 +1,8 @@
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 
@@ -30,4 +34,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
 /** 42 OAuth ガード */
 @Injectable()
-export class FtOauthGuard extends AuthGuard('42') {}
+export class FtOauthGuard extends AuthGuard('42') {
+  getAuthenticateOptions(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest();
+    return {
+      state: req.query.state,
+    };
+  }
+}

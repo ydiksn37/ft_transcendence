@@ -59,8 +59,7 @@ function getBestPlacement(
 
   for (let rotation = 0 as 0 | 1 | 2 | 3; rotation < 4; rotation++) {
     for (let x = -2; x < BOARD_COLS + 2; x++) {
-      // 最下部まで落とす
-      let y = 0;
+      let y = 18;
       if (!isValidPosition(board, type, x, y, rotation)) continue;
 
       while (isValidPosition(board, type, x, y + 1, rotation)) y++;
@@ -93,7 +92,7 @@ export async function calcAiMove(
 
   // ミス確率でランダムな配置をする
   if (Math.random() < config.mistakeRate) {
-    const rotation = (Math.floor(Math.random() * 4)) as 0 | 1 | 2 | 3;
+    const rotation = Math.floor(Math.random() * 4) as 0 | 1 | 2 | 3;
     const validXs: number[] = [];
     for (let x = 0; x < BOARD_COLS; x++) {
       if (isValidPosition(board, type, x, 0, rotation)) validXs.push(x);

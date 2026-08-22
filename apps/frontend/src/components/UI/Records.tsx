@@ -1,8 +1,7 @@
 import React from 'react';
 
 type RecordsProps = {
-  records: number[];
-  setAppState: (state: 'MENU') => void;
+  records: any[];
 };
 
 const formatTime = (ms: number) => {
@@ -12,24 +11,32 @@ const formatTime = (ms: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
-export const Records: React.FC<RecordsProps> = ({ records, setAppState }) => {
+export const Records: React.FC<RecordsProps> = ({ records }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-      <h1>40 Lines Top 10</h1>
-      <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '20px', minWidth: '300px', backgroundColor: '#222', padding: '20px', borderRadius: '8px' }}>
-        {records.length === 0 ? <p style={{ textAlign: 'center' }}>No records yet.</p> : records.map((time, idx) => (
-          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? '#cd7f32' : 'white' }}>
-            <span>{idx + 1}.</span>
-            <span>{formatTime(time)}</span>
-          </div>
-        ))}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+      <h2 style={{ margin: '0 0 20px 0', color: '#ff9800', textShadow: '2px 2px 0 #000', textAlign: 'center' }}>40 LINES TOP 10</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '14px', width: '100%', maxWidth: '500px' }}>
+        {records.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#888' }}>No records yet.</p>
+        ) : (
+          records.map((r, idx) => (
+            <div key={idx} style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              color: idx === 0 ? '#ffd700' : idx === 1 ? '#c0c0c0' : idx === 2 ? '#cd7f32' : 'white',
+              borderBottom: '2px dashed #444',
+              paddingBottom: '8px'
+            }}>
+              <span style={{ width: '30px' }}>{idx + 1}.</span>
+              <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '10px' }}>
+                {r.user?.displayName || r.user?.username || r.record?.user?.displayName || r.record?.user?.username || 'Guest'}
+              </span>
+              <span style={{ minWidth: '80px', textAlign: 'right' }}>{formatTime(r.record?.timeMs || r)}</span>
+            </div>
+          ))
+        )}
       </div>
-      <button
-        onClick={() => setAppState('MENU')}
-        style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-      >
-        Back to Menu
-      </button>
     </div>
   );
 };
