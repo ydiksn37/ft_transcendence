@@ -39,6 +39,7 @@ import { AiAgentService } from './engine/ai-agent.service';
 const LOCK_DELAY_MS = 500;
 const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
 const AI_MATCH_COUNTDOWN_MS = 1000;
+const AI_ACTION_INTERVAL_MS = 50;
 const MAX_AI_ACTIONS = 1000;
 
 export interface CppAiPreviewOptions {
@@ -796,8 +797,18 @@ export class GameInstance {
       }
 
       this.validateCppDecision(aiPlayer, decision, false);
-      for (const action of decision.actions) {
+      for (let index = 0; index < decision.actions.length; index++) {
+        if (!this.isRunning || aiPlayer.isGameOver) return;
+        const action = decision.actions[index];
         this.applyInput(aiSocketId, this.agentActionToClientEvent(action));
+
+        // Socketの連続更新が1描画にまとめられないよう、操作を短い間隔で再生する。
+        // 最終操作の後は次の探索へそのまま進む。
+        if (index < decision.actions.length - 1) {
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, AI_ACTION_INTERVAL_MS),
+          );
+        }
       }
     }
   }

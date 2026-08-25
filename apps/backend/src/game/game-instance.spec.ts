@@ -90,11 +90,14 @@ describe('GameInstance AI matches', () => {
     game.stop();
   });
 
-  it('applies AI actions and publishes the locked board to the human', async () => {
+  it('publishes each AI movement before publishing the locked board', async () => {
     const aiAgent = {
       getDecision: jest
         .fn()
-        .mockResolvedValueOnce({ gameOver: false, actions: ['hard_drop'] })
+        .mockResolvedValueOnce({
+          gameOver: false,
+          actions: ['move_left', 'soft_drop', 'hard_drop'],
+        })
         .mockImplementation(() => new Promise(() => undefined)),
     } as unknown as AiAgentService;
     const roomId = 'ai_action_room';
@@ -107,11 +110,29 @@ describe('GameInstance AI matches', () => {
 
     await jest.advanceTimersByTimeAsync(1800);
 
+    const updatesAfterHorizontalMove = emissions.filter(
+      (emission) =>
+        emission.target === humanSocketId &&
+        emission.event === 'opponent_board_update',
+    );
+    expect(updatesAfterHorizontalMove).toHaveLength(2);
+
+    await jest.advanceTimersByTimeAsync(50);
+    const updatesAfterSoftDrop = emissions.filter(
+      (emission) =>
+        emission.target === humanSocketId &&
+        emission.event === 'opponent_board_update',
+    );
+    expect(updatesAfterSoftDrop).toHaveLength(3);
+
+    await jest.advanceTimersByTimeAsync(50);
+
     const updates = emissions.filter(
       (emission) =>
         emission.target === humanSocketId &&
         emission.event === 'opponent_board_update',
     );
+    expect(updates).toHaveLength(4);
     expect(updates.some((update) => update.payload.score > 0)).toBe(true);
     expect(
       updates.some((update) =>
