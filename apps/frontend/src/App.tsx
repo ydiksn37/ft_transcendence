@@ -11,6 +11,7 @@ import JoinPage from "@/pages/JoinPage"
 import MenuPage from "@/pages/MenuPage"
 import LobbyPage from "@/pages/LobbyPage"
 import PlayPage from "@/pages/PlayPage"
+import AiPreviewPage from "@/pages/AiPreviewPage"
 
 import { OAuthCallback } from "@/pages/OAuthCallback"
 
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/menu" element={<MenuPage />} />
       <Route path="/lobby/:mode" element={<LobbyPage />} />
       <Route path="/play/:mode" element={<PlayPage />} />
+      <Route path="/ai-preview" element={<AiPreviewPage />} />
       
       {/* どこにも適さないURLはTOPへ */}
       <Route path="*" element={<Navigate to="/" replace />} />

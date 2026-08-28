@@ -19,13 +19,14 @@ type TetrisUIProps = {
   stage: Cell[][];
   player: Player;
   gameOver: boolean;
-  gameMode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1';
+  gameMode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'AI_PREVIEW';
   score: number;
   level: number;
   lines: number;
   nextPieceKeys: string[];
   holdInfo: { tetromino: string | null; hasHeld: boolean };
   isWaiting: boolean;
+  connectionError: string | null;
   matchResult: 'WIN' | 'LOSE' | null;
   opponentStage: Cell[][] | null;
   opponentScore: number;
@@ -47,15 +48,19 @@ type TetrisUIProps = {
   joinOnline?: () => void;
   isCustomRoom?: boolean;
   quitGame?: () => void;
+  onlineRestartLabel?: string;
   onHold: () => void;
+  onQuit?: () => void;
+  extraLeftPanel?: React.ReactNode;
+  ghostYOverride?: number;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
-  isWaiting, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
-  countdown, finalTime, elapsedTime, piecesPlaced, attackLines,
-  socketRef, setSocket, setIsWaiting, setDropTime, formatTime, createStage, appState,
-  restartGame, joinOnline, isCustomRoom, quitGame, onHold
+  isWaiting, connectionError, matchResult, opponentStage, opponentScore, pendingGarbage, actionText,
+  countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
+  formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, quitGame,
+  onlineRestartLabel, onHold, onQuit, extraLeftPanel, ghostYOverride
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
@@ -72,7 +77,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       
       const expectedHeight = isMobile ? 750 : 800;
       const scaleY = (vh - 40) / expectedHeight;
-      const expectedWidth = isMobile ? (gameMode === 'ONLINE_1V1' ? 550 : 460) : (gameMode === 'ONLINE_1V1' ? 1100 : 700);
+      const expectedWidth = isMobile
+        ? (gameMode === 'ONLINE_1V1' ? 550 : 460)
+        : (gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
       const scaleX = (vw - 20) / expectedWidth;
       setScale(Math.min(1.5, scaleY, scaleX));
     };
@@ -85,7 +92,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     if (!gameOver) return;
     const handleGameOverKeys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        navigate('/menu');
+        if (onQuit) onQuit();
+        else navigate('/menu');
       } else if (e.key === 'Enter') {
         if (isCustomRoom) {
           if (quitGame) quitGame();
@@ -99,7 +107,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     };
     window.addEventListener('keydown', handleGameOverKeys);
     return () => window.removeEventListener('keydown', handleGameOverKeys);
-  }, [gameOver, navigate, isCustomRoom, quitGame, gameMode, joinOnline, restartGame]);
+  }, [gameOver, navigate, onQuit, isCustomRoom, quitGame, gameMode, joinOnline, restartGame]);
+
 
   const retroBoxStyle: React.CSSProperties = {
     backgroundColor: '#000',
@@ -133,6 +142,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     '40_LINES': { label: '40 LINES', color: 'var(--color-neon-cyan)' },
     '4_WIDE': { label: '4 WIDE', color: 'var(--color-neon-cyan)' },
     'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
+    'AI_PREVIEW': { label: 'AI PREVIEW', color: 'var(--color-neon-cyan)' },
   }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
   const modules = import.meta.glob<string>(
@@ -146,6 +156,36 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     const randomLoader = loaders[Math.floor(Math.random() * loaders.length)];
     randomLoader().then(setBgImage);
   }, []);
+
+  if (gameMode === 'ONLINE_1V1' && connectionError) {
+    return (
+      <div style={{
+        width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+        backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
+        fontFamily: '"Press Start 2P", monospace', color: 'white'
+      }}>
+        <h1 style={{ fontSize: '36px', color: '#e74c3c', textShadow: '4px 4px 0px #000', marginBottom: '24px', textAlign: 'center', lineHeight: '1.5' }}>
+          CONNECTION ERROR
+        </h1>
+        <p style={{ fontSize: '14px', lineHeight: '1.8', textAlign: 'center' }}>{connectionError}</p>
+        <button
+          onClick={() => {
+            socketRef.current?.disconnect();
+            setSocket(null);
+            navigate('/lobby/MULTI_PLAY');
+          }}
+          style={{
+            fontFamily: '"Press Start 2P", monospace', padding: '16px 32px', marginTop: '24px',
+            backgroundColor: '#000', color: '#fff', border: '4px solid #fff', cursor: 'pointer'
+          }}
+        >
+          BACK
+        </button>
+      </div>
+    );
+  }
 
   if (gameMode === 'ONLINE_1V1' && isWaiting) {
     return (
@@ -184,19 +224,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     <div 
       className="hold-button"
       onClick={() => {
-        if (isMobileView) {
+        if (isMobileView && gameMode !== 'AI_PREVIEW') {
           onHold();
           soundManager.playSe('hold');
         }
       }}
       onTouchEnd={(e) => {
-        if (isMobileView) {
+        if (isMobileView && gameMode !== 'AI_PREVIEW') {
           e.preventDefault();
           onHold();
           soundManager.playSe('hold');
         }
       }}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: isMobileView ? 'pointer' : 'default' }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: isMobileView && gameMode !== 'AI_PREVIEW' ? 'pointer' : 'default' }}
     >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
@@ -208,12 +248,14 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     <button
       tabIndex={gameOver ? -1 : 0}
       onClick={() => {
+        if (onQuit) { onQuit(); return; }
         if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
         setIsWaiting(false); setDropTime(null); 
         navigate(`/lobby/${gameMode}`);
       }}
       onTouchEnd={(e) => {
         e.preventDefault();
+        if (onQuit) { onQuit(); return; }
         if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
         setIsWaiting(false); setDropTime(null); 
         navigate(`/lobby/${gameMode}`);
@@ -273,6 +315,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             {!isMobileView && (
               <div className="tetris-side-panel">
                 {holdBlock}
+                {extraLeftPanel}
                 {quitButton}
               </div>
             )}
@@ -288,7 +331,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 <GameBoard 
                   stage={stage} 
                   player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : calculateGhostY(player, stage)} 
+                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
                   targetLine={
                     gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
                       ? 22 - (40 - lines) 
@@ -511,7 +554,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                   >
-                    RETURN TO ROOM (ENTER)
+                    {isMobileView ? 'RETURN TO ROOM' : 'RETURN TO ROOM (ENTER)'}
                   </button>
                 ) : (
                   <>
@@ -525,37 +568,57 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                             navigate('/lobby/MULTI_PLAY');
                           }
                         }}
+                        onTouchEnd={(e) => {
+                          e.preventDefault();
+                          if (joinOnline) {
+                            joinOnline();
+                          } else {
+                            navigate('/lobby/MULTI_PLAY');
+                          }
+                        }}
                         style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                         onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                         onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                         onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                       >
-                        FIND NEW MATCH (ENTER)
+                        {isMobileView ? 'FIND NEW MATCH' : (onlineRestartLabel ?? 'FIND NEW MATCH (ENTER)')}
                       </button>
                     ) : (
                       <button 
                         autoFocus
                         onClick={() => restartGame()}
+                        onTouchEnd={(e) => { e.preventDefault(); restartGame(); }}
                         style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                         onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                         onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                         onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                       >
-                        RETRY (ENTER)
+                        {isMobileView ? 'RETRY' : 'RETRY (ENTER)'}
                       </button>
                     )}
                     
                     <button 
-                      onClick={() => quitGame ? quitGame() : navigate('/menu')}
+                      onClick={() => {
+                        if (onQuit) onQuit();
+                        else if (quitGame) quitGame();
+                        else navigate('/menu');
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        if (onQuit) onQuit();
+                        else if (quitGame) quitGame();
+                        else navigate('/menu');
+                      }}
                       style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #e74c3c', boxShadow: '4px 4px 0px rgba(231,76,60,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
                       onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
                       onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                       onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                     >
-                      QUIT (ESC)
+                      {isMobileView ? 'QUIT' : 'QUIT (ESC)'}
                     </button>
                   </>
                 )}
+
               </div>
             </div>
           )}

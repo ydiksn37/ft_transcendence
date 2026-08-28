@@ -5,11 +5,12 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { GameController } from './game.controller';
 import { ChatModule } from '../chat/chat.module';
+import { AiAgentService } from './engine/ai-agent.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, ChatModule],
   controllers: [GameController],
-  providers: [GameGateway, GameService],
-  exports: [GameService],
+  providers: [GameGateway, GameService, AiAgentService],
+  exports: [GameService, AiAgentService],
 })
 export class GameModule {}

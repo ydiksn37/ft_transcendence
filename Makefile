@@ -59,6 +59,88 @@ install: ## 依存パッケージをすべてインストールする
 	npm install
 	npm run build --workspace=@transcendence/shared
 
+# --- C++ AI ---
+AI_BUILD_DIR := build/ai-agent
+model ?= easy
+games ?= 1
+seed ?= $(shell od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+max_pieces ?= 5000
+jobs ?= 1
+preview ?= 1
+delay_ms ?= 100
+think_ms ?= 50
+tune_iterations ?= 4
+tune_population ?= 8
+tune_elite ?= 2
+tune_games ?= 2
+tune_seed ?= 42
+tune_validation_games ?= 4
+tune_validation_seed ?= 1000000
+tune_optimizer_seed ?= 1
+tune_max_pieces ?= 80
+tune_max_nodes ?= 6000
+tune_jobs ?= 1
+compare_games ?= 100
+compare_seed ?= 3000000
+compare_max_pieces ?= 500
+compare_jobs ?= 1
+versus_model_a ?= hard
+versus_model_b ?= easy
+versus_games ?= 10
+versus_seed ?= $(seed)
+versus_max_pieces ?= 500
+versus_format ?= table
+versus_timeout_ms ?= $(shell expr $(think_ms) \* 4 + 500)
+
+ai-build: ## C++ AIをReleaseモードで設定・ビルドする
+	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	cmake --build $(AI_BUILD_DIR) --parallel
+
+ai-run: ai-build ## C++ AIを実行する (例: make ai-run model=easy)
+	./$(AI_BUILD_DIR)/ai_benchmark \
+		--model "$(model)" \
+		--games "$(games)" \
+		--seed "$(seed)" \
+		--max-pieces "$(max_pieces)" \
+		--jobs "$(jobs)" $(if $(filter 1 true yes,$(preview)),--preview) \
+		--delay-ms "$(delay_ms)" \
+		--think-ms "$(think_ms)"
+
+ai-tune: ai-build ## CEMでExpert評価関数を最適化する
+	./$(AI_BUILD_DIR)/ai_tune \
+		--iterations "$(tune_iterations)" \
+		--population "$(tune_population)" \
+		--elite "$(tune_elite)" \
+		--games "$(tune_games)" \
+		--seed "$(tune_seed)" \
+		--validation-games "$(tune_validation_games)" \
+		--validation-seed "$(tune_validation_seed)" \
+		--optimizer-seed "$(tune_optimizer_seed)" \
+		--max-pieces "$(tune_max_pieces)" \
+		--max-nodes "$(tune_max_nodes)" \
+		--jobs "$(tune_jobs)"
+
+ai-compare: ai-build ## HardとExpertを同一seedで比較し95%信頼区間を表示する
+	./$(AI_BUILD_DIR)/ai_compare \
+		--games "$(compare_games)" \
+		--seed "$(compare_seed)" \
+		--max-pieces "$(compare_max_pieces)" \
+		--jobs "$(compare_jobs)" \
+		--think-ms "$(think_ms)"
+
+ai-versus: ai-build ## TSルールでC++ AI同士を対戦 (例: make ai-versus versus_model_a=hard versus_model_b=easy)
+	npm run build --workspace=@transcendence/shared
+	npm run headless --workspace=@transcendence/backend -- \
+		--agent "$(CURDIR)/$(AI_BUILD_DIR)/ai_agent" \
+		--model-a "$(versus_model_a)" \
+		--model-b "$(versus_model_b)" \
+		--games "$(versus_games)" \
+		--seed "$(versus_seed)" \
+		--max-pieces "$(versus_max_pieces)" \
+		--think-ms "$(think_ms)" \
+		--timeout-ms "$(versus_timeout_ms)" \
+		--format "$(versus_format)"
+
 # --- テスト ---
 test: ## 全ての単体テストを実行する
 	npm run test
@@ -99,4 +181,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install ai-build ai-run ai-versus test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check

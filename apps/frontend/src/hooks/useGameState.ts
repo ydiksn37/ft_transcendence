@@ -12,6 +12,7 @@ export const useGameState = () => {
   const socketRef = useRef(socket);
   useEffect(() => { socketRef.current = socket; }, [socket]);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [opponentStage, setOpponentStage] = useState<Cell[][] | null>(null);
   const [opponentScore, setOpponentScore] = useState(0);
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
@@ -54,6 +55,7 @@ export const useGameState = () => {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
     isWaiting, setIsWaiting,
+    connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
     matchResult, setMatchResult,

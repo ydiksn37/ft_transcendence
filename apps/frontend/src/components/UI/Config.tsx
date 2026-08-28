@@ -74,7 +74,13 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
       <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
         <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
         <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Object.entries(keyConfig).map(([action, code]) => (
+          {[
+            'left', 'right', 'softDrop', 'hardDrop',
+            'rotateCW', 'rotateCCW', 'rotate180',
+            'hold', 'restart', 'quitToMenu'
+          ].map((action) => {
+            const code = keyConfig[action] || '';
+            return (
             <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
               <button
@@ -98,7 +104,8 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
                 }).replace(/^Arrow/, '')}
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

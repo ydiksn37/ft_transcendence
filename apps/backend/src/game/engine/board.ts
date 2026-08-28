@@ -96,6 +96,8 @@ export function detectTSpin(
   y: number,
   rotation: 0 | 1 | 2 | 3,
   lastMoveWasRotation: boolean,
+  kickIndex: number,
+  linesCleared: number,
 ): 'tspin' | 'tspin_mini' | null {
   if (type !== 'T' || !lastMoveWasRotation) return null;
 
@@ -116,9 +118,30 @@ export function detectTSpin(
     );
   }).length;
 
-  if (occupied >= 3) return 'tspin';
-  if (occupied === 2) return 'tspin_mini';
-  return null;
+  if (occupied < 3) return null;
+
+  const occupiedAt = (index: number): number => {
+    const [r, c] = corners[index];
+    return r < 0 ||
+      r >= BOARD_ROWS ||
+      c < 0 ||
+      c >= BOARD_COLS ||
+      board[r]?.[c] !== null
+      ? 1
+      : 0;
+  };
+  const frontCornerIndexes: Record<0 | 1 | 2 | 3, [number, number]> = {
+    0: [2, 3],
+    1: [0, 2],
+    2: [0, 1],
+    3: [1, 3],
+  };
+  const [frontA, frontB] = frontCornerIndexes[rotation];
+  const frontCorners = occupiedAt(frontA) + occupiedAt(frontB);
+
+  return frontCorners === 2 || kickIndex === 4 || linesCleared >= 2
+    ? 'tspin'
+    : 'tspin_mini';
 }
 
 /** SRS回転 — 成功した位置を返す、失敗は null */
@@ -129,7 +152,8 @@ export function tryRotate(
   y: number,
   currentRotation: 0 | 1 | 2 | 3,
   direction: 'CW' | 'CCW' | '180',
-): { x: number; y: number; rotation: 0 | 1 | 2 | 3 } | null {
+): { x: number; y: number; rotation: 0 | 1 | 2 | 3; kickIndex: number } | null {
+  if (type === 'O') return null;
   let newRotation: 0 | 1 | 2 | 3;
   if (direction === 'CW')
     newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
@@ -141,21 +165,26 @@ export function tryRotate(
   const kickKey = `${currentRotation}->${newRotation}`;
   const kicks = kickTable[kickKey] ?? [[0, 0]];
 
-  for (const [dx, dy] of kicks) {
+  for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
+    const [dx, dy] = kicks[kickIndex];
     const newX = x + dx;
     const newY = y + dy;
     if (isValidPosition(board, type, newX, newY, newRotation)) {
-      return { x: newX, y: newY, rotation: newRotation };
+      return { x: newX, y: newY, rotation: newRotation, kickIndex };
     }
   }
   return null;
 }
 
 /** おじゃまラインを盤面下部に追加 */
-export function addGarbageLines(board: Board, lines: number): Board {
+export function addGarbageLines(
+  board: Board,
+  lines: number,
+  random: () => number = Math.random,
+): Board {
   const newBoard = cloneBoard(board).slice(lines);
   for (let i = 0; i < lines; i++) {
-    const gapCol = Math.floor(Math.random() * BOARD_COLS);
+    const gapCol = Math.floor(random() * BOARD_COLS);
     const garbageRow = Array(BOARD_COLS).fill('GARBAGE') as Cell[];
     garbageRow[gapCol] = null;
     newBoard.push(garbageRow);

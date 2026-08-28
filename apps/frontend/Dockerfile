@@ -8,12 +8,12 @@ COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/shared/package.json ./packages/shared/
 
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
 
 # 共有パッケージをビルド
-RUN npm run build --workspace=@transcendence/shared
+RUN --mount=type=cache,target=/app/node_modules/.cache npm run build --workspace=@transcendence/shared
 
 WORKDIR /app/apps/frontend
 EXPOSE 5173
