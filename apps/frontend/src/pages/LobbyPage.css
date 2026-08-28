@@ -1,12 +1,14 @@
 .lobby-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100dvh;
+  width: 100%;
   background-color: #111;
   color: white;
   font-family: 'Press Start 2P', monospace;
   padding: 20px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .lobby-header {
@@ -107,54 +109,71 @@
 }
 
 @media (max-width: 768px) {
+  .lobby-container {
+    height: 100%;
+    min-height: 0;
+    padding: 10px;
+    overflow-y: auto; /* Fallback in case it's still too tall */
+  }
   .lobby-header {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
     width: 100%;
-    align-items: stretch;
+    margin-bottom: 10px;
   }
   .user-controls {
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 100%;
-  }
-  .user-controls .nav-btn {
-    flex: 1;
-    min-width: 120px;
+    display: contents;
   }
   .back-btn, .nav-btn {
-    font-size: 10px;
-    padding: 10px;
-    height: auto;
+    font-size: 9px;
+    padding: 0 10px;
+    height: 40px;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+  }
+  .lobby-content {
+    justify-content: center;
   }
   .lobby-panels {
     flex-direction: column;
     align-items: center;
+    margin-bottom: 10px;
+    gap: 15px;
+  }
+  .panel {
+    min-height: 200px;
+    padding: 10px;
   }
   .config-panel, .records-panel {
     width: 100%;
     max-width: 100%;
   }
   .mode-title {
-    font-size: 32px;
-  }
-  .marathon-slider-wrapper {
-    transform: scale(0.65);
+    font-size: 28px;
+    margin-bottom: 20px;
   }
   .multi-play-buttons {
     flex-direction: column !important;
     align-items: center;
     width: 100%;
+    gap: 10px !important;
   }
   .multi-play-buttons .start-game-btn {
     margin-bottom: 0;
   }
   .start-game-btn {
-    font-size: 24px;
-    padding: 15px 30px;
+    font-size: 18px;
+    padding: 12px 20px;
     width: 100%;
     max-width: 300px;
-    margin-bottom: 30px;
+    margin-bottom: 15px;
   }
   .settings-header {
     flex-direction: column !important;

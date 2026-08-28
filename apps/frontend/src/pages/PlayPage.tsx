@@ -100,8 +100,7 @@ const PlayPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuning, setListeningAction } = useConfig();
-  const tuningRef = useRef(tuning);
+  const { keyConfig, setKeyConfig, keyConfigRef, tuning, tuningRef, setListeningAction } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────

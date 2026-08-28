@@ -68,7 +68,7 @@ export const useConfig = () => {
               sdf: tuningRef.current.sdf,
               touchFlick: tuningRef.current.touchFlick,
               keyBindings: keyConfigRef.current,
-              volume: Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100,
+              volume: Math.round(Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100),
               sfxEnabled: volumeRef.current.se > 0,
               musicEnabled: volumeRef.current.bgm > 0
             })
@@ -118,10 +118,10 @@ export const useConfig = () => {
     volumeRef.current = volume;
     keyConfigRef.current = keyConfig;
 
-    const saveToDB = async () => {
+    const timeoutId = setTimeout(async () => {
       if (!token) return;
       try {
-        await fetch('/api/users/me/settings', {
+        const res = await fetch('/api/users/me/settings', {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -134,16 +134,23 @@ export const useConfig = () => {
             sdf: tuning.sdf,
             touchFlick: tuning.touchFlick,
             keyBindings: keyConfig,
-            volume: Math.max(volume.se, volume.bgm) * 100,
+            volume: Math.round(Math.max(volume.se, volume.bgm) * 100),
             sfxEnabled: volume.se > 0,
             musicEnabled: volume.bgm > 0
           })
         });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Save config failed:", errData);
+          alert(`設定の保存に失敗しました: ${errData.message || res.status}`);
+        }
       } catch (err) {
         console.error("Failed to save settings to DB", err);
       }
-    };
-    saveToDB();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
   }, [tuning, volume, keyConfig, isInitialized]);
 
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
