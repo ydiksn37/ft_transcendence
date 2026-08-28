@@ -595,11 +595,8 @@ export class GameInstance {
     return this.aiDifficulty !== null;
   }
 
-  public receiveGarbageFromClient(targetSocketId: string, lines: number): void {
-    const aiPlayer = this.players.get(`ai_${this.roomId}`);
-    if (aiPlayer && !aiPlayer.isGameOver) {
-      aiPlayer.garbageQueue += lines;
-    }
+  public receiveGarbageFromClient(senderSocketId: string, lines: number): void {
+    this.sendGarbageToOpponent(senderSocketId, lines);
   }
 
   public updatePlayerBoard(socketId: string, frontendStage: any[][], score: number): void {
@@ -639,14 +636,23 @@ export class GameInstance {
 
   /** おじゃまを相手に送信 */
   private sendGarbageToOpponent(senderSocketId: string, lines: number): void {
-    this.players.forEach((player, socketId) => {
-      if (socketId !== senderSocketId && !player.isGameOver) {
-        player.garbageQueue += lines;
+    const targets = [...this.players.entries()].filter(
+      ([id, p]) => id !== senderSocketId && !p.isGameOver
+    );
 
-        // AIがおじゃまを送った場合、人間のフロントエンドに送信
-        if (this.isAiMatch && senderSocketId === `ai_${this.roomId}` && socketId !== `ai_${this.roomId}`) {
-          this.server.to(socketId).emit('receive_garbage', { lines });
-        }
+    if (targets.length === 0) return;
+
+    // 生存している相手におじゃまを分配する（割り切れない場合は切り捨て等、今回は単純に Math.floor(lines / targets.length) ただし最低1は送る？）
+    // ユーザーの要件「半分ずつ送る」に従い、等分する。
+    const sentLines = targets.length > 1 ? Math.floor(lines / targets.length) : lines;
+    if (sentLines === 0) return;
+
+    targets.forEach(([socketId, player]) => {
+      player.garbageQueue += sentLines;
+
+      // 相手が人間（AIではない）なら、フロントエンドにせり上がり用のお邪魔ライン数を送信
+      if (!socketId.startsWith('ai_')) {
+        this.server.to(socketId).emit('receive_garbage', { lines: sentLines });
       }
     });
   }
@@ -727,10 +733,12 @@ export class GameInstance {
             }
           }
           this.server.to(sid).emit('opponent_board_update', { 
+            playerId: socketId,
             stage: frontendStage, 
             score: player.score,
             next: this.bag.peek(5),
-            hold: player.holdMino
+            hold: player.holdMino,
+            isGameOver: player.isGameOver
           });
         }
       }

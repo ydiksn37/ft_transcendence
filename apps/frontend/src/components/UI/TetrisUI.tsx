@@ -32,6 +32,7 @@ type TetrisUIProps = {
   opponentScore: number;
   opponentNextPieceKeys?: string[];
   opponentHoldMino?: string | null;
+  opponents?: Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>;
   pendingGarbage: number[];
   actionText: string | null;
   countdown: string | null;
@@ -59,7 +60,7 @@ type TetrisUIProps = {
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
-  isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, pendingGarbage, actionText,
+  isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, quitGame,
   onlineRestartLabel, onHold, onQuit, extraLeftPanel, ghostYOverride
@@ -450,72 +451,102 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', marginLeft: '40px' }}>
-            {/* 相手の 左パネル (HOLD) */}
-            {!isMobileView && (
-              <div className="tetris-side-panel">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
-                  {(!isWaiting) ? renderHoldBox(opponentHoldMino || null) : <div style={retroBoxStyle} />}
-                </div>
-              </div>
-            )}
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: '40px', maxWidth: '600px' }}>
+            {(() => {
+              const numOpp = Math.max(1, Object.keys(opponents || {}).length);
+              // 人数が多いほど小さくする (1人: 1.0, 2人: 0.55, 3人: 0.45...)
+              const oppScale = numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45);
+              const oppWidth = 560; // 本来の幅 (300 + 80 + 80 + gaps)
+              const oppHeight = 700; // 本来の高さ
 
-            {/* 相手の 中央パネル (GameBoard) */}
-            <div className="tetris-board-container">
-              <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>OPPONENT</h3>
-              <div style={{ position: 'relative', width: 300, height: 660 }}>
-                <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                  <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
-                    <GameBoard 
-                      stage={opponentStage || createStage(10)} 
-                      player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
-                      ghostY={0} 
-                    />
-                  </Stage>
-                </div>
-                
-                {isWaiting && (
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>
-                    Waiting for match...
+              const renderOpponent = (id: string, opp: any, index: number, isFallback: boolean = false) => (
+                <div key={id} style={{ width: `${oppWidth * oppScale}px`, height: `${oppHeight * oppScale}px`, position: 'relative' }}>
+                  <div style={{
+                    transform: `scale(${oppScale})`, transformOrigin: 'top left',
+                    display: 'flex', flexDirection: 'row', gap: '20px', position: 'absolute', top: 0, left: 0, width: `${oppWidth}px`, height: `${oppHeight}px`
+                  }}>
+                    {/* 相手の 左パネル (HOLD) */}
+                    {!isMobileView && (
+                      <div className="tetris-side-panel">
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
+                          {(!isWaiting) ? renderHoldBox(opp.holdMino || null) : <div style={retroBoxStyle} />}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 相手の 中央パネル (GameBoard) */}
+                    <div className="tetris-board-container">
+                      <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>
+                        OPPONENT {isFallback ? '' : index + 1}
+                      </h3>
+                      <div style={{ position: 'relative', width: 300, height: 660 }}>
+                        <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                          <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                            <GameBoard 
+                              stage={opp.stage || createStage(10)} 
+                              player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
+                              ghostY={0} 
+                            />
+                          </Stage>
+                        </div>
+                        
+                        {isWaiting && (
+                          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 10 }}>
+                            Waiting for match...
+                          </div>
+                        )}
+                        
+                        {opp.isGameOver && (
+                          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'red', fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px black', zIndex: 15 }}>
+                            GAME OVER
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 相手の 右パネル (NEXT & SCORE) */}
+                    <div className="tetris-right-panel">
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
+                        <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
+                        <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {renderNextPieces(opp.nextPieceKeys || [], 5)}
+                        </div>
+                      </div>
+
+                      <div className="score-container" style={{
+                        backgroundColor: '#000',
+                        border: '4px solid #fff',
+                        boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
+                        padding: '20px 16px',
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '20px',
+                        fontFamily: '"Press Start 2P", monospace'
+                      }}>
+                        <div className="score-item">
+                          <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>SCORE</div>
+                          <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: 'var(--color-neon-cyan)', fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
+                            {opp.score || 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 1対1用のフォールバック時のみ表示される古い判定名残（必要なら表示） */}
+                      {!isWaiting && matchResult && isFallback && (
+                        <div style={{ marginTop: '20px', textAlign: 'center', color: matchResult === 'LOSE' ? 'gold' : 'red', fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px black' }}>
+                          {matchResult === 'LOSE' ? 'WIN' : 'LOSE'}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* 相手の 右パネル (NEXT & SCORE) */}
-            <div className="tetris-right-panel">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
-                <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
-                <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {renderNextPieces(opponentNextPieceKeys, 5)}
                 </div>
-              </div>
+              );
 
-              <div className="score-container" style={{
-                backgroundColor: '#000',
-                border: '4px solid #fff',
-                boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
-                padding: '20px 16px',
-                display: 'flex', 
-                flexDirection: 'column',
-                gap: '20px',
-                fontFamily: '"Press Start 2P", monospace'
-              }}>
-                <div className="score-item">
-                  <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>SCORE</div>
-                  <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: 'var(--color-neon-cyan)', fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
-                    {opponentScore}
-                  </div>
-                </div>
-              </div>
-
-              {!isWaiting && matchResult && (
-                <div style={{ marginTop: '20px', textAlign: 'center', color: matchResult === 'LOSE' ? 'gold' : 'red', fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px black' }}>
-                  {matchResult === 'LOSE' ? 'WIN' : 'LOSE'}
-                </div>
-              )}
-            </div>
+              return Object.keys(opponents || {}).length > 0
+                ? Object.entries(opponents!).map(([id, opp], index) => renderOpponent(id, opp, index))
+                : renderOpponent('fallback', { stage: opponentStage, score: opponentScore, nextPieceKeys: opponentNextPieceKeys, holdMino: opponentHoldMino }, 0, true);
+            })()}
           </div>
         )}
 
@@ -580,18 +611,14 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   <button
                     autoFocus
                     onClick={() => {
-                      if (joinOnline) {
-                        joinOnline();
-                      } else {
-                        navigate('/lobby/MULTI_PLAY');
+                      if (quitGame) {
+                        quitGame();
                       }
                     }}
                     onTouchEnd={(e) => {
                       e.preventDefault();
-                      if (joinOnline) {
-                        joinOnline();
-                      } else {
-                        navigate('/lobby/MULTI_PLAY');
+                      if (quitGame) {
+                        quitGame();
                       }
                     }}
                     style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}

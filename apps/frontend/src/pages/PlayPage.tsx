@@ -50,6 +50,7 @@ const PlayPage = () => {
     opponentScore, setOpponentScore,
     opponentNextPieceKeys, setOpponentNextPieceKeys,
     opponentHoldMino, setOpponentHoldMino,
+    opponents, setOpponents,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -645,7 +646,7 @@ const PlayPage = () => {
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
-    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino,
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
 
@@ -733,6 +734,7 @@ const PlayPage = () => {
       opponentScore={opponentScore}
       opponentNextPieceKeys={opponentNextPieceKeys}
       opponentHoldMino={opponentHoldMino}
+      opponents={opponents}
       pendingGarbage={pendingGarbage}
       actionText={actionText}
       countdown={countdown}

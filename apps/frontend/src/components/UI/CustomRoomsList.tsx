@@ -20,6 +20,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const [inRoom, setInRoom] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [players, setPlayers] = useState<{ socketId: string; userId: string | null; wins: number }[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -37,6 +38,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         setCustomRoomId(data.roomId);
         setIsOwner(data.isOwner);
         setPlayers(data.players || []);
+        setIsPlaying(data.isPlaying || false);
       }
     };
 
@@ -157,9 +159,11 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       ) : (
         <div style={{ marginTop: '50px', textAlign: 'center' }}>
           <h2>
-            {players.length < 2 
-              ? "Waiting for players..." 
-              : (isOwner ? "Ready to start!" : "Waiting for owner to start...")}
+            {isPlaying
+              ? "Game in progress..."
+              : players.length < 2 
+                ? "Waiting for players..." 
+                : (isOwner ? "Ready to start!" : "Waiting for owner to start...")}
           </h2>
           <div style={{ marginTop: '20px', fontSize: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             {players.map((p, idx) => {
@@ -180,10 +184,11 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
           
           {isOwner && players.length >= 2 && (
             <button 
-              onClick={() => socket?.emit('game:start_custom_room')}
-              style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+              onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
+              disabled={isPlaying}
+              style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
             >
-              START GAME
+              {isPlaying ? 'GAME IN PROGRESS...' : 'START GAME'}
             </button>
           )}
 

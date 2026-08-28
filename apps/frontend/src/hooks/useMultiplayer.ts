@@ -32,8 +32,9 @@ type UseMultiplayerProps = {
   setConnectionError: Dispatch<SetStateAction<string | null>>;
   setOpponentStage: Dispatch<SetStateAction<Cell[][] | null>>;
   setOpponentScore: Dispatch<SetStateAction<number>>;
-  setOpponentNextPieceKeys: Dispatch<SetStateAction<string[]>>;
-  setOpponentHoldMino: Dispatch<SetStateAction<string | null>>;
+  setOpponentNextPieceKeys: React.Dispatch<React.SetStateAction<string[]>>;
+  setOpponentHoldMino: React.Dispatch<React.SetStateAction<string | null>>;
+  setOpponents: React.Dispatch<React.SetStateAction<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>>>;
   matchResult: 'WIN' | 'LOSE' | null;
   setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
@@ -47,8 +48,7 @@ export const useMultiplayer = ({
   stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
   isWaiting, setIsWaiting, setConnectionError,
-  setOpponentStage, setOpponentScore,
-  setOpponentNextPieceKeys, setOpponentHoldMino,
+  setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
   matchResult, setMatchResult,
   setPendingGarbage, pendingGarbageRef, token
 }: UseMultiplayerProps) => {
@@ -108,11 +108,26 @@ export const useMultiplayer = ({
       setIsWaiting(true);
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
       if (data.next) setOpponentNextPieceKeys(data.next);
       if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -174,11 +189,26 @@ export const useMultiplayer = ({
       startGame('ONLINE_1V1');
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
       if (data.next) setOpponentNextPieceKeys(data.next);
       if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -186,10 +216,23 @@ export const useMultiplayer = ({
       setPendingGarbage(pendingGarbageRef.current);
     });
 
-    newSocket.on('opponent_game_over', () => {
-      setMatchResult(prev => prev === null ? 'WIN' : prev);
-      setGameOver(true);
-      setDropTime(null);
+    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+      // 自分が負けた場合
+      if (data.loserId === newSocket.id) {
+        setMatchResult('LOSE');
+        setGameOver(true);
+        setDropTime(null);
+      }
+      // 勝者が決まった場合、自分が勝者かどうか
+      else if (data.winnerId) {
+        if (data.winnerId === newSocket.id) {
+          setMatchResult('WIN');
+        } else {
+          setMatchResult('LOSE'); // 自分以外の誰かが勝った
+        }
+        setGameOver(true);
+        setDropTime(null);
+      }
     });
 
     newSocket.on('opponent_disconnected', () => {
@@ -250,11 +293,26 @@ export const useMultiplayer = ({
       startGame('ONLINE_1V1');
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
       if (data.next) setOpponentNextPieceKeys(data.next);
       if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
