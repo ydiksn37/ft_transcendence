@@ -228,7 +228,21 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox()}
-      {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && !isMobileView && <span style={{ color: 'gray', fontSize: '10px', marginTop: '10px', fontFamily: '"Press Start 2P", monospace' }}>LOCKED</span>}
+      {!(gameMode === 'ONLINE_1V1' && isWaiting) &&
+        !isMobileView &&
+        (holdInfo.hasHeld || gameMode === 'AI_PREVIEW') && (
+          <span
+            style={{
+              color: 'gray',
+              fontSize: '10px',
+              marginTop: '10px',
+              fontFamily: '"Press Start 2P", monospace',
+              visibility: holdInfo.hasHeld ? 'visible' : 'hidden',
+            }}
+          >
+            LOCKED
+          </span>
+        )}
     </div>
   );
 
@@ -542,7 +556,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                   >
-                    {isMobileView ? 'FIND NEW MATCH' : 'FIND NEW MATCH (ENTER)'}
+                    {onlineRestartLabel ??
+                      (isMobileView
+                        ? 'FIND NEW MATCH'
+                        : 'FIND NEW MATCH (ENTER)')}
                   </button>
                 ) : (
                   <button 

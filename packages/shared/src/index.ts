@@ -108,6 +108,7 @@ export const ServerEvent = {
   GAME_START:        'game:start',
   GARBAGE_INCOMING:  'game:garbage',    // おじゃまライン予告
   AI_PREVIEW_STATUS: 'ai:preview_status',
+  AI_PREVIEW_STATE:  'ai:preview_state',
   // マッチ
   MATCH_FOUND:       'match:found',
   ROOM_READY:        'room:ready',
@@ -127,9 +128,13 @@ export const ServerEvent = {
 export type ServerEventType = typeof ServerEvent[keyof typeof ServerEvent];
 
 export type AiAgentModel = 'easy' | 'hard' | 'expert';
+export type AiPreviewMode = 'solo' | 'versus';
+export type AiPreviewSide = 'left' | 'right';
 
 export interface AiPreviewStartRequest {
+  mode?: AiPreviewMode;
   model: AiAgentModel;
+  opponentModel?: AiAgentModel;
   thinkTimeMs?: number;
   actionDelayMs?: number;
   seed?: number;
@@ -138,11 +143,19 @@ export interface AiPreviewStartRequest {
 export interface AiPreviewStatus {
   phase: 'starting' | 'thinking' | 'executing' | 'stopped' | 'error';
   model: AiAgentModel;
+  mode?: AiPreviewMode;
+  side?: AiPreviewSide;
   actionDelayMs: number;
   completedDepth?: number;
   nodesVisited?: number;
   decisionMs?: number;
   message?: string;
+}
+
+export interface AiPreviewPlayerState {
+  side: AiPreviewSide;
+  model: AiAgentModel;
+  state: GameState;
 }
 
 // ───────────────────────────────────────────────

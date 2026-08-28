@@ -191,7 +191,7 @@ export const useMultiplayer = ({
     resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
     socketOptions, setSocket, socketRef, startGame, setDropTime]);
 
-  const startVsAi = useCallback((difficulty: string) => {
+  const startVsAi = useCallback((difficulty: string, actionDelayMs = 50) => {
     if (socket) {
       socket.disconnect();
       setSocket(null);
@@ -222,7 +222,7 @@ export const useMultiplayer = ({
 
     newSocket.on('connect', () => {
       setConnectionError(null);
-      newSocket.emit('game:start_vs_ai', { difficulty });
+      newSocket.emit('game:start_vs_ai', { difficulty, actionDelayMs });
     });
 
     newSocket.on('connect_error', () => {

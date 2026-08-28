@@ -34,7 +34,10 @@ struct ReplayResult {
 ReplayResult replayDecision(const Board& board, PieceType type,
                             const AgentDecision& decision,
                             std::size_t firstAction) {
-  ActivePiece active{type, 3, 0, 0};
+  // The TypeScript engine and DecisionContext spawn in the hidden rows. The
+  // replay must start from the same coordinate or legal search routes that
+  // rotate/move before dropping can be rejected as mismatches.
+  ActivePiece active{type, 3, kSpawnY, 0};
   int lastRotationKickIndex = -1;
   int dropScore = 0;
   bool locked = false;

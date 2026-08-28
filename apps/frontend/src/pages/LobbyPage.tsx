@@ -6,12 +6,18 @@ import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
 import './LobbyPage.css';
 
+const MAX_AI_ACTION_DELAY_MS = 250;
+
 export default function LobbyPage() {
   const { mode } = useParams<{ mode: string }>();
   const navigate = useNavigate();
   const { token, user, logout } = useAuth();
   
   const [startLevel, setStartLevel] = useState(1);
+  const [aiSpeedPercent, setAiSpeedPercent] = useState(80);
+  const aiActionDelayMs = Math.round(
+    MAX_AI_ACTION_DELAY_MS * (1 - aiSpeedPercent / 100),
+  );
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume } = useConfig();
 
@@ -273,23 +279,46 @@ export default function LobbyPage() {
             >
               CUSTOM ROOMS
             </button>
+            <fieldset className="ai-speed-selector">
+              <legend>AI MOVE SPEED</legend>
+              <div className="ai-speed-value">
+                <strong>{aiSpeedPercent === 100 ? 'INSTANT' : `${aiSpeedPercent}%`}</strong>
+                <span>{aiActionDelayMs} ms / move</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={aiSpeedPercent}
+                aria-label="AI move speed"
+                onChange={(event) => setAiSpeedPercent(Number(event.target.value))}
+                style={{
+                  background: `linear-gradient(to right, #00ffff 0%, #00ffff ${aiSpeedPercent}%, #333 ${aiSpeedPercent}%, #333 100%)`,
+                }}
+              />
+              <div className="ai-speed-scale" aria-hidden="true">
+                <span>SLOW</span>
+                <span>INSTANT</span>
+              </div>
+            </fieldset>
             <button 
               className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=EASY`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=EASY&aiSpeedMs=${aiActionDelayMs}`)}
               style={{ borderColor: '#2ecc71', boxShadow: `0 0 20px #2ecc71`, color: '#2ecc71', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (EASY)
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=MEDIUM`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=MEDIUM&aiSpeedMs=${aiActionDelayMs}`)}
               style={{ borderColor: '#f1c40f', boxShadow: `0 0 20px #f1c40f`, color: '#f1c40f', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (MEDIUM)
             </button>
             <button 
               className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=HARD`)}
+              onClick={() => handleStartGame(`/play/VS_AI?difficulty=HARD&aiSpeedMs=${aiActionDelayMs}`)}
               style={{ borderColor: '#9b59b6', boxShadow: `0 0 20px #9b59b6`, color: '#9b59b6', marginBottom: 0, fontSize: '12px' }}
             >
               VS AI (HARD)

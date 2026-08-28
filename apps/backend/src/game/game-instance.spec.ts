@@ -28,6 +28,31 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('starts versus preview players from identical independent seeded bags', () => {
+    const game = new GameInstance('preview_seed_room', server, 12345);
+    game.addCppPreviewPlayer('preview_left', 'left', 'expert');
+    game.addCppPreviewPlayer('preview_right', 'right', 'hard');
+
+    const left = game.getPlayers().get('preview_left');
+    const right = game.getPlayers().get('preview_right');
+    expect(left?.activeMino).toBeDefined();
+    expect(right?.activeMino).toBe(left?.activeMino);
+
+    right!.garbageQueue = 3;
+    right!.attacksSent = 7;
+    const request = (game as any).makeCppDecisionRequest(
+      'preview_left',
+      left,
+    );
+    expect(request.next).toHaveLength(5);
+    expect(request.opponent).toMatchObject({
+      garbageQueue: 3,
+      attacksSent: 7,
+      piecesPlaced: 0,
+    });
+    expect(request.opponent.board).toHaveLength(40);
+  });
+
   it('publishes a 40-row opponent stage including the active AI mino', () => {
     const aiAgent = {
       getDecision: jest.fn(() => new Promise(() => undefined)),
@@ -106,7 +131,7 @@ describe('GameInstance AI matches', () => {
 
     game.addPlayer(humanSocketId, null);
     game.addPlayer(`ai_${roomId}`, null);
-    game.start('EASY');
+    game.start('EASY', 125);
 
     await jest.advanceTimersByTimeAsync(1800);
 
@@ -117,7 +142,16 @@ describe('GameInstance AI matches', () => {
     );
     expect(updatesAfterHorizontalMove).toHaveLength(2);
 
-    await jest.advanceTimersByTimeAsync(50);
+    await jest.advanceTimersByTimeAsync(124);
+    expect(
+      emissions.filter(
+        (emission) =>
+          emission.target === humanSocketId &&
+          emission.event === 'opponent_board_update',
+      ),
+    ).toHaveLength(2);
+
+    await jest.advanceTimersByTimeAsync(1);
     const updatesAfterSoftDrop = emissions.filter(
       (emission) =>
         emission.target === humanSocketId &&
@@ -125,7 +159,7 @@ describe('GameInstance AI matches', () => {
     );
     expect(updatesAfterSoftDrop).toHaveLength(3);
 
-    await jest.advanceTimersByTimeAsync(50);
+    await jest.advanceTimersByTimeAsync(125);
 
     const updates = emissions.filter(
       (emission) =>
