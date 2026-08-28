@@ -273,11 +273,13 @@ export class GameInstance {
   private startGravity(): void {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
-        if (
-          player.isGameOver ||
-          (this.aiDifficulty && socketId === `ai_${this.roomId}`)
-        )
-          return;
+        if (player.isGameOver) return;
+        
+        // VS_AIモードでは:
+        // - AIは自前のロジックで操作を送信するため重力不要
+        // - 人間はフロントエンドでシミュレーションするためサーバー側重力による自滅を防ぐ
+        if (this.aiDifficulty) return;
+        
         this.applyGravity(socketId);
       });
     }, GRAVITY_INTERVAL_MS);
@@ -600,6 +602,29 @@ export class GameInstance {
     }
   }
 
+  public updatePlayerBoard(socketId: string, frontendStage: any[][], score: number): void {
+    const player = this.players.get(socketId);
+    if (!player || player.isGameOver) return;
+    
+    // frontendStage: [string | 0, string][]
+    const backendBoard = createEmptyBoard();
+    for (let r = 0; r < BOARD_ROWS; r++) {
+      for (let c = 0; c < BOARD_COLS; c++) {
+        if (frontendStage[r] && frontendStage[r][c]) {
+          const val = frontendStage[r][c][0];
+          const status = frontendStage[r][c][1];
+          // Ghost は無視し、実際に置かれたブロックと固定中のブロックを反映
+          if (status === 'merged' && val !== 0) {
+            backendBoard[r][c] = val === 'X' ? 'GARBAGE' : val as TetrominoType;
+          }
+        }
+      }
+    }
+    
+    player.board = backendBoard;
+    player.score = score;
+  }
+
   public handleClientGameOver(socketId: string): void {
     this.handleGameOver(socketId);
   }
@@ -711,11 +736,19 @@ export class GameInstance {
   }
 
   /** ゲームオーバー処理 */
-  public handleGameOver(socketId: string): void {
+  public async handleGameOver(socketId: string): Promise<void> {
     const player = this.players.get(socketId);
     if (!player || player.isGameOver) return;
     
     player.isGameOver = true;
+    
+    // ゲームオーバーになった最新の盤面（お邪魔のせり上がり等）を必ずフロントエンドに送る
+    this.broadcastState(socketId, player);
+
+    // AIマッチでAIがゲームオーバーになった場合、クライアントにせり上がり演出等を見せるための猶予を設ける
+    if (this.isAiMatch && socketId === `ai_${this.roomId}`) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
 
     const survivors = [...this.players.values()].filter((p) => !p.isGameOver);
     const winner = survivors.length === 1 ? survivors[0] : null;
@@ -792,6 +825,13 @@ export class GameInstance {
       await new Promise(r => setTimeout(r, delay));
 
       if (decision.gameOver) {
+        // AIがおじゃまブロックによって死んだことを見せるため、
+        // キューに残っているお邪魔ブロックを強制的に適用してからゲームオーバーを宣言する
+        if (aiPlayer.garbageQueue > 0) {
+          aiPlayer.board = addGarbageLines(aiPlayer.board, aiPlayer.garbageQueue);
+          aiPlayer.garbageQueue = 0;
+        }
+        
         this.handleGameOver(aiSocketId);
         break;
       }

@@ -616,6 +616,12 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     client.to(roomId).emit('opponent_board_update', data);
+    
+    // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.updatePlayerBoard(client.id, data.stage, data.score);
+    }
   }
 
   @SubscribeMessage('send_garbage')
