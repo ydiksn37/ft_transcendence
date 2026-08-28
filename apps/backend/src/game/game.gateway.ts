@@ -408,6 +408,18 @@ export class GameGateway
         }
         r.isPlaying = false;
         this.rooms.delete(rId);
+        
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+        r.players.forEach(p => {
+          p.socket.emit('custom_room_state', {
+            inRoom: true,
+            roomId: r.roomId,
+            name: r.name,
+            isOwner: r.ownerSocketId === p.socket.id,
+            players: r.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+            isPlaying: false
+          });
+        });
       }
     };
 
@@ -615,7 +627,13 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_board_update', data);
+    client.to(roomId).emit('opponent_board_update', { ...data, playerId: client.id });
+    
+    // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.updatePlayerBoard(client.id, data.stage, data.score);
+    }
   }
 
   @SubscribeMessage('send_garbage')
@@ -625,21 +643,22 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('receive_garbage', data);
-
+    
+    // カスタムルームでGameInstanceが動いている場合はそちらに任せる
     const room = this.rooms.get(roomId);
-    if (room && room.isAiMatch) {
+    if (room) {
       room.receiveGarbageFromClient(client.id, data.lines);
+      return;
     }
+
+    // fallback (1v1 P2P mode)
+    client.to(roomId).emit('receive_garbage', data);
   }
 
   @SubscribeMessage('game_over')
   handleGameOverEvent(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    
-    // Always emit opponent_game_over to the other player so they see the WIN screen
-    client.to(roomId).emit('opponent_game_over');
     
     // Trigger the server-side game over logic to clean up the room
     const instance = this.rooms.get(roomId);

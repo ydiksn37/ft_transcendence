@@ -273,11 +273,13 @@ export class GameInstance {
   private startGravity(): void {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
-        if (
-          player.isGameOver ||
-          (this.aiDifficulty && socketId === `ai_${this.roomId}`)
-        )
-          return;
+        if (player.isGameOver) return;
+        
+        // VS_AIモードでは:
+        // - AIは自前のロジックで操作を送信するため重力不要
+        // - 人間はフロントエンドでシミュレーションするためサーバー側重力による自滅を防ぐ
+        if (this.aiDifficulty) return;
+        
         this.applyGravity(socketId);
       });
     }, GRAVITY_INTERVAL_MS);
@@ -593,11 +595,31 @@ export class GameInstance {
     return this.aiDifficulty !== null;
   }
 
-  public receiveGarbageFromClient(targetSocketId: string, lines: number): void {
-    const aiPlayer = this.players.get(`ai_${this.roomId}`);
-    if (aiPlayer && !aiPlayer.isGameOver) {
-      aiPlayer.garbageQueue += lines;
+  public receiveGarbageFromClient(senderSocketId: string, lines: number): void {
+    this.sendGarbageToOpponent(senderSocketId, lines);
+  }
+
+  public updatePlayerBoard(socketId: string, frontendStage: any[][], score: number): void {
+    const player = this.players.get(socketId);
+    if (!player || player.isGameOver) return;
+    
+    // frontendStage: [string | 0, string][]
+    const backendBoard = createEmptyBoard();
+    for (let r = 0; r < BOARD_ROWS; r++) {
+      for (let c = 0; c < BOARD_COLS; c++) {
+        if (frontendStage[r] && frontendStage[r][c]) {
+          const val = frontendStage[r][c][0];
+          const status = frontendStage[r][c][1];
+          // Ghost は無視し、実際に置かれたブロックと固定中のブロックを反映
+          if (status === 'merged' && val !== 0) {
+            backendBoard[r][c] = val === 'X' ? 'GARBAGE' : val as TetrominoType;
+          }
+        }
+      }
     }
+    
+    player.board = backendBoard;
+    player.score = score;
   }
 
   public handleClientGameOver(socketId: string): void {
@@ -614,14 +636,23 @@ export class GameInstance {
 
   /** おじゃまを相手に送信 */
   private sendGarbageToOpponent(senderSocketId: string, lines: number): void {
-    this.players.forEach((player, socketId) => {
-      if (socketId !== senderSocketId && !player.isGameOver) {
-        player.garbageQueue += lines;
+    const targets = [...this.players.entries()].filter(
+      ([id, p]) => id !== senderSocketId && !p.isGameOver
+    );
 
-        // AIがおじゃまを送った場合、人間のフロントエンドに送信
-        if (this.isAiMatch && senderSocketId === `ai_${this.roomId}` && socketId !== `ai_${this.roomId}`) {
-          this.server.to(socketId).emit('receive_garbage', { lines });
-        }
+    if (targets.length === 0) return;
+
+    // 生存している相手におじゃまを分配する（割り切れない場合は切り捨て等、今回は単純に Math.floor(lines / targets.length) ただし最低1は送る？）
+    // ユーザーの要件「半分ずつ送る」に従い、等分する。
+    const sentLines = targets.length > 1 ? Math.floor(lines / targets.length) : lines;
+    if (sentLines === 0) return;
+
+    targets.forEach(([socketId, player]) => {
+      player.garbageQueue += sentLines;
+
+      // 相手が人間（AIではない）なら、フロントエンドにせり上がり用のお邪魔ライン数を送信
+      if (!socketId.startsWith('ai_')) {
+        this.server.to(socketId).emit('receive_garbage', { lines: sentLines });
       }
     });
   }
@@ -682,7 +713,7 @@ export class GameInstance {
         if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
           const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
             if (cell === null) return [0, 'clear'];
-            if (cell === 'GARBAGE') return ['B', 'merged'];
+            if (cell === 'GARBAGE') return ['X', 'merged'];
             return [cell, 'merged'];
           }));
 
@@ -701,7 +732,14 @@ export class GameInstance {
               }
             }
           }
-          this.server.to(sid).emit('opponent_board_update', { stage: frontendStage, score: player.score });
+          this.server.to(sid).emit('opponent_board_update', { 
+            playerId: socketId,
+            stage: frontendStage, 
+            score: player.score,
+            next: this.bag.peek(5),
+            hold: player.holdMino,
+            isGameOver: player.isGameOver
+          });
         }
       }
     });
@@ -711,11 +749,19 @@ export class GameInstance {
   }
 
   /** ゲームオーバー処理 */
-  public handleGameOver(socketId: string): void {
+  public async handleGameOver(socketId: string): Promise<void> {
     const player = this.players.get(socketId);
     if (!player || player.isGameOver) return;
     
     player.isGameOver = true;
+    
+    // ゲームオーバーになった最新の盤面（お邪魔のせり上がり等）を必ずフロントエンドに送る
+    this.broadcastState(socketId, player);
+
+    // AIマッチでAIがゲームオーバーになった場合、クライアントにせり上がり演出等を見せるための猶予を設ける
+    if (this.isAiMatch && socketId === `ai_${this.roomId}`) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
 
     const survivors = [...this.players.values()].filter((p) => !p.isGameOver);
     const winner = survivors.length === 1 ? survivors[0] : null;
@@ -792,6 +838,13 @@ export class GameInstance {
       await new Promise(r => setTimeout(r, delay));
 
       if (decision.gameOver) {
+        // AIがおじゃまブロックによって死んだことを見せるため、
+        // キューに残っているお邪魔ブロックを強制的に適用してからゲームオーバーを宣言する
+        if (aiPlayer.garbageQueue > 0) {
+          aiPlayer.board = addGarbageLines(aiPlayer.board, aiPlayer.garbageQueue);
+          aiPlayer.garbageQueue = 0;
+        }
+        
         this.handleGameOver(aiSocketId);
         break;
       }
