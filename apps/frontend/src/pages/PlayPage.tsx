@@ -48,6 +48,8 @@ const PlayPage = () => {
     connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
+    opponentNextPieceKeys, setOpponentNextPieceKeys,
+    opponentHoldMino, setOpponentHoldMino,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -642,8 +644,8 @@ const PlayPage = () => {
   const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
-    setOpponentStage, setOpponentScore,
+    stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
 
@@ -729,6 +731,8 @@ const PlayPage = () => {
       matchResult={matchResult}
       opponentStage={opponentStage}
       opponentScore={opponentScore}
+      opponentNextPieceKeys={opponentNextPieceKeys}
+      opponentHoldMino={opponentHoldMino}
       pendingGarbage={pendingGarbage}
       actionText={actionText}
       countdown={countdown}

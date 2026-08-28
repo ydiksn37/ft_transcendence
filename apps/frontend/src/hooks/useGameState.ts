@@ -15,6 +15,8 @@ export const useGameState = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [opponentStage, setOpponentStage] = useState<Cell[][] | null>(null);
   const [opponentScore, setOpponentScore] = useState(0);
+  const [opponentNextPieceKeys, setOpponentNextPieceKeys] = useState<string[]>([]);
+  const [opponentHoldMino, setOpponentHoldMino] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
   const [pendingGarbage, setPendingGarbage] = useState<number[]>([]);
   const pendingGarbageRef = useRef<number[]>([]);
@@ -58,6 +60,8 @@ export const useGameState = () => {
     connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
+    opponentNextPieceKeys, setOpponentNextPieceKeys,
+    opponentHoldMino, setOpponentHoldMino,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, setGameMode, gameModeRef,

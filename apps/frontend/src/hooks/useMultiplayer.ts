@@ -22,6 +22,8 @@ type UseMultiplayerProps = {
   startGame: (mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   stage: Cell[][];
   score: number;
+  nextPieceKeys: string[];
+  holdInfo: { tetromino: string | null; hasHeld: boolean };
   socket: Socket | null;
   setSocket: Dispatch<SetStateAction<Socket | null>>;
   socketRef: React.MutableRefObject<Socket | null>;
@@ -30,6 +32,8 @@ type UseMultiplayerProps = {
   setConnectionError: Dispatch<SetStateAction<string | null>>;
   setOpponentStage: Dispatch<SetStateAction<Cell[][] | null>>;
   setOpponentScore: Dispatch<SetStateAction<number>>;
+  setOpponentNextPieceKeys: Dispatch<SetStateAction<string[]>>;
+  setOpponentHoldMino: Dispatch<SetStateAction<string | null>>;
   matchResult: 'WIN' | 'LOSE' | null;
   setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
@@ -40,10 +44,11 @@ type UseMultiplayerProps = {
 export const useMultiplayer = ({
   appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-  stage, score,
+  stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
   isWaiting, setIsWaiting, setConnectionError,
   setOpponentStage, setOpponentScore,
+  setOpponentNextPieceKeys, setOpponentHoldMino,
   matchResult, setMatchResult,
   setPendingGarbage, pendingGarbageRef, token
 }: UseMultiplayerProps) => {
@@ -103,9 +108,11 @@ export const useMultiplayer = ({
       setIsWaiting(true);
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -167,9 +174,11 @@ export const useMultiplayer = ({
       startGame('ONLINE_1V1');
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -241,9 +250,11 @@ export const useMultiplayer = ({
       startGame('ONLINE_1V1');
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number; next?: string[]; hold?: string | null; }) => {
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -285,9 +296,9 @@ export const useMultiplayer = ({
 
   useEffect(() => {
     if (socket && appState === 'ONLINE_1V1' && !isWaiting) {
-      socket.emit('board_update', { stage, score });
+      socket.emit('board_update', { stage, score, next: nextPieceKeys, hold: holdInfo.tetromino });
     }
-  }, [stage, score, socket, appState, isWaiting]);
+  }, [stage, score, nextPieceKeys, holdInfo, socket, appState, isWaiting]);
 
   useEffect(() => {
     if (socket && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {

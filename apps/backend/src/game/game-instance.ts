@@ -707,7 +707,7 @@ export class GameInstance {
         if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
           const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
             if (cell === null) return [0, 'clear'];
-            if (cell === 'GARBAGE') return ['B', 'merged'];
+            if (cell === 'GARBAGE') return ['X', 'merged'];
             return [cell, 'merged'];
           }));
 
@@ -726,7 +726,12 @@ export class GameInstance {
               }
             }
           }
-          this.server.to(sid).emit('opponent_board_update', { stage: frontendStage, score: player.score });
+          this.server.to(sid).emit('opponent_board_update', { 
+            stage: frontendStage, 
+            score: player.score,
+            next: this.bag.peek(5),
+            hold: player.holdMino
+          });
         }
       }
     });
