@@ -63,7 +63,8 @@ struct BeamState {
   std::size_t firstPlacement = 0;
   std::optional<PieceType> holdPiece;
   std::size_t nextIndex = 0;
-  bool backToBackActive = false;
+  int backToBackChain = 0;
+  int attackLaneColumn = 5;
   BoardFeatures features;
 };
 
@@ -109,6 +110,69 @@ std::optional<ActivePiece> applySearchAction(const Board& board,
 
 bool occupied(const Board& board, int row, int col) noexcept {
   return board.cells()[row][col] != Cell::Empty;
+}
+
+using CellMask =
+    std::array<std::array<bool, kBoardCols>, kBoardRows>;
+
+int countUnfillableCavityCells(const Board& board) {
+  // Only cells underneath an occupied cell are cavities. Open sky and an
+  // ordinary Well are not penalized merely because no piece can lock there
+  // in the current position.
+  CellMask cavityCandidates{};
+  bool hasCandidate = false;
+  for (int col = 0; col < kBoardCols; ++col) {
+    bool occupiedAbove = false;
+    for (int row = 0; row < kBoardRows; ++row) {
+      if (occupied(board, row, col)) {
+        occupiedAbove = true;
+      } else if (occupiedAbove) {
+        cavityCandidates[row][col] = true;
+        hasCandidate = true;
+      }
+    }
+  }
+  if (!hasCandidate) return 0;
+
+  // Check every grounded geometry of all seven pieces and all four SRS
+  // orientations. This deliberately accepts even a placement whose route is
+  // difficult: only cells which cannot be occupied even by a hypothetical
+  // spin/tuck receive the near-disqualifying penalty. That conservative test
+  // avoids rejecting valid TSD cavities and is cheap enough for every beam
+  // node.
+  static constexpr std::array<PieceType, 7> kPieceTypes{
+      PieceType::I, PieceType::O, PieceType::T, PieceType::S,
+      PieceType::Z, PieceType::J, PieceType::L,
+  };
+  const auto hasGroundedPlacementCovering =
+      [&](int targetRow, int targetCol) {
+        for (const PieceType type : kPieceTypes) {
+          for (int rotation = 0; rotation < 4; ++rotation) {
+            const ActivePiece origin{type, 0, 0, rotation};
+            for (const Point offset : getMinoCells(origin)) {
+              const ActivePiece placement{
+                  type, targetCol - offset.col, targetRow - offset.row,
+                  rotation};
+              if (!isValidPosition(board, placement)) continue;
+              ActivePiece below = placement;
+              ++below.y;
+              if (!isValidPosition(board, below)) return true;
+            }
+          }
+        }
+        return false;
+      };
+
+  int result = 0;
+  for (int row = 0; row < kBoardRows; ++row) {
+    for (int col = 0; col < kBoardCols; ++col) {
+      if (cavityCandidates[row][col] &&
+          !hasGroundedPlacementCovering(row, col)) {
+        ++result;
+      }
+    }
+  }
+  return result;
 }
 
 bool matchesTSpinDoublePrePattern(const Board& board, int row,
@@ -292,10 +356,26 @@ int splitSurfaceRoughness(
   return roughness;
 }
 
+int splitSurfaceExcessRoughness(
+    const std::array<int, kBoardCols>& heights, int wellColumn) noexcept {
+  int excess = 0;
+  const auto addStep = [&](int left, int right) {
+    excess += std::max(0, std::abs(left - right) - 2);
+  };
+  for (int col = 0; col + 1 < wellColumn; ++col) {
+    addStep(heights[col], heights[col + 1]);
+  }
+  for (int col = wellColumn + 1; col + 1 < kBoardCols; ++col) {
+    addStep(heights[col], heights[col + 1]);
+  }
+  return excess;
+}
+
 ExpertPatternFeatures extractExpertPatternFeaturesWithHeights(
     const Board& board,
     const std::array<int, kBoardCols>& heights,
-    int preferredAttackLane = -1) noexcept {
+    int preferredAttackLane = -1,
+    bool analyzeUnfillableCells = true) noexcept {
   ExpertPatternFeatures features;
   std::array<bool, kBoardCols> tSpinDoubleColumns{};
   for (int row = 0; row + 1 < kBoardRows; ++row) {
@@ -318,6 +398,9 @@ ExpertPatternFeatures extractExpertPatternFeaturesWithHeights(
         }
       }
     }
+  }
+  if (analyzeUnfillableCells) {
+    features.unfillableCavityCells = countUnfillableCavityCells(board);
   }
 
   const std::array<int, kBoardCols> wellDepths =
@@ -387,6 +470,8 @@ ExpertPatternFeatures extractExpertPatternFeaturesWithHeights(
     }
   }
   if (features.attackLaneColumn >= 0) {
+    features.attackLaneSideExcessRoughness =
+        splitSurfaceExcessRoughness(heights, features.attackLaneColumn);
     for (int row = 0; row < kBoardRows; ++row) {
       const Cell cell =
           board.cells()[row][features.attackLaneColumn];
@@ -561,7 +646,8 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
 
   const ExpertPatternFeatures patternFeatures =
       extractExpertPatternFeaturesWithHeights(board, heights,
-                                              preferredAttackLane);
+                                              preferredAttackLane,
+                                              holes > 0);
   // A 7-bag supplies only one T. Stop adding completed-slot reward at the
   // third simultaneous TSD; ordinary hole/height penalties then make excess
   // reservations unattractive. In danger, reserve room for only one slot.
@@ -585,6 +671,8 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
       weights.holesPenalty * holes -
       weights.holesQuadraticPenalty * holes * holes -
       weights.coveredHolePenalty * coveredHoleDepth -
+      weights.unfillableCavityPenalty *
+          patternFeatures.unfillableCavityCells -
       weights.bumpinessPenalty * bumpiness -
       weights.rowTransitionsPenalty * rowTransitions -
       weights.columnTransitionsPenalty * columnTransitions -
@@ -682,6 +770,8 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
           patternFeatures.attackLaneOccupiedCells -
       weights.structuredSideRoughnessPenalty *
           patternFeatures.attackLaneSideRoughness -
+      weights.flatSideExcessRoughnessPenalty *
+          patternFeatures.attackLaneSideExcessRoughness -
       weights.competingWellPenalty * patternFeatures.competingWellUnits;
   const double wellSafety = std::clamp(
       static_cast<double>(15 - maximumHeight) / 7.0, 0.10, 1.0);
@@ -704,8 +794,13 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
           aggregateHeight,
           holes,
           coveredHoleDepth,
+          patternFeatures.unfillableCavityCells,
           garbageCells,
           patternFeatures.attackLaneColumn,
+          patternFeatures.attackLaneDepth,
+          patternFeatures.attackLaneOccupiedCells,
+          patternFeatures.attackLaneSideRoughness,
+          patternFeatures.attackLaneSideExcessRoughness,
           patternFeatures.structuredWellDepth,
           patternFeatures.garbageRecoveryShaftDepth,
           patternFeatures.openWellCount,
@@ -725,14 +820,14 @@ bool isBackToBackUpdate(const PlacementOption& placement) noexcept {
          (placement.linesCleared == 4 && !placement.perfectClear);
 }
 
-bool backToBackAfter(const PlacementOption& placement,
-                     bool backToBackActive) noexcept {
-  if (placement.linesCleared == 0) return backToBackActive;
-  return isBackToBackUpdate(placement);
+int backToBackAfter(const PlacementOption& placement,
+                    int backToBackChain) noexcept {
+  if (placement.linesCleared == 0) return backToBackChain;
+  return isBackToBackUpdate(placement) ? backToBackChain + 1 : 0;
 }
 
 int garbageFor(const PlacementOption& placement,
-               bool backToBackActive) noexcept {
+               int backToBackChain) noexcept {
   if (placement.linesCleared == 0) return 0;
   if (placement.perfectClear) return 10;
 
@@ -752,12 +847,12 @@ int garbageFor(const PlacementOption& placement,
         std::min(placement.linesCleared, 4))];
     bonusEligible = placement.linesCleared == 4;
   }
-  if (backToBackActive && bonusEligible) ++garbage;
+  if (backToBackChain > 0 && bonusEligible) ++garbage;
   return garbage;
 }
 
 double placementReward(const PlacementOption& placement,
-                       bool backToBackActive,
+                       int backToBackChain,
                        const BoardFeatures& currentFeatures,
                        const BoardFeatures& resultFeatures,
                        const ExpertTAvailability& replacementT,
@@ -831,23 +926,26 @@ double placementReward(const PlacementOption& placement,
   const int destroyedPreTSpinDoublePatterns = std::max(
       0, currentFeatures.preTSpinDoublePatterns -
              resultFeatures.preTSpinDoublePatterns);
-  const bool prematureTSpinSingle =
-      placement.placement.type == PieceType::T &&
-      placement.tSpin == TSpin::Full && placement.linesCleared == 1 &&
-      destroyedPreTSpinDoublePatterns > 0 &&
-      currentFeatures.cleanForTSpinSetup;
-  if (prematureTSpinSingle) {
-    // Keep the TSD base until its roof is built. Without this transition
-    // penalty the immediate two-line attack from TSS repeatedly wins over
-    // completing the four/five-line attack sequence.
-    reward -= offenseFactor * weights.completedTSpinDoubleBreakPenalty *
-              0.75 * destroyedPreTSpinDoublePatterns;
+  if (destroyedPreTSpinDoublePatterns > 0 && !consumedByTSpinDouble &&
+      currentFeatures.cleanForTSpinSetup) {
+    // BUILD_TSD is a real planning phase, not a disposable visual pattern.
+    // Any move that abandons its base is penalized; an opportunistic TSS is
+    // slightly worse because it also spends the once-per-bag T piece.
+    const double tConsumptionFactor = tSpinSingle ? 1.25 : 1.0;
+    reward -= offenseFactor * weights.preTSpinDoubleBreakPenalty *
+              destroyedPreTSpinDoublePatterns * tConsumptionFactor;
   }
 
   const bool hasTSpinDoubleAlternative =
       currentFeatures.reachableTSpinDoublePatterns > 0 ||
       currentFeatures.preTSpinDoublePatterns > 0;
-  if (tSpinSingle && hasTSpinDoubleAlternative && !emergencyMode) {
+  const bool cleanTSpinDoubleBuildBoard =
+      currentFeatures.maximumHeight <= 10 && currentFeatures.holes == 0 &&
+      currentFeatures.openWellCount <= 1 &&
+      currentFeatures.competingWellUnits == 0;
+  if (tSpinSingle &&
+      (hasTSpinDoubleAlternative || cleanTSpinDoubleBuildBoard) &&
+      !emergencyMode) {
     // Compare attack per scarce T, not only attack on this placement.  A TSS
     // is still useful when it keeps B2B, when another T is already available,
     // or when the stack is becoming unsafe.  On a low, clean stack with the
@@ -864,11 +962,52 @@ double placementReward(const PlacementOption& placement,
           0.35 + 0.12 * replacementT.movesUntilPiece, 0.35, 1.15);
     }
     if (replacementT.visibleCount > 1) scarcityFactor *= 0.80;
-    const double backToBackFactor = backToBackActive ? 0.75 : 1.0;
+    // On a low clean board, neither an existing B2B nor a nearby replacement
+    // T justifies cashing out a local TSS. Preserve enough flat stack to build
+    // the two-line slot; TSS remains available in recovery mode above.
+    scarcityFactor = std::max(scarcityFactor, 0.85);
     const double wellRecoveryFactor = multipleWellRecoveryMode ? 0.20 : 1.0;
+    const double activeBuildFactor =
+        hasTSpinDoubleAlternative ? 1.25 : 1.0;
     reward -= offenseFactor * weights.tSpinSingleOpportunityPenalty *
-              safeBoardFactor * scarcityFactor * backToBackFactor *
+              activeBuildFactor * safeBoardFactor * scarcityFactor *
               wellRecoveryFactor * (1.0 - 0.75 * recoveryUrgency);
+  }
+
+  const bool incomingI =
+      replacementI.inHold ||
+      (replacementI.exact && replacementI.movesUntilPiece <= 3);
+  const int currentTetrisProgress = std::max(
+      currentFeatures.structuredWellDepth,
+      currentFeatures.attackLaneDepth);
+  const int lostTetrisProgress = std::max(
+      0, currentFeatures.attackLaneDepth - resultFeatures.attackLaneDepth);
+  const int addedLaneObstructions = std::max(
+      0, resultFeatures.attackLaneOccupiedCells -
+             currentFeatures.attackLaneOccupiedCells);
+  const bool cleanTetrisBuild =
+      currentFeatures.openWellCount <= 1 &&
+      currentFeatures.competingWellUnits == 0 &&
+      currentFeatures.garbageRecoveryShaftDepth < 3;
+  if (tSpinSingle && incomingI && currentTetrisProgress >= 2 &&
+      cleanTetrisBuild && !emergencyMode) {
+    // A line-clearing TSS consumes one of the four prepared rows even when it
+    // does not visibly plug the lane. Explicit lane damage makes the penalty
+    // larger. Once recovery mode starts, survival is allowed to override it.
+    double arrivalFactor = 1.0;
+    if (replacementI.inHold || replacementI.movesUntilPiece <= 1) {
+      arrivalFactor = 1.30;
+    } else if (replacementI.movesUntilPiece == 2) {
+      arrivalFactor = 1.15;
+    }
+    const double progressFactor =
+        0.50 + 0.25 * std::min(currentTetrisProgress, 4);
+    const double damageFactor =
+        1.0 + 0.50 * lostTetrisProgress +
+        0.75 * addedLaneObstructions;
+    reward -= offenseFactor * weights.tSpinSingleBlocksTetrisPenalty *
+              arrivalFactor * progressFactor * damageFactor *
+              (1.0 - 0.75 * recoveryUrgency);
   }
 
   // At low height, a temporary cavity can be an intentional T-Spin setup.
@@ -886,6 +1025,12 @@ double placementReward(const PlacementOption& placement,
   const int recoveredHoleDepth = std::max(
       0, currentFeatures.coveredHoleDepth -
              resultFeatures.coveredHoleDepth);
+  const int newUnfillableCavityCells = std::max(
+      0, resultFeatures.unfillableCavityCells -
+             currentFeatures.unfillableCavityCells);
+  const int recoveredUnfillableCavityCells = std::max(
+      0, currentFeatures.unfillableCavityCells -
+             resultFeatures.unfillableCavityCells);
   const int heightIncrease = std::max(
       0, resultFeatures.maximumHeight - currentFeatures.maximumHeight);
   const int heightRelief = std::max(
@@ -905,11 +1050,18 @@ double placementReward(const PlacementOption& placement,
              resultFeatures.openWellPieceDemand);
   reward -= weights.newHolePenalty * newHoles * damageMultiplier;
   reward -= weights.buryHolePenalty * buriedHoleDepth * damageMultiplier;
+  // A legal future spin/drop cannot repair these cells on the current board.
+  // Treat creating one as a strategic invalid move even at low height, where
+  // the ordinary hole damage multiplier is intentionally small for TSDs.
+  reward -= weights.newUnfillableCavityPenalty *
+            newUnfillableCavityCells;
   reward -= weights.heightIncreasePenalty * heightIncrease *
             (1.0 + recoveryUrgency);
   reward += weights.holeRecoveryReward *
             (2 * recoveredHoles + recoveredHoleDepth) *
             recoveryMultiplier;
+  reward += weights.unfillableCavityRecoveryReward *
+            recoveredUnfillableCavityCells * recoveryMultiplier;
   reward += weights.heightReliefReward * heightRelief *
             (1.0 + 1.5 * recoveryUrgency);
   reward += weights.garbageCellClearedReward * garbageCellsCleared *
@@ -977,7 +1129,18 @@ double placementReward(const PlacementOption& placement,
 
   if (placement.linesCleared == 0) return reward;
 
-  const int garbage = garbageFor(placement, backToBackActive);
+  const bool inefficientThreeLineClear =
+      placement.linesCleared == 3 && !placement.tSpin.has_value() &&
+      !emergencyMode && currentFeatures.maximumHeight <= 10 &&
+      currentFeatures.holes == 0 && currentFeatures.openWellCount <= 1 &&
+      currentFeatures.garbageRecoveryShaftDepth < 3;
+  if (inefficientThreeLineClear) {
+    // A clean low stack has time to complete the fourth Well row. Clearing
+    // three now gives half a Tetris's attack and also forfeits its B2B clear.
+    reward -= weights.inefficientThreeLinePenalty;
+  }
+
+  const int garbage = garbageFor(placement, backToBackChain);
   reward += offenseFactor * weights.garbageReward * garbage +
             weights.lineReward * placement.linesCleared;
   if (placement.tSpin == TSpin::Full) {
@@ -991,19 +1154,39 @@ double placementReward(const PlacementOption& placement,
     reward += offenseFactor * weights.tSpinMiniReward;
   } else if (placement.linesCleared == 4) {
     reward += offenseFactor * weights.tetrisReward;
+    const bool plannedLaneCashout =
+        verticalIColumn == currentFeatures.attackLaneColumn;
+    if (plannedLaneCashout) {
+      const double heightCashoutUrgency = std::clamp(
+          static_cast<double>(currentFeatures.maximumHeight - 8) / 4.0,
+          0.0, 1.0);
+      const double wellCashoutUrgency = std::clamp(
+          static_cast<double>(currentFeatures.structuredWellDepth) / 4.0,
+          0.0, 1.0);
+      reward += offenseFactor * weights.tetrisCashoutReward *
+                std::max(heightCashoutUrgency, wellCashoutUrgency);
+    }
   }
   if (placement.perfectClear) reward += weights.perfectClearReward;
 
   if (!emergencyMode && !multipleWellRecoveryMode &&
       isBackToBackUpdate(placement)) {
-    reward += backToBackActive ? weights.backToBackContinuationReward
-                               : weights.backToBackStartReward;
+    if (backToBackChain > 0) {
+      const double chainValue =
+          1.0 + 0.10 * std::min(backToBackChain, 10);
+      reward += weights.backToBackContinuationReward * chainValue;
+    } else {
+      reward += weights.backToBackStartReward;
+    }
   } else if (!emergencyMode && !multipleWellRecoveryMode &&
-             backToBackActive) {
+             backToBackChain > 0) {
     const double safeBoardFactor = std::clamp(
         static_cast<double>(15 - currentFeatures.maximumHeight) / 5.0,
         0.0, 1.0);
+    const double chainValue =
+        1.0 + 0.15 * std::min(backToBackChain, 10);
     reward -= weights.backToBackBreakPenalty *
+              chainValue *
               (0.20 + 0.80 * safeBoardFactor) *
               (1.0 - 0.75 * recoveryUrgency);
   }
@@ -1161,7 +1344,8 @@ std::uint64_t hashState(const BeamState& state) noexcept {
                         ? static_cast<std::uint64_t>(*state.holdPiece) + 1U
                         : 0U);
   hashCombine(hash, static_cast<std::uint64_t>(state.nextIndex));
-  hashCombine(hash, state.backToBackActive ? 1U : 0U);
+  hashCombine(hash, static_cast<std::uint64_t>(state.backToBackChain));
+  hashCombine(hash, static_cast<std::uint64_t>(state.attackLaneColumn));
   return hash;
 }
 
@@ -1233,7 +1417,8 @@ double stateRank(double accumulatedReward, double futureWeight,
 
 ExpertPatternFeatures extractExpertPatternFeatures(
     const Board& board) noexcept {
-  return extractExpertPatternFeaturesWithHeights(board, columnHeights(board));
+  return extractExpertPatternFeaturesWithHeights(
+      board, columnHeights(board), -1, true);
 }
 
 ExpertTAvailability determineExpertTAvailability(
@@ -1279,18 +1464,11 @@ std::optional<AgentDecision> ExpertAgent::decide(
   const int spawnX = context.spawnX;
   const int spawnY = context.spawnY;
   const int spawnRotation = context.spawnRotation;
-  const bool backToBackActive = context.backToBack > 0;
+  const int backToBackChain = std::max(0, context.backToBack);
   const std::vector<int> garbageGaps = projectedGarbageGaps(context);
   const std::optional<AgentDecision> fallback = decideEasy(
       board, type, spawnX, spawnY, spawnRotation, garbageGaps);
   if (!fallback) return std::nullopt;
-
-  // A preview process may serve one or more matches. Reset the opening plan
-  // on an empty board, and otherwise retain the same divider throughout the
-  // match so the evaluator cannot switch between several shallow Wells.
-  if (board.empty()) {
-    attackLaneColumn_ = 5;  // 5-wide block | Well | 4-wide block
-  }
 
   const SearchLimit limit{Clock::now() + thinkTime_, maximumNodes_};
   bool timedOut = false;
@@ -1340,43 +1518,58 @@ std::optional<AgentDecision> ExpertAgent::decide(
 
   const ExpertTAvailability initialT =
       determineExpertTAvailability(holdPiece, nextPieces);
-  const BoardFeatures initialFeatures =
-      evaluateBoardForExpert(board, weights_, initialT,
-                             determineExpertIAvailability(holdPiece,
-                                                          nextPieces),
+  const ExpertIAvailability initialI =
+      determineExpertIAvailability(holdPiece, nextPieces);
+  // Choose a 5-4 or 6-3 split on the opening placement, then retain that
+  // divider for the match. Mirroring is unnecessary: columns 5 and 6 are the
+  // two requested left-to-right layouts and retain a central attack lane.
+  const std::array<int, 2> openingAttackLanes{5, 6};
+  const bool chooseOpeningLane = board.empty();
+  const BoardFeatures emergencyFeatures =
+      evaluateBoardForExpert(board, weights_, initialT, initialI,
                              attackLaneColumn_);
   const bool emergencyMode =
-      initialFeatures.maximumHeight >= kEmergencyHeight;
+      emergencyFeatures.maximumHeight >= kEmergencyHeight;
   std::vector<BeamState> layer;
-  layer.reserve(rootPlacements.size());
+  layer.reserve(rootPlacements.size() * (chooseOpeningLane ? 2U : 1U));
   for (std::size_t index = 0; index < rootPlacements.size(); ++index) {
     const RootPlacement& root = rootPlacements[index];
-    const ExpertTAvailability replacementT = determineExpertTAvailability(
-        root.holdPiece, nextPieces, root.nextIndex);
-    const ExpertIAvailability replacementI = determineExpertIAvailability(
-        root.holdPiece, nextPieces, root.nextIndex);
-    const BoardFeatures features =
-        evaluateBoardForExpert(root.placement.board, weights_, replacementT,
-                               replacementI, attackLaneColumn_);
-    const BoardFeatures rewardFeatures = evaluateBoardForExpert(
-        root.boardBeforeGarbage, weights_, replacementT, replacementI,
-        attackLaneColumn_);
-    const double reward = placementReward(
-        root.placement, backToBackActive, initialFeatures, rewardFeatures,
-        replacementT, replacementI, weights_, emergencyMode);
-    layer.push_back({root.placement.board,
-                     reward,
-                     stateRank(reward, kFutureDiscount, features,
-                               emergencyMode),
-                     index,
-                     root.holdPiece,
-                     root.nextIndex,
-                     backToBackAfter(root.placement, backToBackActive),
-                     features});
+    const int laneCount = chooseOpeningLane ? 2 : 1;
+    for (int laneIndex = 0; laneIndex < laneCount; ++laneIndex) {
+      const int attackLane = chooseOpeningLane
+                                 ? openingAttackLanes[laneIndex]
+                                 : attackLaneColumn_;
+      const ExpertTAvailability replacementT = determineExpertTAvailability(
+          root.holdPiece, nextPieces, root.nextIndex);
+      const ExpertIAvailability replacementI = determineExpertIAvailability(
+          root.holdPiece, nextPieces, root.nextIndex);
+      const BoardFeatures initialFeatures = evaluateBoardForExpert(
+          board, weights_, initialT, initialI, attackLane);
+      const BoardFeatures features = evaluateBoardForExpert(
+          root.placement.board, weights_, replacementT, replacementI,
+          attackLane);
+      const BoardFeatures rewardFeatures = evaluateBoardForExpert(
+          root.boardBeforeGarbage, weights_, replacementT, replacementI,
+          attackLane);
+      const double reward = placementReward(
+          root.placement, backToBackChain, initialFeatures, rewardFeatures,
+          replacementT, replacementI, weights_, emergencyMode);
+      layer.push_back({root.placement.board,
+                       reward,
+                       stateRank(reward, kFutureDiscount, features,
+                                 emergencyMode),
+                       index,
+                       root.holdPiece,
+                       root.nextIndex,
+                       backToBackAfter(root.placement, backToBackChain),
+                       attackLane,
+                       features});
+    }
   }
   layer = selectBeamStates(std::move(layer));
 
   std::size_t bestFirstPlacement = layer[bestStateIndex(layer)].firstPlacement;
+  int bestAttackLane = layer[bestStateIndex(layer)].attackLaneColumn;
   double bestRank = layer[bestStateIndex(layer)].rank;
   int completedDepth = 1;
   double discount = kFutureDiscount;
@@ -1414,9 +1607,10 @@ std::optional<AgentDecision> ExpertAgent::decide(
                                            nextIndexAfter);
           const BoardFeatures features =
               evaluateBoardForExpert(placement.board, weights_, replacementT,
-                                     replacementI, attackLaneColumn_);
+                                     replacementI,
+                                     state.attackLaneColumn);
           const double moveReward = placementReward(
-              placement, state.backToBackActive, state.features, features,
+              placement, state.backToBackChain, state.features, features,
               replacementT, replacementI, weights_, emergencyMode);
           const double accumulatedReward =
               state.accumulatedReward + discount * moveReward;
@@ -1429,7 +1623,8 @@ std::optional<AgentDecision> ExpertAgent::decide(
                state.firstPlacement,
                holdAfter,
                nextIndexAfter,
-               backToBackAfter(placement, state.backToBackActive),
+               backToBackAfter(placement, state.backToBackChain),
+               state.attackLaneColumn,
                features});
         }
       };
@@ -1459,12 +1654,14 @@ std::optional<AgentDecision> ExpertAgent::decide(
     layer = std::move(nextLayer);
     const std::size_t bestIndex = bestStateIndex(layer);
     bestFirstPlacement = layer[bestIndex].firstPlacement;
+    bestAttackLane = layer[bestIndex].attackLaneColumn;
     bestRank = layer[bestIndex].rank;
     ++completedDepth;
     discount *= kFutureDiscount;
   }
 
   const PlacementOption& best = rootPlacements[bestFirstPlacement].placement;
+  attackLaneColumn_ = bestAttackLane;
   std::vector<Action> finalActions = best.actions;
   if (best.placement.type == PieceType::T && best.linesCleared == 0) {
     const bool usedHold =

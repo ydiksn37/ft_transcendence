@@ -38,8 +38,8 @@ enum MinoSkin {
 
 enum AiDifficulty {
   EASY
-  MEDIUM
   HARD
+  EXPERT
 }
 
 enum GameMode {

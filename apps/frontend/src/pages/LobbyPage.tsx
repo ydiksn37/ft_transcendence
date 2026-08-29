@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AI_DIFFICULTIES, type AiDifficulty } from '@transcendence/shared';
 import { Config } from '../components/UI/Config';
 import { Records } from '../components/UI/Records';
 import { useAuth } from '../hooks/useAuth';
@@ -7,6 +8,11 @@ import { useConfig } from '../hooks/useConfig';
 import './LobbyPage.css';
 
 const MAX_AI_ACTION_DELAY_MS = 250;
+const AI_DIFFICULTY_COLORS: Record<AiDifficulty, string> = {
+  EASY: '#2ecc71',
+  HARD: '#f1c40f',
+  EXPERT: '#9b59b6',
+};
 
 export default function LobbyPage() {
   const { mode } = useParams<{ mode: string }>();
@@ -302,27 +308,27 @@ export default function LobbyPage() {
                 <span>INSTANT</span>
               </div>
             </fieldset>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=EASY&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#2ecc71', boxShadow: `0 0 20px #2ecc71`, color: '#2ecc71', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (EASY)
-            </button>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=MEDIUM&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#f1c40f', boxShadow: `0 0 20px #f1c40f`, color: '#f1c40f', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (MEDIUM)
-            </button>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=HARD&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#9b59b6', boxShadow: `0 0 20px #9b59b6`, color: '#9b59b6', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (HARD)
-            </button>
+            {AI_DIFFICULTIES.map((difficulty) => {
+              const color = AI_DIFFICULTY_COLORS[difficulty];
+              return (
+                <button
+                  key={difficulty}
+                  className="start-game-btn"
+                  onClick={() => handleStartGame(
+                    `/play/VS_AI?difficulty=${difficulty}&aiSpeedMs=${aiActionDelayMs}`,
+                  )}
+                  style={{
+                    borderColor: color,
+                    boxShadow: `0 0 20px ${color}`,
+                    color,
+                    marginBottom: 0,
+                    fontSize: '12px',
+                  }}
+                >
+                  VS AI ({difficulty})
+                </button>
+              );
+            })}
           </div>
         )}
 

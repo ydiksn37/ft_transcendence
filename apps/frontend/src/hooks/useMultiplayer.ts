@@ -2,6 +2,7 @@ import { useEffect, useCallback, useMemo } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
+import type { AiDifficulty } from '@transcendence/shared';
 import { setRandomSeed } from '../utils/tetrominos';
 import { createStage, type Cell } from '../utils/gameHelpers';
 
@@ -191,7 +192,7 @@ export const useMultiplayer = ({
     resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
     socketOptions, setSocket, socketRef, startGame, setDropTime]);
 
-  const startVsAi = useCallback((difficulty: string, actionDelayMs = 50) => {
+  const startVsAi = useCallback((difficulty: AiDifficulty, actionDelayMs = 50) => {
     if (socket) {
       socket.disconnect();
       setSocket(null);

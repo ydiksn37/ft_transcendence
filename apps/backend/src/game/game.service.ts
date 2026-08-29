@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { AiDifficulty } from '@transcendence/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -14,7 +15,7 @@ export class GameService {
     player2Id: string | null;
     winnerId: string | null;
     isAiGame: boolean;
-    aiDifficulty?: string;
+    aiDifficulty?: AiDifficulty;
     player1Apm: number;
     player2Apm: number;
     player1Pps: number;
@@ -38,7 +39,7 @@ export class GameService {
         player2Id: data.player2Id,
         winnerId: data.winnerId,
         isAiGame: data.isAiGame,
-        aiDifficulty: data.aiDifficulty as any,
+        aiDifficulty: data.aiDifficulty,
         player1Apm: data.player1Apm,
         player2Apm: data.player2Apm,
         player1Pps: data.player1Pps,

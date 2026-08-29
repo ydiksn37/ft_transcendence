@@ -20,20 +20,17 @@ namespace {
 using Clock = std::chrono::steady_clock;
 using Deadline = Clock::time_point;
 
-constexpr std::size_t kBeamWidth = 16;
+// Hard is intentionally a middle tier: it searches several pieces with a
+// modest beam, but does not carry Expert's attack structures, bag planning,
+// or B2B state through the tree.
+constexpr std::size_t kBeamWidth = 10;
+constexpr int kMaximumSearchDepth = 3;
 constexpr double kFutureDiscount = 0.92;
-constexpr double kBackToBackContinuationReward = 600.0;
-constexpr double kBackToBackBreakPenalty = 1800.0;
-
-struct HardBoardEvaluation {
-  double value;
-  int maximumHeight;
-};
+constexpr double kCreatedHolePenalty = 12000.0;
 
 struct SearchNode {
   ActivePiece piece;
   std::vector<Action> actions;
-  int lastRotationKickIndex;
 };
 
 struct PlacementOption {
@@ -41,7 +38,6 @@ struct PlacementOption {
   std::vector<Action> actions;
   Board board;
   int linesCleared;
-  std::optional<TSpin> tSpin;
   bool perfectClear;
   double reward;
 };
@@ -59,11 +55,9 @@ struct BeamState {
   std::size_t firstPlacement;
   std::optional<PieceType> holdPiece;
   std::size_t nextIndex;
-  bool backToBackActive;
-  int maximumHeight;
 };
 
-using StateKey = std::tuple<int, int, int, int>;
+using StateKey = std::tuple<int, int, int>;
 using PlacementKey = std::tuple<int, int, int>;
 
 bool deadlineReached(const Deadline& deadline) noexcept {
@@ -101,97 +95,31 @@ std::optional<ActivePiece> applyAction(const Board& board,
   return std::nullopt;
 }
 
-double placementReward(int lines, std::optional<TSpin> tSpin,
-                       bool perfectClear) noexcept {
+double placementReward(int lines, bool perfectClear) noexcept {
+  // Hard deliberately treats every placement as an ordinary line clear.
+  // T-Spin detection, spin attack tables, B2B, and setup preservation belong
+  // exclusively to Expert.
+  static constexpr std::array<int, 5> kLineGarbage{0, 0, 1, 2, 4};
+  const int garbage =
+      kLineGarbage[static_cast<std::size_t>(std::min(lines, 4))];
   static constexpr std::array<double, 5> kLineReward{
-      0.0, 40.0, 180.0, 450.0, 1800.0};
-  double reward = kLineReward[static_cast<std::size_t>(lines)];
-  if (tSpin == TSpin::Full) {
-    // A TSD sends twice as much garbage as a TSS in the backend. Give the
-    // harder setup enough margin to beat two discounted TSS clears as well.
-    static constexpr std::array<double, 4> kTSpinReward{
-        0.0, 700.0, 3200.0, 5200.0};
-    reward += kTSpinReward[static_cast<std::size_t>(std::min(lines, 3))];
-  } else if (tSpin == TSpin::Mini && lines > 0) {
-    reward += 200.0 * lines;
-  }
+      0.0, 40.0, 100.0, 180.0, 400.0};
+  double reward = 900.0 * garbage +
+                  kLineReward[static_cast<std::size_t>(lines)];
   if (perfectClear) reward += 7000.0;
   return reward;
 }
 
-bool isBackToBackClear(const PlacementOption& placement) noexcept {
-  return placement.linesCleared > 0 &&
-         (placement.linesCleared == 4 || placement.tSpin.has_value());
-}
+}  // namespace
 
-bool backToBackAfter(const PlacementOption& placement,
-                     bool backToBackActive) noexcept {
-  if (placement.linesCleared == 0) return backToBackActive;
-  return isBackToBackClear(placement);
-}
-
-double rewardWithBackToBack(const PlacementOption& placement,
-                            bool backToBackActive,
-                            int currentMaximumHeight) noexcept {
-  double reward = placement.reward;
-  if (placement.linesCleared == 0) return reward;
-  if (isBackToBackClear(placement)) {
-    if (backToBackActive) reward += kBackToBackContinuationReward;
-  } else if (backToBackActive) {
-    // Prefer preserving B2B on a safe board, but allow an ordinary rescue
-    // clear as the stack approaches the game-over area.
-    const double safeBoardFactor = std::clamp(
-        static_cast<double>(15 - currentMaximumHeight) / 5.0, 0.0, 1.0);
-    const double safetyFactor = 0.25 + 0.75 * safeBoardFactor;
-    reward -= kBackToBackBreakPenalty * safetyFactor;
-  }
-  return reward;
-}
-
-int countReadyTSpinDoubleSlots(const Board& board) noexcept {
-  constexpr unsigned int kFullRow = (1U << kBoardCols) - 1U;
-  std::array<unsigned int, kBoardRows> occupiedRows{};
-  for (int row = 0; row < kBoardRows; ++row) {
-    for (int col = 0; col < kBoardCols; ++col) {
-      if (board.cells()[row][col] != Cell::Empty) {
-        occupiedRows[row] |= 1U << col;
-      }
-    }
-  }
-
-  int slots = 0;
-  for (int x = 0; x + 2 < kBoardCols; ++x) {
-    const unsigned int center = 1U << (x + 1);
-    const unsigned int threeWide = 7U << x;
-    const unsigned int sideCorners = (1U << x) | (1U << (x + 2));
-    for (int y = 0; y + 2 < kBoardRows; ++y) {
-      // Up-facing T: one-cell gap above a three-cell gap, with at least one
-      // supporting bottom corner. These exact row masks are the two rows that
-      // a T-Spin Double would clear.
-      if (occupiedRows[y] == (kFullRow ^ center) &&
-          occupiedRows[y + 1] == (kFullRow ^ threeWide) &&
-          (occupiedRows[y + 2] & sideCorners) != 0U) {
-        ++slots;
-      }
-
-      // Down-facing T: the same completed slot mirrored vertically.
-      if ((occupiedRows[y] & sideCorners) != 0U &&
-          occupiedRows[y + 1] == (kFullRow ^ threeWide) &&
-          occupiedRows[y + 2] == (kFullRow ^ center)) {
-        ++slots;
-      }
-    }
-  }
-  return slots;
-}
-
-HardBoardEvaluation evaluateBoardForHard(const Board& board) noexcept {
+HardBoardEvaluation evaluateHardBoard(const Board& board) noexcept {
   std::array<int, kBoardCols> heights{};
   int aggregateHeight = 0;
   int holes = 0;
   int coveredHoleDepth = 0;
-  int bumpiness = 0;
   int maximumHeight = 0;
+  int rowTransitions = 0;
+  int columnTransitions = 0;
 
   for (int col = 0; col < kBoardCols; ++col) {
     int top = kBoardRows;
@@ -209,8 +137,25 @@ HardBoardEvaluation evaluateBoardForHard(const Board& board) noexcept {
     aggregateHeight += heights[col];
     maximumHeight = std::max(maximumHeight, heights[col]);
   }
-  for (int col = 0; col + 1 < kBoardCols; ++col) {
-    bumpiness += std::abs(heights[col] - heights[col + 1]);
+  for (int row = 0; row < kBoardRows; ++row) {
+    bool previousOccupied = true;
+    for (int col = 0; col < kBoardCols; ++col) {
+      const bool currentOccupied =
+          board.cells()[row][col] != Cell::Empty;
+      if (currentOccupied != previousOccupied) ++rowTransitions;
+      previousOccupied = currentOccupied;
+    }
+    if (!previousOccupied) ++rowTransitions;
+  }
+  for (int col = 0; col < kBoardCols; ++col) {
+    bool previousOccupied = true;
+    for (int row = 0; row < kBoardRows; ++row) {
+      const bool currentOccupied =
+          board.cells()[row][col] != Cell::Empty;
+      if (currentOccupied != previousOccupied) ++columnTransitions;
+      previousOccupied = currentOccupied;
+    }
+    if (!previousOccupied) ++columnTransitions;
   }
 
   std::array<int, kBoardCols> wellStreak{};
@@ -234,19 +179,82 @@ HardBoardEvaluation evaluateBoardForHard(const Board& board) noexcept {
     }
   }
 
-  // Keep completed TSD setups in the beam while waiting for T.
-  double value = -0.75 * aggregateHeight - 45.0 * holes -
-                 8.0 * coveredHoleDepth - 0.5 * bumpiness -
-                 2.5 * maximumHeight + 35.0 * tetrisWell +
-                 18.0 * tetrisWell * tetrisWell +
-                 900.0 * countReadyTSpinDoubleSlots(board);
+  std::array<int, kBoardCols> surfaceWellDepths{};
+  int primaryWellColumn = -1;
+  int primaryWellDepth = 0;
+  for (int col = 0; col < kBoardCols; ++col) {
+    const int leftHeight =
+        col == 0 ? heights[col + 1] : heights[col - 1];
+    const int rightHeight =
+        col + 1 == kBoardCols ? heights[col - 1] : heights[col + 1];
+    surfaceWellDepths[col] =
+        std::max(0, std::min(leftHeight, rightHeight) - heights[col]);
+    if (surfaceWellDepths[col] > primaryWellDepth) {
+      primaryWellDepth = surfaceWellDepths[col];
+      primaryWellColumn = col;
+    }
+  }
+
+  // One one-column Well is useful for an I piece. Its two boundary steps are
+  // intentionally excluded from the flat surface measurement; every other
+  // valley and cliff is unwanted roughness.
+  const bool preservePrimaryWell = primaryWellDepth >= 2;
+  int flatSurfaceRoughness = 0;
+  int excessiveSurfaceSteps = 0;
+  for (int col = 0; col + 1 < kBoardCols; ++col) {
+    if (preservePrimaryWell &&
+        (col == primaryWellColumn - 1 || col == primaryWellColumn)) {
+      continue;
+    }
+    const int difference = std::abs(heights[col] - heights[col + 1]);
+    flatSurfaceRoughness += difference;
+    const int excessive = std::max(0, difference - 1);
+    excessiveSurfaceSteps += excessive * excessive;
+  }
+
+  int extraWellCount = 0;
+  int extraWellDepth = 0;
+  for (int col = 0; col < kBoardCols; ++col) {
+    if (col == primaryWellColumn || surfaceWellDepths[col] == 0) continue;
+    ++extraWellCount;
+    extraWellDepth += surfaceWellDepths[col] * surfaceWellDepths[col];
+  }
+
+  // Generic board quality only. A newly buried cell must cost more than any
+  // ordinary clear can earn; otherwise a short beam trades permanent holes
+  // for local Tetrises. Hard still chooses the least damaging move when a
+  // hole is unavoidable (for example while digging incoming garbage).
+  const int rewardedWellDepth =
+      std::min(std::max(tetrisWell, primaryWellDepth), 4);
+  const int deepWellOverflow = std::max(0, primaryWellDepth - 4);
+  double value = -0.90 * aggregateHeight - 9000.0 * holes -
+                 1800.0 * holes * holes - 350.0 * coveredHoleDepth -
+                 4.0 * flatSurfaceRoughness -
+                 80.0 * excessiveSurfaceSteps -
+                 350.0 * extraWellCount - 220.0 * extraWellDepth -
+                 180.0 * deepWellOverflow * deepWellOverflow -
+                 1.20 * rowTransitions - 0.80 * columnTransitions -
+                 4.0 * maximumHeight + 45.0 * rewardedWellDepth +
+                 18.0 * rewardedWellDepth * rewardedWellDepth;
   if (maximumHeight >= 12) {
     const int danger = maximumHeight - 11;
     value -= 20.0 * danger * danger;
   }
   if (maximumHeight >= 16) value -= 200.0 * (maximumHeight - 15);
-  return {value, maximumHeight};
+  return {value,
+          aggregateHeight,
+          maximumHeight,
+          holes,
+          coveredHoleDepth,
+          primaryWellColumn,
+          primaryWellDepth,
+          extraWellCount,
+          extraWellDepth,
+          flatSurfaceRoughness,
+          excessiveSurfaceSteps};
 }
+
+namespace {
 
 std::uint64_t hashBoard(const Board& board) noexcept {
   std::uint64_t hash = 1469598103934665603ULL;
@@ -287,8 +295,8 @@ std::vector<PlacementOption> enumeratePlacements(
   std::queue<SearchNode> pending;
   std::set<StateKey> visited;
   std::map<PlacementKey, PlacementOption> placements;
-  pending.push({spawn, {}, -1});
-  visited.insert({spawn.x, spawn.y, spawn.rotation, -1});
+  pending.push({spawn, {}});
+  visited.insert({spawn.x, spawn.y, spawn.rotation});
 
   while (!pending.empty()) {
     if ((nodesVisited & 63U) == 0U && deadlineReached(deadline)) {
@@ -304,22 +312,14 @@ std::vector<PlacementOption> enumeratePlacements(
     const PlacementKey placementKey{placement.x, placement.y,
                                     placement.rotation};
     const ClearResult cleared = clearLines(lockMino(board, placement));
-    // frontend の hard drop は1段以上落ちた場合、最後の操作を drop にする。
-    const int lockKickIndex =
-        placement.y == node.piece.y ? node.lastRotationKickIndex : -1;
-    const auto tSpin =
-        detectTSpin(board, placement, lockKickIndex >= 0, lockKickIndex,
-                    cleared.linesCleared);
     const bool perfectClear = cleared.linesCleared > 0 && cleared.board.empty();
-    const double reward =
-        placementReward(cleared.linesCleared, tSpin, perfectClear);
+    const double reward = placementReward(cleared.linesCleared, perfectClear);
     std::vector<Action> placementActions = node.actions;
     placementActions.push_back(Action::HardDrop);
     PlacementOption option{placement,
                            std::move(placementActions),
                            cleared.board,
                            cleared.linesCleared,
-                           tSpin,
                            perfectClear,
                            reward};
     auto existing = placements.find(placementKey);
@@ -334,18 +334,27 @@ std::vector<PlacementOption> enumeratePlacements(
       int nextKickIndex = -1;
       const auto next = applyAction(board, node.piece, action, &nextKickIndex);
       if (!next) continue;
-      const StateKey stateKey{next->x, next->y, next->rotation,
-                              nextKickIndex};
+      const StateKey stateKey{next->x, next->y, next->rotation};
       if (!visited.insert(stateKey).second) continue;
       std::vector<Action> actions = node.actions;
       actions.push_back(action);
-      pending.push({*next, std::move(actions), nextKickIndex});
+      pending.push({*next, std::move(actions)});
     }
   }
 
+  const int holesBeforePlacement = evaluateHardBoard(board).holes;
   std::vector<PlacementOption> result;
   result.reserve(placements.size());
-  for (auto& entry : placements) result.push_back(std::move(entry.second));
+  for (auto& entry : placements) {
+    PlacementOption option = std::move(entry.second);
+    const int holesAfterPlacement = evaluateHardBoard(option.board).holes;
+    const int createdHoles =
+        std::max(0, holesAfterPlacement - holesBeforePlacement);
+    // Charging this at every ply prevents the beam from roofing a cell for
+    // one move and hiding the damage again before the leaf evaluation.
+    option.reward -= kCreatedHolePenalty * createdHoles;
+    result.push_back(std::move(option));
+  }
   return result;
 }
 
@@ -375,7 +384,6 @@ std::optional<AgentDecision> HardAgent::decide(
   const int spawnX = context.spawnX;
   const int spawnY = context.spawnY;
   const int spawnRotation = context.spawnRotation;
-  const bool backToBackActive = context.backToBack > 0;
   const std::vector<int> garbageGaps = projectedGarbageGaps(context);
   const auto fallback = decideEasy(board, type, spawnX, spawnY,
                                    spawnRotation, garbageGaps);
@@ -426,27 +434,18 @@ std::optional<AgentDecision> HardAgent::decide(
 
   std::vector<BeamState> layer;
   layer.reserve(rootPlacements.size());
-  const HardBoardEvaluation initialBoardEvaluation =
-      evaluateBoardForHard(board);
   for (std::size_t index = 0; index < rootPlacements.size(); ++index) {
     const auto& root = rootPlacements[index];
     const HardBoardEvaluation boardEvaluation =
-        evaluateBoardForHard(root.placement.board);
-    const int dangerHeight = garbageGaps.empty()
-                                 ? initialBoardEvaluation.maximumHeight
-                                 : boardEvaluation.maximumHeight;
-    const double reward = rewardWithBackToBack(
-        root.placement, backToBackActive,
-        dangerHeight);
+        evaluateHardBoard(root.placement.board);
+    const double reward = root.placement.reward;
     layer.push_back(
         {root.placement.board,
          reward,
          reward + kFutureDiscount * boardEvaluation.value,
          index,
          root.holdPiece,
-         root.nextIndex,
-         backToBackAfter(root.placement, backToBackActive),
-         boardEvaluation.maximumHeight});
+         root.nextIndex});
   }
   std::sort(layer.begin(), layer.end(),
             [](const BeamState& left, const BeamState& right) {
@@ -458,7 +457,9 @@ std::optional<AgentDecision> HardAgent::decide(
   int completedDepth = 1;
   double discount = kFutureDiscount;
 
-  for (std::size_t depth = 1; depth <= nextPieces.size(); ++depth) {
+  for (std::size_t depth = 1;
+       depth <= nextPieces.size() && completedDepth < kMaximumSearchDepth;
+       ++depth) {
     if (deadlineReached(deadline)) {
       timedOut = true;
       break;
@@ -480,25 +481,21 @@ std::optional<AgentDecision> HardAgent::decide(
                                std::optional<PieceType> holdAfter,
                                std::size_t nextIndexAfter) {
         auto placements = enumeratePlacements(
-            state.board, pieceToPlace, 3, 0, 0, deadline, timedOut,
+            state.board, pieceToPlace, 3, kSpawnY, 0, deadline, timedOut,
             nodesVisited);
         if (timedOut) return;
         for (const PlacementOption& placement : placements) {
           const HardBoardEvaluation boardEvaluation =
-              evaluateBoardForHard(placement.board);
-          const double placementValue = rewardWithBackToBack(
-              placement, state.backToBackActive, state.maximumHeight);
+              evaluateHardBoard(placement.board);
           const double reward = state.accumulatedReward +
-                                discount * placementValue;
+                                discount * placement.reward;
           candidates.push_back(
               {placement.board,
                reward,
                reward + discount * kFutureDiscount * boardEvaluation.value,
                state.firstPlacement,
                holdAfter,
-               nextIndexAfter,
-               backToBackAfter(placement, state.backToBackActive),
-               boardEvaluation.maximumHeight});
+               nextIndexAfter});
         }
       };
 
