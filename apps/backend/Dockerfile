@@ -1,6 +1,9 @@
+# ─── AI Agent ツールチェーン ────────────────────────────
+FROM node:22-alpine AS ai-toolchain
+RUN apk add --no-cache cmake make g++
+
 # ─── AI Agent ビルドステージ ────────────────────────────
-FROM node:22-alpine AS ai-builder
-RUN apk add --no-cache cmake make g++ git
+FROM ai-toolchain AS ai-builder
 WORKDIR /app
 COPY apps/ai-agent ./apps/ai-agent
 RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \

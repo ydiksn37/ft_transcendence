@@ -41,6 +41,10 @@ const PlayPage = () => {
   const aiDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedAiDifficulty)
     ? requestedAiDifficulty
     : 'EASY';
+  const requestedAiSpeedMs = Number(queryParams.get('aiSpeedMs') ?? 50);
+  const aiActionDelayMs = Number.isFinite(requestedAiSpeedMs)
+    ? Math.max(0, Math.min(1000, Math.trunc(requestedAiSpeedMs)))
+    : 50;
   const {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
@@ -664,7 +668,7 @@ const PlayPage = () => {
     } else if (mode === 'CUSTOM_ROOMS') {
       setupCustomRoomConnection();
     } else if (mode === 'VS_AI') {
-      startVsAi(aiDifficulty);
+      startVsAi(aiDifficulty, aiActionDelayMs);
     } else {
       startGame(mode);
     }
@@ -749,7 +753,7 @@ const PlayPage = () => {
       createStage={createStage}
       appState={appState}
       restartGame={() => startGame()}
-      joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty) : joinOnline}
+      joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty, aiActionDelayMs) : joinOnline}
       isCustomRoom={mode === 'CUSTOM_ROOMS'}
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
       onQuit={quitGame}

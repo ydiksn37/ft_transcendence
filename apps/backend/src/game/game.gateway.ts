@@ -442,7 +442,7 @@ export class GameGateway
   @SubscribeMessage('game:start_vs_ai')
   handleStartVsAi(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { difficulty: AiDifficulty },
+    @MessageBody() data: { difficulty: AiDifficulty; actionDelayMs?: number },
   ) {
     if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
       client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
@@ -468,7 +468,8 @@ export class GameGateway
     this.rooms.set(roomId, instance);
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
-    setTimeout(() => instance.start(data.difficulty), 1000);
+    const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
+    setTimeout(() => instance.start(data.difficulty, actionDelayMs), 1000);
   }
 
   // ── C++ AI Webプレビュー ──────────────────────────────────
@@ -478,6 +479,7 @@ export class GameGateway
     @MessageBody() data: AiPreviewStartRequest,
   ) {
     const allowedModels: AiAgentModel[] = ['easy', 'hard', 'expert'];
+    const mode = data?.mode === 'versus' ? 'versus' : 'solo';
     const model = allowedModels.includes(data?.model) ? data.model : null;
     if (!model) {
       client.emit(ServerEvent.ERROR, {
@@ -485,6 +487,13 @@ export class GameGateway
       });
       return;
     }
+    const opponentModel =
+      mode === 'versus' &&
+      allowedModels.includes(data?.opponentModel as AiAgentModel)
+        ? (data.opponentModel as AiAgentModel)
+        : mode === 'versus'
+          ? 'expert'
+          : undefined;
 
     const previousRoomId = this.clientRoom.get(client.id);
     if (previousRoomId) {
@@ -517,7 +526,18 @@ export class GameGateway
         }
       },
     );
-    instance.addPlayer(client.id, null);
+    instance.addCppPreviewPlayer(
+      `ai_preview_left_${roomId}`,
+      'left',
+      model,
+    );
+    if (mode === 'versus' && opponentModel) {
+      instance.addCppPreviewPlayer(
+        `ai_preview_right_${roomId}`,
+        'right',
+        opponentModel,
+      );
+    }
     client.join(roomId);
     this.clientRoom.set(client.id, roomId);
     this.rooms.set(roomId, instance);
@@ -525,12 +545,16 @@ export class GameGateway
       roomId,
       seed,
       aiPreview: true,
+      mode,
       model,
+      opponentModel,
     });
 
     void instance.startCppPreview({
       executable,
+      mode,
       model,
+      opponentModel,
       thinkTimeMs,
       responseTimeoutMs: thinkTimeMs * 4 + 500,
       actionDelayMs,

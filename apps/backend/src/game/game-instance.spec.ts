@@ -28,6 +28,31 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('starts versus preview players from identical independent seeded bags', () => {
+    const game = new GameInstance('preview_seed_room', server, 12345);
+    game.addCppPreviewPlayer('preview_left', 'left', 'expert');
+    game.addCppPreviewPlayer('preview_right', 'right', 'hard');
+
+    const left = game.getPlayers().get('preview_left');
+    const right = game.getPlayers().get('preview_right');
+    expect(left?.activeMino).toBeDefined();
+    expect(right?.activeMino).toBe(left?.activeMino);
+
+    right!.garbageQueue = 3;
+    right!.attacksSent = 7;
+    const request = (game as any).makeCppDecisionRequest(
+      'preview_left',
+      left,
+    );
+    expect(request.next).toHaveLength(5);
+    expect(request.opponent).toMatchObject({
+      garbageQueue: 3,
+      attacksSent: 7,
+      piecesPlaced: 0,
+    });
+    expect(request.opponent.board).toHaveLength(40);
+  });
+
   it('publishes a 40-row opponent stage including the active AI mino', () => {
     const aiAgent = {
       getDecision: jest.fn(() => new Promise(() => undefined)),
@@ -90,11 +115,14 @@ describe('GameInstance AI matches', () => {
     game.stop();
   });
 
-  it('applies AI actions and publishes the locked board to the human', async () => {
+  it('publishes each AI movement before publishing the locked board', async () => {
     const aiAgent = {
       getDecision: jest
         .fn()
-        .mockResolvedValueOnce({ gameOver: false, actions: ['hard_drop'] })
+        .mockResolvedValueOnce({
+          gameOver: false,
+          actions: ['move_left', 'soft_drop', 'hard_drop'],
+        })
         .mockImplementation(() => new Promise(() => undefined)),
     } as unknown as AiAgentService;
     const roomId = 'ai_action_room';
@@ -103,15 +131,42 @@ describe('GameInstance AI matches', () => {
 
     game.addPlayer(humanSocketId, null);
     game.addPlayer(`ai_${roomId}`, null);
-    game.start('EASY');
+    game.start('EASY', 125);
 
     await jest.advanceTimersByTimeAsync(1800);
+
+    const updatesAfterHorizontalMove = emissions.filter(
+      (emission) =>
+        emission.target === humanSocketId &&
+        emission.event === 'opponent_board_update',
+    );
+    expect(updatesAfterHorizontalMove).toHaveLength(2);
+
+    await jest.advanceTimersByTimeAsync(124);
+    expect(
+      emissions.filter(
+        (emission) =>
+          emission.target === humanSocketId &&
+          emission.event === 'opponent_board_update',
+      ),
+    ).toHaveLength(2);
+
+    await jest.advanceTimersByTimeAsync(1);
+    const updatesAfterSoftDrop = emissions.filter(
+      (emission) =>
+        emission.target === humanSocketId &&
+        emission.event === 'opponent_board_update',
+    );
+    expect(updatesAfterSoftDrop).toHaveLength(3);
+
+    await jest.advanceTimersByTimeAsync(125);
 
     const updates = emissions.filter(
       (emission) =>
         emission.target === humanSocketId &&
         emission.event === 'opponent_board_update',
     );
+    expect(updates).toHaveLength(4);
     expect(updates.some((update) => update.payload.score > 0)).toBe(true);
     expect(
       updates.some((update) =>

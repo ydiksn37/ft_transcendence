@@ -6,20 +6,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-include(FetchContent)
-
 # Keep this version explicit so every developer and Docker build uses the same
-# JSON implementation. CMake downloads it during the configure step.
+# JSON implementation. The pinned single-header release is vendored so Docker
+# builds do not depend on GitHub being reachable.
 set(NLOHMANN_JSON_VERSION "3.11.3")
-set(JSON_BuildTests OFF CACHE INTERNAL "Disable nlohmann/json tests")
-
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG "v${NLOHMANN_JSON_VERSION}"
-  GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(nlohmann_json)
+set(NLOHMANN_JSON_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+if(NOT EXISTS "${NLOHMANN_JSON_INCLUDE_DIR}/nlohmann/json.hpp")
+  message(FATAL_ERROR
+          "vendored nlohmann/json ${NLOHMANN_JSON_VERSION} is missing")
+endif()
+add_library(nlohmann_json INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+target_include_directories(nlohmann_json INTERFACE
+                           "${NLOHMANN_JSON_INCLUDE_DIR}")
 
 add_library(ai_engine
   src/agent.cpp

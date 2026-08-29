@@ -108,6 +108,82 @@
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+.ai-speed-selector {
+  flex-basis: 100%;
+  max-width: 620px;
+  padding: 12px 16px 16px;
+  border: 3px solid #555;
+  font-family: 'Press Start 2P', monospace;
+}
+
+.ai-speed-selector legend {
+  padding: 0 10px;
+  color: #aaa;
+  font-size: 11px;
+}
+
+.ai-speed-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 16px;
+  min-height: 24px;
+  margin-bottom: 10px;
+}
+
+.ai-speed-value strong {
+  color: #00ffff;
+  font-size: 14px;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.7);
+}
+
+.ai-speed-value span,
+.ai-speed-scale {
+  color: #888;
+  font-size: 8px;
+}
+
+.ai-speed-selector input[type='range'] {
+  width: 100%;
+  height: 10px;
+  margin: 4px 0;
+  border: 2px solid #666;
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.ai-speed-selector input[type='range']:focus-visible {
+  border-color: #fff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.7);
+}
+
+.ai-speed-selector input[type='range']::-webkit-slider-thumb {
+  width: 22px;
+  height: 26px;
+  border: 3px solid #fff;
+  border-radius: 0;
+  background: #00ffff;
+  box-shadow: 3px 3px 0 #005f66;
+  appearance: none;
+}
+
+.ai-speed-selector input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 22px;
+  border: 3px solid #fff;
+  border-radius: 0;
+  background: #00ffff;
+  box-shadow: 3px 3px 0 #005f66;
+}
+
+.ai-speed-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
 @media (max-width: 768px) {
   .lobby-container {
     height: 100%;
@@ -167,6 +243,15 @@
   }
   .multi-play-buttons .start-game-btn {
     margin-bottom: 0;
+  }
+  .ai-speed-selector {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .ai-speed-value {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
   }
   .start-game-btn {
     font-size: 18px;
