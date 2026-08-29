@@ -1,6 +1,8 @@
 import { ServerEvent } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { AiAgentService } from './engine/ai-agent.service';
+import { calcGhostY } from './engine/board';
+import { AgentAction, VISIBLE_ROW_OFFSET } from './headless/headless-battle';
 
 type Emission = {
   target: string;
@@ -100,7 +102,9 @@ describe('GameInstance AI matches', () => {
     await jest.advanceTimersByTimeAsync(999);
     expect(aiAgent.getDecision).not.toHaveBeenCalled();
 
-    await jest.advanceTimersByTimeAsync(801);
+    // EASY waits 800 ms before acting, then the AI game-over animation keeps
+    // the final result on screen for another 1500 ms.
+    await jest.advanceTimersByTimeAsync(2301);
 
     const gameOver = emissions.find(
       (emission) =>
@@ -177,5 +181,115 @@ describe('GameInstance AI matches', () => {
     ).toBe(true);
 
     game.stop();
+  });
+
+  it('waits for both versus agents before placing either next piece', async () => {
+    const game = new GameInstance('lockstep_room', server, 12345);
+    game.addCppPreviewPlayer('preview_left', 'left', 'expert');
+    game.addCppPreviewPlayer('preview_right', 'right', 'hard');
+    const left = game.getPlayers().get('preview_left')!;
+    const right = game.getPlayers().get('preview_right')!;
+
+    const makeDecision = (player: typeof left, actions: AgentAction[]) => {
+      const simulated = { ...player };
+      for (const action of actions.slice(0, -1)) {
+        (game as any).applyAgentActionToState(simulated, action);
+      }
+      return {
+        gameOver: false,
+        actions,
+        placement: {
+          piece: simulated.activeMino,
+          x: simulated.activeX,
+          y:
+            calcGhostY(
+              simulated.board,
+              simulated.activeMino,
+              simulated.activeX,
+              simulated.activeY,
+              simulated.activeRotation,
+            ) - VISIBLE_ROW_OFFSET,
+          rotation: simulated.activeRotation,
+        },
+        completedDepth: 1,
+        nodesVisited: 1,
+      };
+    };
+
+    let resolveLeft!: (decision: ReturnType<typeof makeDecision>) => void;
+    let resolveRight!: (decision: ReturnType<typeof makeDecision>) => void;
+    const leftFirstDecision = new Promise<ReturnType<typeof makeDecision>>(
+      (resolve) => {
+        resolveLeft = resolve;
+      },
+    );
+    const rightFirstDecision = new Promise<ReturnType<typeof makeDecision>>(
+      (resolve) => {
+        resolveRight = resolve;
+      },
+    );
+    const gameOverDecision = Promise.resolve({
+      gameOver: true,
+      actions: [] as AgentAction[],
+    });
+    const leftAgent = {
+      decide: jest
+        .fn()
+        .mockImplementationOnce(() => leftFirstDecision)
+        .mockImplementation(() => gameOverDecision),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    const rightAgent = {
+      decide: jest
+        .fn()
+        .mockImplementationOnce(() => rightFirstDecision)
+        .mockImplementation(() => gameOverDecision),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+
+    (game as any).isRunning = true;
+    (game as any).cppPreviewOptions = {
+      mode: 'versus',
+      model: 'expert',
+      opponentModel: 'hard',
+      actionDelayMs: 0,
+    };
+    (game as any).cppAgents.set('preview_left', leftAgent);
+    (game as any).cppAgents.set('preview_right', rightAgent);
+
+    const loop = (game as any).runCppVersusPreviewLoop([
+      ['preview_left', left],
+      ['preview_right', right],
+    ]);
+    await Promise.resolve();
+    resolveLeft(makeDecision(left, ['move_left', 'soft_drop', 'hard_drop']));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The fast side has completed its search, but may not consume an extra
+    // piece while the other side is still thinking.
+    expect(left.piecesPlaced).toBe(0);
+    expect(right.piecesPlaced).toBe(0);
+
+    resolveRight(makeDecision(right, ['hard_drop']));
+    await loop;
+
+    expect(left.piecesPlaced).toBe(1);
+    expect(right.piecesPlaced).toBe(1);
+
+    const leftFrames = emissions
+      .filter(
+        (emission) =>
+          emission.event === ServerEvent.AI_PREVIEW_STATE &&
+          emission.payload.side === 'left',
+      )
+      .map((emission) => emission.payload.state);
+    expect(leftFrames.some((state) => state.activeMino.x === 2)).toBe(true);
+    expect(leftFrames.some((state) => state.activeMino.y === 19)).toBe(true);
+    expect(
+      leftFrames.some((state) =>
+        state.board.some((row: any[]) => row.some((cell) => cell !== null)),
+      ),
+    ).toBe(true);
   });
 });
