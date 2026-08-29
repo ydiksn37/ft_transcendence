@@ -101,7 +101,7 @@ export class TournamentService {
 
     // ラウンドごとにグループ化
     const rounds = tournament.matches.reduce(
-      (acc, match) => {
+      (acc: any, match: any) => {
         if (!acc[match.round]) acc[match.round] = [];
         acc[match.round].push(match);
         return acc;
@@ -161,7 +161,7 @@ export class TournamentService {
     const participants = tournament.entries.sort(() => Math.random() - 0.5);
     const matches = this.generateBracket(
       tournamentId,
-      participants.map((e) => e.userId),
+      participants.map((e: any) => e.userId),
     );
 
     await this.prisma.$transaction([

@@ -210,6 +210,7 @@ export class UsersService {
 
     const existing = await this.prisma.friendship.findFirst({
       where: {
+        status: { in: ['PENDING', 'ACCEPTED'] },
         OR: [
           { requesterId, addresseeId },
           { requesterId: addresseeId, addresseeId: requesterId },
@@ -220,6 +221,17 @@ export class UsersService {
     if (existing) {
       throw new BadRequestException('既にフレンド関係または申請中です');
     }
+
+    // もし過去に拒否された(REJECTED)レコードがあれば削除して新しく作る
+    await this.prisma.friendship.deleteMany({
+      where: {
+        status: 'REJECTED',
+        OR: [
+          { requesterId, addresseeId },
+          { requesterId: addresseeId, addresseeId: requesterId },
+        ],
+      },
+    });
 
     return this.prisma.friendship.create({
       data: { requesterId, addresseeId, status: 'PENDING' },
@@ -284,7 +296,6 @@ export class UsersService {
   async removeFriend(userId: string, friendId: string) {
     const friendship = await this.prisma.friendship.findFirst({
       where: {
-        status: 'ACCEPTED',
         OR: [
           { requesterId: userId, addresseeId: friendId },
           { requesterId: friendId, addresseeId: userId },

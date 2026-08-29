@@ -27,6 +27,7 @@ import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -44,47 +45,44 @@ export class GameGateway
   private matchmakingQueue: Socket[] = [];
 
   // Custom Rooms
-  private customRooms = new Map<
-    string,
-    {
-      roomId: string;
-      name: string;
-      ownerId: string;
-      ownerSocket: Socket;
-    }
-  >();
-
-  private activeCustomRooms = new Map<
-    string,
-    {
-      roomId: string;
-      name: string;
-      ownerSocket: Socket;
-      ownerId: string;
-      guestSocket: Socket;
-      guestId: string;
-      ownerWins: number;
-      guestWins: number;
-    }
-  >();
+  private customRooms = new Map<string, {
+    roomId: string;
+    name: string;
+    ownerSocketId: string;
+    players: {
+      socket: Socket;
+      userId: string | null;
+      wins: number;
+    }[];
+    isPlaying: boolean;
+  }>();
 
   constructor(
     private readonly gameService: GameService,
     private readonly chatService: ChatService,
     private readonly aiAgentService: AiAgentService,
     private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {}
 
   afterInit() {
     this.logger.log('GameGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token;
     if (typeof token === 'string' && token.length > 0) {
       try {
         const payload = this.jwtService.verify<{ sub: string }>(token);
-        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+        if (typeof payload.sub === 'string') {
+          client.data.userId = payload.sub;
+          // DBのオンラインステータスを更新し、全体に通知
+          await this.prisma.user.update({
+            where: { id: payload.sub },
+            data: { isOnline: true },
+          }).catch(() => {});
+          this.server.emit('user_status_changed', { userId: payload.sub, isOnline: true });
+        }
       } catch {
         this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
       }
@@ -92,8 +90,18 @@ export class GameGateway
     this.logger.log(`接続: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`切断: ${client.id}`);
+
+    const userId = client.data.userId;
+    if (userId) {
+      // DBのオンラインステータスをオフラインに更新し、全体に通知
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isOnline: false, lastSeenAt: new Date() },
+      }).catch(() => {});
+      this.server.emit('user_status_changed', { userId, isOnline: false });
+    }
 
     // マッチメイキングキューから除外
     this.matchmakingQueue = this.matchmakingQueue.filter(
@@ -109,24 +117,40 @@ export class GameGateway
         room.stop();
         this.rooms.delete(roomId);
       }
-      this.activeCustomRooms.delete(roomId);
+      
+      const activeRoom = this.customRooms.get(roomId);
+      if (activeRoom) {
+        activeRoom.players = activeRoom.players.filter(p => p.socket.id !== client.id);
+        if (activeRoom.players.length === 0) {
+          this.customRooms.delete(roomId);
+        } else {
+          if (activeRoom.ownerSocketId === client.id) {
+            activeRoom.ownerSocketId = activeRoom.players[0].socket.id;
+          }
+          activeRoom.players.forEach(p => {
+            p.socket.emit('custom_room_state', {
+              inRoom: true,
+              roomId: activeRoom.roomId,
+              name: activeRoom.name,
+              isOwner: activeRoom.ownerSocketId === p.socket.id,
+              players: activeRoom.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+              isPlaying: activeRoom.isPlaying
+            });
+          });
+        }
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      }
       this.clientRoom.delete(client.id);
     }
 
-    // カスタムルームのオーナーだった場合ルーム削除
-    for (const [cRoomId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
-        this.customRooms.delete(cRoomId);
-        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
-      }
-    }
+    // カスタムルームのクリーンアップは上記で処理されるため省略
   }
 
   private getCustomRoomsList() {
     return Array.from(this.customRooms.values()).map((r) => ({
       roomId: r.roomId,
       name: r.name,
-      ownerId: r.ownerId,
+      ownerId: r.ownerSocketId
     }));
   }
 
@@ -241,7 +265,7 @@ export class GameGateway
   ) {
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         this.customRooms.delete(rId);
       }
     }
@@ -260,12 +284,18 @@ export class GameGateway
     this.customRooms.set(roomId, {
       roomId,
       name: roomName,
-      ownerId: (client.data?.userId as string) || client.id,
-      ownerSocket: client,
+      ownerSocketId: client.id,
+      players: [{ socket: client, userId: (client.data?.userId as string) || null, wins: 0 }],
+      isPlaying: false
     });
 
     client.join(roomId);
-    client.emit('custom_room_created', { roomId, name: roomName });
+    this.clientRoom.set(client.id, roomId);
+    client.emit('custom_room_created', { 
+      roomId, 
+      name: roomName,
+      players: [{ socketId: client.id, userId: (client.data?.userId as string) || null, wins: 0 }] 
+    });
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
 
@@ -289,7 +319,7 @@ export class GameGateway
     let targetRoom: any = null;
 
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         oldRoomId = rId;
         targetRoom = room;
         break;
@@ -326,31 +356,16 @@ export class GameGateway
   handleRequestCustomRoomState(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (activeRoom) {
-      const isOwner = activeRoom.ownerSocket.id === client.id;
+    const room = this.customRooms.get(roomId);
+    if (room) {
       client.emit('custom_room_state', {
         inRoom: true,
-        roomId: activeRoom.roomId,
-        name: activeRoom.name,
-        isOwner,
-        opponentJoined: true,
-        ownerWins: activeRoom.ownerWins,
-        guestWins: activeRoom.guestWins,
+        roomId: room.roomId,
+        name: room.name,
+        isOwner: room.ownerSocketId === client.id,
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+        isPlaying: room.isPlaying
       });
-    } else {
-      const room = this.customRooms.get(roomId);
-      if (room && room.ownerSocket.id === client.id) {
-        client.emit('custom_room_state', {
-          inRoom: true,
-          roomId: room.roomId,
-          name: room.name,
-          isOwner: true,
-          opponentJoined: false,
-          ownerWins: 0,
-          guestWins: 0,
-        });
-      }
     }
   }
 
@@ -364,37 +379,29 @@ export class GameGateway
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-
-    if (room.ownerSocket.id === client.id) {
-      client.emit('error', { message: '自分のルームには参加できません' });
+    if (room.isPlaying) {
+      client.emit('error', { message: 'すでにゲームが進行中です' });
+      return;
+    }
+    if (room.players.find(p => p.socket.id === client.id)) {
+      client.emit('error', { message: 'すでにルームに参加しています' });
       return;
     }
 
-    // マッチ成立（まだゲームは開始しない、activeCustomRooms に移動）
-    const opponent = room.ownerSocket;
-    const activeRoom = {
-      roomId: room.roomId,
-      name: room.name,
-      ownerSocket: opponent,
-      ownerId: (opponent.data?.userId as string) ?? null,
-      guestSocket: client,
-      guestId: (client.data?.userId as string) ?? null,
-      ownerWins: 0,
-      guestWins: 0,
-    };
-    this.activeCustomRooms.set(room.roomId, activeRoom);
+    room.players.push({
+      socket: client,
+      userId: (client.data?.userId as string) ?? null,
+      wins: 0
+    });
 
     client.join(room.roomId);
-    this.clientRoom.set(opponent.id, room.roomId);
     this.clientRoom.set(client.id, room.roomId);
-
-    this.customRooms.delete(room.roomId); // 募集終了
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
 
-    // 部屋にいる全員に相手が参加したことと、現在のスコアを通知
-    this.server.to(room.roomId).emit('custom_room_opponent_joined', {
-      ownerWins: activeRoom.ownerWins,
-      guestWins: activeRoom.guestWins,
+    room.players.forEach(p => {
+      p.socket.emit('custom_room_players_updated', {
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins }))
+      });
     });
   }
 
@@ -402,40 +409,47 @@ export class GameGateway
   handleStartCustomRoom(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (!activeRoom) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || room.players.length < 2) return;
 
     if (this.rooms.has(roomId)) {
       client.emit('error', { message: 'Game already running' });
       return;
     }
 
+    room.isPlaying = true;
     const seed = Math.floor(Math.random() * 2147483647);
-
+    
     const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
-      const room = this.activeCustomRooms.get(rId);
-      if (room) {
-        if (winnerId === room.ownerSocket.id) room.ownerWins++;
-        else if (winnerId === room.guestSocket.id) room.guestWins++;
-
+      const r = this.customRooms.get(rId);
+      if (r) {
+        if (winnerId) {
+          const winner = r.players.find(p => p.socket.id === winnerId);
+          if (winner) winner.wins++;
+        }
         this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
-
-        // ゲーム終了後、結果を保存してルーム状態に戻す
+        r.isPlaying = false;
         this.rooms.delete(rId);
-
-        // クライアントへロビーに戻るように通知
-        this.server.to(rId).emit('custom_room_returned', {
-          ownerWins: room.ownerWins,
-          guestWins: room.guestWins,
+        
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+        r.players.forEach(p => {
+          p.socket.emit('custom_room_state', {
+            inRoom: true,
+            roomId: r.roomId,
+            name: r.name,
+            isOwner: r.ownerSocketId === p.socket.id,
+            players: r.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+            isPlaying: false
+          });
         });
       }
     };
 
     const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
-    instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
-    instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
-
+    room.players.forEach(p => {
+      instance.addPlayer(p.socket.id, p.userId);
+    });
+    
     this.rooms.set(roomId, instance);
 
     this.server.to(roomId).emit(ServerEvent.MATCH_FOUND, {
@@ -443,7 +457,7 @@ export class GameGateway
       seed,
     });
 
-    setTimeout(() => instance.start(), 3000); // 3秒後にスタート
+    setTimeout(() => instance.start(), 3000);
   }
 
   // ── AI 対戦開始 ───────────────────────────────────────────
@@ -660,33 +674,47 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_board_update', data);
+    client.to(roomId).emit('opponent_board_update', { ...data, playerId: client.id });
+    
+    // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.updatePlayerBoard(client.id, data.stage, data.score);
+    }
   }
 
   @SubscribeMessage('send_garbage')
   handleSendGarbage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { lines: number },
+    @MessageBody() data: { lines: number; generated?: number },
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('receive_garbage', data);
-
+    
+    // カスタムルームでGameInstanceが動いている場合はそちらに任せる
     const room = this.rooms.get(roomId);
-    if (room && room.isAiMatch) {
-      room.receiveGarbageFromClient(client.id, data.lines);
+    if (room) {
+      room.receiveGarbageFromClient(client.id, data.lines, data.generated);
+      return;
     }
+
+    // fallback (1v1 P2P mode)
+    client.to(roomId).emit('receive_garbage', data);
   }
 
   @SubscribeMessage('game_over')
   handleGameOverEvent(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_game_over');
-
-    const room = this.rooms.get(roomId);
-    if (room && room.isAiMatch) {
-      room.handleClientGameOver(client.id);
+    
+    // Trigger the server-side game over logic to clean up the room
+    const instance = this.rooms.get(roomId);
+    if (instance) {
+      if (instance.isAiMatch) {
+        instance.handleClientGameOver(client.id);
+      } else {
+        instance.handleGameOver(client.id);
+      }
     }
   }
 
@@ -707,6 +735,17 @@ export class GameGateway
   }
 
   // ── チャット ──────────────────────────────────────────────
+  @SubscribeMessage('chat:join')
+  handleJoinChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    if (data.roomId) {
+      client.join(data.roomId);
+      this.logger.log(`Client ${client.id} joined chat room ${data.roomId}`);
+    }
+  }
+
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
   async handleChatMessage(
     @ConnectedSocket() client: Socket,

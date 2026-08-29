@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useConfig } from '../hooks/useConfig';
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
 import { getAvatarPreset } from "@/lib/avatarPresets";
+import { io } from "socket.io-client";
 import '../pages/Dashboard.css'
 
 export default function Friends() {
@@ -15,6 +16,41 @@ export default function Friends() {
 	const [search, setSearch] = useState("");
 	const [addFriendInput, setAddFriendInput] = useState("");
 	const [currentUser, setCurrentUser] = useState<any>(null);
+	const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+	const [showSuggest, setShowSuggest] = useState(false);
+
+	useEffect(() => {
+		const token = localStorage.getItem('token');
+		if (!token) return;
+		const socket = io('/', { forceNew: true, auth: { token } });
+		socket.on('user_status_changed', () => {
+			fetchFriends();
+		});
+		return () => {
+			socket.disconnect();
+		};
+	}, []);
+
+	useEffect(() => {
+		const searchInput = addFriendInput.trim();
+		if (searchInput.length === 0) {
+			setSuggestedUsers([]);
+			return;
+		}
+		const timeoutId = setTimeout(async () => {
+			try {
+				const token = localStorage.getItem('token');
+				const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchInput)}`, {
+					headers: { Authorization: `Bearer ${token}` }
+				});
+				if (res.ok) {
+					const data = await res.json();
+					setSuggestedUsers(data.data || []);
+				}
+			} catch (e) {}
+		}, 300);
+		return () => clearTimeout(timeoutId);
+	}, [addFriendInput]);
 
 	const fetchFriends = async () => {
 		try {
@@ -142,9 +178,15 @@ export default function Friends() {
 		.filter(f => f.status === 'ACCEPTED')
 		.map(f => f.requesterId === currentUserId ? { ...f.addressee, friendshipId: f.id } : { ...f.requester, friendshipId: f.id });
 
-	const pendingRequests = friendships
+	const incomingRequests = friendships
 		.filter(f => f.status === 'PENDING' && f.addresseeId === currentUserId)
-		.map(f => ({ ...f.requester, friendshipId: f.id }));
+		.map(f => ({ ...f.requester, friendshipId: f.id, type: 'incoming' }));
+
+	const outgoingRequests = friendships
+		.filter(f => f.status === 'PENDING' && f.requesterId === currentUserId)
+		.map(f => ({ ...f.addressee, friendshipId: f.id, type: 'outgoing' }));
+
+	const pendingRequests = [...incomingRequests, ...outgoingRequests];
 
 	const keyword = search.trim().toLowerCase();
 	const filteredFriends = keyword
@@ -197,6 +239,24 @@ export default function Friends() {
 												<span style={{ fontSize: '10px', color: f.isOnline ? '#4caf50' : '#888' }}>{f.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
 											</div>
 											<button 
+												onClick={async () => {
+													try {
+														const token = localStorage.getItem('token');
+														const res = await fetch('/api/chat/rooms/direct', {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+															body: JSON.stringify({ targetUserId: f.id })
+														});
+														if (res.ok) {
+															const room = await res.json();
+															navigate(`/chat?room=${room.id}${mode ? '&mode='+mode : ''}`);
+														}
+													} catch(e) {}
+												}}
+												style={{ padding: '5px 10px', backgroundColor: '#3498db', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>
+												CHAT
+											</button>
+											<button 
 												onClick={() => handleRemoveFriend(f.id)}
 												style={{ padding: '5px 10px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>
 												REMOVE
@@ -212,27 +272,59 @@ export default function Friends() {
 						
 						<div className="arcade-panel" style={{ display: 'flex', flexDirection: 'column', gap: '15px', minWidth: 0 }}>
 							<div style={{ fontSize: '14px', color: '#3498db', borderBottom: '4px solid #444', paddingBottom: '10px' }}>ADD FRIEND</div>
-							<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-								<input
-									type="text"
-									value={addFriendInput}
-									onChange={(e) => setAddFriendInput(e.target.value)}
-									placeholder="@USERNAME"
-									style={{ 
-										flex: '1 1 150px', padding: '10px', backgroundColor: '#000', color: '#fff',
-										border: '2px solid #333', fontSize: '12px', fontFamily: "'Press Start 2P', monospace", minWidth: 0
-									}}
-								/>
-								<button 
-									onClick={handleAddFriend}
-									style={{ 
-										flex: '1 1 auto',
-										padding: '10px 15px', backgroundColor: '#3498db', color: '#fff',
-										border: '2px solid #fff', fontSize: '12px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace"
-									}}
-								>
-									ADD
-								</button>
+							<div style={{ position: 'relative' }}>
+								<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+									<input
+										type="text"
+										value={addFriendInput}
+										onChange={(e) => {
+											setAddFriendInput(e.target.value);
+											setShowSuggest(true);
+										}}
+										onFocus={() => setShowSuggest(true)}
+										onBlur={() => setTimeout(() => setShowSuggest(false), 200)}
+										placeholder="@USERNAME"
+										style={{ 
+											flex: '1 1 150px', padding: '10px', backgroundColor: '#000', color: '#fff',
+											border: '2px solid #333', fontSize: '12px', fontFamily: "'Press Start 2P', monospace", minWidth: 0
+										}}
+									/>
+									<button 
+										onClick={handleAddFriend}
+										style={{ 
+											flex: '1 1 auto',
+											padding: '10px 15px', backgroundColor: '#3498db', color: '#fff',
+											border: '2px solid #fff', fontSize: '12px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace"
+										}}
+									>
+										ADD
+									</button>
+								</div>
+								{showSuggest && suggestedUsers.length > 0 && (
+									<div style={{
+										position: 'absolute', top: '100%', left: 0, right: 0, 
+										backgroundColor: '#222', border: '2px solid #444', 
+										zIndex: 10, display: 'flex', flexDirection: 'column',
+										maxHeight: '150px', overflowY: 'auto'
+									}}>
+										{suggestedUsers.map(u => (
+											<div 
+												key={u.id}
+												onClick={() => {
+													setAddFriendInput(u.username);
+													setShowSuggest(false);
+												}}
+												style={{
+													padding: '10px', cursor: 'pointer', fontSize: '10px',
+													borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: '10px'
+												}}
+											>
+												<span style={{color: '#3498db'}}>@{u.username}</span> 
+												<span style={{color: '#888'}}>{u.displayName}</span>
+											</div>
+										))}
+									</div>
+								)}
 							</div>
 						</div>
 
@@ -246,8 +338,14 @@ export default function Friends() {
 											<span style={{ fontSize: '12px', wordBreak: 'break-all' }}>@{r.username}</span>
 										</div>
 										<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-											<button onClick={() => handleAccept(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>ACCEPT</button>
-											<button onClick={() => handleDecline(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>DECLINE</button>
+											{r.type === 'incoming' ? (
+												<>
+													<button onClick={() => handleAccept(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>ACCEPT</button>
+													<button onClick={() => handleDecline(r.friendshipId)} style={{ flex: 1, padding: '8px', backgroundColor: '#e74c3c', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>DECLINE</button>
+												</>
+											) : (
+												<button onClick={() => handleRemoveFriend(r.id)} style={{ flex: 1, padding: '8px', backgroundColor: '#555', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>CANCEL REQUEST</button>
+											)}
 										</div>
 									</div>
 								))}

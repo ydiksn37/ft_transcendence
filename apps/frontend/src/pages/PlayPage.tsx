@@ -53,6 +53,9 @@ const PlayPage = () => {
     connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
+    opponentNextPieceKeys, setOpponentNextPieceKeys,
+    opponentHoldMino, setOpponentHoldMino,
+    opponents, setOpponents,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -105,8 +108,7 @@ const PlayPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuning, setListeningAction } = useConfig();
-  const tuningRef = useRef(tuning);
+  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
@@ -245,33 +247,34 @@ const PlayPage = () => {
     }
      
      // Garbage Lines Logic
+     let generatedGarbage = 0;
+     if (tSpinType === 't-spin') {
+       if (lines === 1) generatedGarbage = 2;
+       else if (lines === 2) generatedGarbage = 4;
+       else if (lines === 3) generatedGarbage = 6;
+     } else if (tSpinType === 'mini-t-spin') {
+       if (lines === 1) generatedGarbage = 1;
+       else if (lines === 2) generatedGarbage = 1;
+     } else {
+       if (lines === 2) generatedGarbage = 1;
+       else if (lines === 3) generatedGarbage = 2;
+       else if (lines === 4) generatedGarbage = 4;
+     }
+
+     if (isB2B && lines > 0) generatedGarbage += 1;
+     if (perfectClear) generatedGarbage += 10;
+     
+     if (comboRef.current > 0) {
+        generatedGarbage += Math.floor((comboRef.current + 1) / 2);
+     }
+
+     if (generatedGarbage > 0) {
+        setAttackLines(prev => prev + generatedGarbage);
+     }
+
      if (gameModeRef.current === 'ONLINE_1V1') {
-        let generatedGarbage = 0;
-        if (tSpinType === 't-spin') {
-          if (lines === 1) generatedGarbage = 2;
-          else if (lines === 2) generatedGarbage = 4;
-          else if (lines === 3) generatedGarbage = 6;
-        } else if (tSpinType === 'mini-t-spin') {
-          if (lines === 1) generatedGarbage = 1;
-          else if (lines === 2) generatedGarbage = 1;
-        } else {
-          if (lines === 2) generatedGarbage = 1;
-          else if (lines === 3) generatedGarbage = 2;
-          else if (lines === 4) generatedGarbage = 4;
-        }
-
-        if (isB2B && lines > 0) generatedGarbage += 1;
-        if (perfectClear) generatedGarbage += 10;
-        
-        if (comboRef.current > 0) {
-           generatedGarbage += Math.floor((comboRef.current + 1) / 2);
-        }
-
-        if (generatedGarbage > 0) {
-           setAttackLines(prev => prev + generatedGarbage);
-        }
-
         let remainingAttacks = [...pendingGarbageRef.current];
+        const originalGeneratedGarbage = generatedGarbage;
         
         if (generatedGarbage > 0) {
            while (remainingAttacks.length > 0 && generatedGarbage > 0) {
@@ -283,10 +286,11 @@ const PlayPage = () => {
                  generatedGarbage = 0;
               }
            }
-           if (generatedGarbage > 0 && socketRef.current) {
-              socketRef.current.emit('send_garbage', { lines: generatedGarbage });
-           }
         }
+        if (originalGeneratedGarbage > 0 && socketRef.current) {
+           socketRef.current.emit('send_garbage', { lines: generatedGarbage, generated: originalGeneratedGarbage });
+        }
+
 
         if (lines === 0 && remainingAttacks.length > 0) {
            const linesToAdd = remainingAttacks.reduce((a, b) => a + b, 0);
@@ -589,6 +593,8 @@ const PlayPage = () => {
     resetHold();
     setGameOver(false);
     setMatchResult(null);
+    setOpponentStage(null);
+    setOpponentScore(0);
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
     setScore(0);
@@ -645,10 +651,18 @@ const PlayPage = () => {
   const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
-    setOpponentStage, setOpponentScore,
+    stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
+
+  const quitGame = useCallback(() => {
+    if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+      setAppState('CUSTOM_ROOMS');
+    } else {
+      navigate(`/lobby/${mode}`);
+    }
+  }, [mode, navigate, setAppState]);
 
   initializeRouteRef.current = () => {
     if (!mode) return;
@@ -673,18 +687,13 @@ const PlayPage = () => {
     };
   }, [mode, location.search, socketRef]);
 
+
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
-      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-        setAppState('CUSTOM_ROOMS');
-      } else {
-        navigate(`/lobby/${mode}`);
-      }
-    }
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
   useTouchControls({
@@ -729,6 +738,9 @@ const PlayPage = () => {
       matchResult={matchResult}
       opponentStage={opponentStage}
       opponentScore={opponentScore}
+      opponentNextPieceKeys={opponentNextPieceKeys}
+      opponentHoldMino={opponentHoldMino}
+      opponents={opponents}
       pendingGarbage={pendingGarbage}
       actionText={actionText}
       countdown={countdown}
@@ -745,7 +757,10 @@ const PlayPage = () => {
       appState={appState}
       restartGame={() => startGame()}
       joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty, aiActionDelayMs) : joinOnline}
+      isCustomRoom={mode === 'CUSTOM_ROOMS'}
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
+      onQuit={quitGame}
+
       onHold={() => playerHold(stage[0].length, stage)}
     />
   );

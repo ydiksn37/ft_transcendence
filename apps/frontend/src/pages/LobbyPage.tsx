@@ -119,6 +119,8 @@ export default function LobbyPage() {
   }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, token, user]);
 
   const [records, setRecords] = useState<any[]>([]);
+  const [myRecords, setMyRecords] = useState<any[]>([]);
+  const [recordTab, setRecordTab] = useState<'MY' | 'GLOBAL'>('MY');
 
   useEffect(() => {
     if (mode === '40_LINES') {
@@ -129,13 +131,22 @@ export default function LobbyPage() {
             const data = await res.json();
             setRecords(data);
           }
+          if (token) {
+            const resMe = await fetch(`/api/sprint/me`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (resMe.ok) {
+              const dataMe = await resMe.json();
+              setMyRecords(dataMe);
+            }
+          }
         } catch (e) {
-          console.error('Failed to fetch leaderboard', e);
+          console.error('Failed to fetch leaderboard or my records', e);
         }
       };
       fetchLeaderboard();
     }
-  }, [mode]);
+  }, [mode, token]);
 
   const getModeLabel = () => {
     switch (mode) {
@@ -202,7 +213,7 @@ export default function LobbyPage() {
               onMouseEnter={() => setSelectedIndex(1)}
               style={selectedIndex === 1 ? { backgroundColor: '#555' } : {}}
             >
-              {selectedIndex === 1 ? '▶ Register / Login' : 'Register / Login'}
+              {selectedIndex === 1 && !isMobile ? '▶ Register / Login' : 'Register / Login'}
             </button>
           )
         )}
@@ -216,47 +227,57 @@ export default function LobbyPage() {
         {mode === 'MARATHON' && (() => {
           const index = startLevel === 1 ? 0 : startLevel / 5;
           const blocksCount = 4 + index;
+          const blockSize = isMobile ? 12 : 20;
+          const trackWidth = blockSize * 24;
           return (
             <div style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '16px', color: '#ccc' }}>STARTING LEVEL</span>
               
-              <div className="marathon-slider-wrapper" style={{ position: 'relative', width: '480px', height: '20px', marginTop: '5px' }}>
+              <div 
+                className="marathon-slider-wrapper" 
+                style={{ position: 'relative', width: `${trackWidth}px`, height: `${blockSize}px`, marginTop: '5px', touchAction: 'none', cursor: 'pointer' }}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  let newIndex = Math.round((x / trackWidth) * 20);
+                  if (newIndex < 0) newIndex = 0;
+                  if (newIndex > 20) newIndex = 20;
+                  setStartLevel(newIndex === 0 ? 1 : newIndex * 5);
+                }}
+                onPointerMove={(e) => {
+                  if (e.buttons > 0) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    let newIndex = Math.round((x / trackWidth) * 20);
+                    if (newIndex < 0) newIndex = 0;
+                    if (newIndex > 20) newIndex = 20;
+                    setStartLevel(newIndex === 0 ? 1 : newIndex * 5);
+                  }
+                }}
+                onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
+              >
                 {/* The empty background track */}
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '480px', height: '20px', backgroundColor: '#111', border: '2px solid #333', boxSizing: 'border-box' }} />
+                <div style={{ position: 'absolute', top: 0, left: 0, width: `${trackWidth}px`, height: `${blockSize}px`, backgroundColor: '#111', border: '2px solid #333', boxSizing: 'border-box', pointerEvents: 'none' }} />
                 
                 {/* The stretching I-tetromino made of individual blocks */}
-                <div style={{ display: 'flex', position: 'absolute', top: 0, left: 0, height: '20px', pointerEvents: 'none' }}>
+                <div style={{ display: 'flex', position: 'absolute', top: 0, left: 0, height: `${blockSize}px`, pointerEvents: 'none' }}>
                   {Array.from({ length: blocksCount }).map((_, i) => (
                     <div 
                       key={i} 
                       style={{ 
-                        width: '20px', 
-                        height: '20px', 
+                        width: `${blockSize}px`, 
+                        height: `${blockSize}px`, 
                         backgroundColor: '#00FFFF', // Cyan color like in-game
-                        borderTop: '3px solid rgba(255, 255, 255, 0.4)',
-                        borderLeft: '3px solid rgba(255, 255, 255, 0.4)',
-                        borderBottom: '3px solid rgba(0, 0, 0, 0.4)',
-                        borderRight: '3px solid rgba(0, 0, 0, 0.4)',
+                        borderTop: `${isMobile ? '2px' : '3px'} solid rgba(255, 255, 255, 0.4)`,
+                        borderLeft: `${isMobile ? '2px' : '3px'} solid rgba(255, 255, 255, 0.4)`,
+                        borderBottom: `${isMobile ? '2px' : '3px'} solid rgba(0, 0, 0, 0.4)`,
+                        borderRight: `${isMobile ? '2px' : '3px'} solid rgba(0, 0, 0, 0.4)`,
                         boxSizing: 'border-box' 
                       }} 
                     />
                   ))}
                 </div>
-
-                {/* Hidden actual range input for mouse interaction */}
-                <input 
-                  type="range"
-                  min="0" max="20"
-                  value={index}
-                  onChange={e => {
-                    const idx = Number(e.target.value);
-                    setStartLevel(idx === 0 ? 1 : idx * 5);
-                  }}
-                  style={{
-                    position: 'absolute', top: 0, left: 0, width: '480px', height: '20px',
-                    opacity: 0, cursor: 'pointer', margin: 0
-                  }}
-                />
               </div>
               
               <div style={{ fontSize: '24px', color: '#fff', textShadow: '2px 2px 0 #00FFFF', marginTop: '15px' }}>
@@ -365,8 +386,55 @@ export default function LobbyPage() {
           )}
           
           {mode === '40_LINES' && token && user && (
-            <div className="panel records-panel">
-              <Records records={records} />
+            <div className="panel records-panel" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, justifyContent: 'flex-start', overflow: 'hidden' }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                justifyContent: 'center', 
+                padding: '15px', 
+                backgroundColor: 'rgba(0,0,0,0.5)', 
+                borderBottom: '2px solid #444',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
+              }}>
+                <button 
+                  onClick={() => setRecordTab('MY')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'MY' ? '#ff9800' : '#222',
+                    border: recordTab === 'MY' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  MY RECORDS
+                </button>
+                <button 
+                  onClick={() => setRecordTab('GLOBAL')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'GLOBAL' ? '#ff9800' : '#222',
+                    border: recordTab === 'GLOBAL' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  GLOBAL
+                </button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', width: '100%', boxSizing: 'border-box' }}>
+                <Records 
+                  records={recordTab === 'MY' ? myRecords : records} 
+                  title={recordTab === 'MY' ? "MY TOP 10" : "GLOBAL TOP 10"} 
+                />
+              </div>
             </div>
           )}
         </div>
