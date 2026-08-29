@@ -16,6 +16,13 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
   useEffect(() => {
     soundManager.setVolumes(volume.se, volume.bgm);
   }, [volume]);
+  const [isMobile, setIsMobile] = React.useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
       <h1 style={{ fontSize: '24px' }}>Configuration</h1>
@@ -36,10 +43,6 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
           <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>Touch Flick</label>
-          <input type="checkbox" checked={tuning.touchFlick ?? true} onChange={e => setTuning(p => ({...p, touchFlick: e.target.checked}))} style={{ width: '24px', height: '24px', cursor: 'pointer' }} />
         </div>
       </div>
 
@@ -71,36 +74,45 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
         </div>
       </div>
 
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
-        <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
-        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Object.entries(keyConfig).map(([action, code]) => (
-            <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
-              <button
-                onClick={() => {
-                  setListeningAction(action);
-                  window.focus();
-                }}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: listeningAction === action ? '#ff4444' : '#555',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  minWidth: '60px'
-                }}
-              >
-                {listeningAction === action ? 'Press key...' : code.replace(/^Key/, '').replace(/(Left|Right|Up|Down)$/, (match, p1) => {
-                  if (code.startsWith('Arrow')) return p1;
-                  return match;
-                }).replace(/^Arrow/, '')}
-              </button>
-            </div>
-          ))}
+      {!isMobile && (
+        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
+          <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[
+              'left', 'right', 'softDrop', 'hardDrop',
+              'rotateCW', 'rotateCCW', 'rotate180',
+              'hold', 'restart', 'quitToMenu'
+            ].map((action) => {
+              const code = keyConfig[action] || '';
+              return (
+              <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
+                <button
+                  onClick={() => {
+                    setListeningAction(action);
+                    window.focus();
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: listeningAction === action ? '#ff4444' : '#555',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    minWidth: '60px'
+                  }}
+                >
+                  {listeningAction === action ? 'Press key...' : code.replace(/^Key/, '').replace(/(Left|Right|Up|Down)$/, (match, p1) => {
+                    if (code.startsWith('Arrow')) return p1;
+                    return match;
+                  }).replace(/^Arrow/, '')}
+                </button>
+              </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   );

@@ -10,15 +10,22 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
+import { resolve } from 'node:path';
+import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
   ServerEvent,
   AiDifficulty,
   Cell,
 } from '@transcendence/shared';
+import type {
+  AiAgentModel,
+  AiPreviewStartRequest,
+} from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
+import { AiAgentService } from './engine/ai-agent.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -36,33 +43,23 @@ export class GameGateway
   private matchmakingQueue: Socket[] = [];
 
   // Custom Rooms
-  private customRooms = new Map<
-    string,
-    {
-      roomId: string;
-      name: string;
-      ownerId: string;
-      ownerSocket: Socket;
-    }
-  >();
-
-  private activeCustomRooms = new Map<
-    string,
-    {
-      roomId: string;
-      name: string;
-      ownerSocket: Socket;
-      ownerId: string;
-      guestSocket: Socket;
-      guestId: string;
-      ownerWins: number;
-      guestWins: number;
-    }
-  >();
+  private customRooms = new Map<string, {
+    roomId: string;
+    name: string;
+    ownerSocketId: string;
+    players: {
+      socket: Socket;
+      userId: string | null;
+      wins: number;
+    }[];
+    isPlaying: boolean;
+  }>();
 
   constructor(
     private readonly gameService: GameService,
     private readonly chatService: ChatService,
+    private readonly aiAgentService: AiAgentService,
+    private readonly jwtService: JwtService,
   ) {}
 
   afterInit() {
@@ -70,6 +67,15 @@ export class GameGateway
   }
 
   handleConnection(client: Socket) {
+    const token = client.handshake.auth?.token;
+    if (typeof token === 'string' && token.length > 0) {
+      try {
+        const payload = this.jwtService.verify<{ sub: string }>(token);
+        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+      } catch {
+        this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
+      }
+    }
     this.logger.log(`接続: ${client.id}`);
   }
 
@@ -90,24 +96,40 @@ export class GameGateway
         room.stop();
         this.rooms.delete(roomId);
       }
-      this.activeCustomRooms.delete(roomId);
+      
+      const activeRoom = this.customRooms.get(roomId);
+      if (activeRoom) {
+        activeRoom.players = activeRoom.players.filter(p => p.socket.id !== client.id);
+        if (activeRoom.players.length === 0) {
+          this.customRooms.delete(roomId);
+        } else {
+          if (activeRoom.ownerSocketId === client.id) {
+            activeRoom.ownerSocketId = activeRoom.players[0].socket.id;
+          }
+          activeRoom.players.forEach(p => {
+            p.socket.emit('custom_room_state', {
+              inRoom: true,
+              roomId: activeRoom.roomId,
+              name: activeRoom.name,
+              isOwner: activeRoom.ownerSocketId === p.socket.id,
+              players: activeRoom.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+              isPlaying: activeRoom.isPlaying
+            });
+          });
+        }
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      }
       this.clientRoom.delete(client.id);
     }
 
-    // カスタムルームのオーナーだった場合ルーム削除
-    for (const [cRoomId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
-        this.customRooms.delete(cRoomId);
-        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
-      }
-    }
+    // カスタムルームのクリーンアップは上記で処理されるため省略
   }
 
   private getCustomRoomsList() {
     return Array.from(this.customRooms.values()).map((r) => ({
       roomId: r.roomId,
       name: r.name,
-      ownerId: r.ownerId,
+      ownerId: r.ownerSocketId
     }));
   }
 
@@ -176,7 +198,7 @@ export class GameGateway
         this.rooms.delete(rId);
       };
 
-      const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+      const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
       // ユーザーIDはJWTから取得（実装簡略化のため socket.data を利用）
       const userId1 = (client.data?.userId as string) ?? null;
@@ -222,7 +244,7 @@ export class GameGateway
   ) {
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         this.customRooms.delete(rId);
       }
     }
@@ -241,12 +263,18 @@ export class GameGateway
     this.customRooms.set(roomId, {
       roomId,
       name: roomName,
-      ownerId: (client.data?.userId as string) || client.id,
-      ownerSocket: client,
+      ownerSocketId: client.id,
+      players: [{ socket: client, userId: (client.data?.userId as string) || null, wins: 0 }],
+      isPlaying: false
     });
 
     client.join(roomId);
-    client.emit('custom_room_created', { roomId, name: roomName });
+    this.clientRoom.set(client.id, roomId);
+    client.emit('custom_room_created', { 
+      roomId, 
+      name: roomName,
+      players: [{ socketId: client.id, userId: (client.data?.userId as string) || null, wins: 0 }] 
+    });
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
 
@@ -270,7 +298,7 @@ export class GameGateway
     let targetRoom: any = null;
 
     for (const [rId, room] of this.customRooms.entries()) {
-      if (room.ownerSocket.id === client.id) {
+      if (room.ownerSocketId === client.id) {
         oldRoomId = rId;
         targetRoom = room;
         break;
@@ -307,31 +335,16 @@ export class GameGateway
   handleRequestCustomRoomState(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (activeRoom) {
-      const isOwner = activeRoom.ownerSocket.id === client.id;
+    const room = this.customRooms.get(roomId);
+    if (room) {
       client.emit('custom_room_state', {
         inRoom: true,
-        roomId: activeRoom.roomId,
-        name: activeRoom.name,
-        isOwner,
-        opponentJoined: true,
-        ownerWins: activeRoom.ownerWins,
-        guestWins: activeRoom.guestWins,
+        roomId: room.roomId,
+        name: room.name,
+        isOwner: room.ownerSocketId === client.id,
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+        isPlaying: room.isPlaying
       });
-    } else {
-      const room = this.customRooms.get(roomId);
-      if (room && room.ownerSocket.id === client.id) {
-        client.emit('custom_room_state', {
-          inRoom: true,
-          roomId: room.roomId,
-          name: room.name,
-          isOwner: true,
-          opponentJoined: false,
-          ownerWins: 0,
-          guestWins: 0,
-        });
-      }
     }
   }
 
@@ -345,37 +358,29 @@ export class GameGateway
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-
-    if (room.ownerSocket.id === client.id) {
-      client.emit('error', { message: '自分のルームには参加できません' });
+    if (room.isPlaying) {
+      client.emit('error', { message: 'すでにゲームが進行中です' });
+      return;
+    }
+    if (room.players.find(p => p.socket.id === client.id)) {
+      client.emit('error', { message: 'すでにルームに参加しています' });
       return;
     }
 
-    // マッチ成立（まだゲームは開始しない、activeCustomRooms に移動）
-    const opponent = room.ownerSocket;
-    const activeRoom = {
-      roomId: room.roomId,
-      name: room.name,
-      ownerSocket: opponent,
-      ownerId: (opponent.data?.userId as string) ?? null,
-      guestSocket: client,
-      guestId: (client.data?.userId as string) ?? null,
-      ownerWins: 0,
-      guestWins: 0,
-    };
-    this.activeCustomRooms.set(room.roomId, activeRoom);
+    room.players.push({
+      socket: client,
+      userId: (client.data?.userId as string) ?? null,
+      wins: 0
+    });
 
     client.join(room.roomId);
-    this.clientRoom.set(opponent.id, room.roomId);
     this.clientRoom.set(client.id, room.roomId);
-
-    this.customRooms.delete(room.roomId); // 募集終了
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
 
-    // 部屋にいる全員に相手が参加したことと、現在のスコアを通知
-    this.server.to(room.roomId).emit('custom_room_opponent_joined', {
-      ownerWins: activeRoom.ownerWins,
-      guestWins: activeRoom.guestWins,
+    room.players.forEach(p => {
+      p.socket.emit('custom_room_players_updated', {
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins }))
+      });
     });
   }
 
@@ -383,40 +388,46 @@ export class GameGateway
   handleStartCustomRoom(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-
-    const activeRoom = this.activeCustomRooms.get(roomId);
-    if (!activeRoom) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || room.players.length < 2) return;
 
     if (this.rooms.has(roomId)) {
       client.emit('error', { message: 'Game already running' });
       return;
     }
 
+    room.isPlaying = true;
     const seed = Math.floor(Math.random() * 2147483647);
-
-    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
-      const room = this.activeCustomRooms.get(rId);
-      if (room) {
-        if (winnerId === room.ownerSocket.id) room.ownerWins++;
-        else if (winnerId === room.guestSocket.id) room.guestWins++;
-
-        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
-
-        // ゲーム終了後、結果を保存してルーム状態に戻す
+    
+    const onGameOver = (rId: string, winnerId: string | null) => {
+      const r = this.customRooms.get(rId);
+      if (r) {
+        if (winnerId) {
+          const winner = r.players.find(p => p.socket.id === winnerId);
+          if (winner) winner.wins++;
+        }
+        r.isPlaying = false;
         this.rooms.delete(rId);
-
-        // クライアントへロビーに戻るように通知
-        this.server.to(rId).emit('custom_room_returned', {
-          ownerWins: room.ownerWins,
-          guestWins: room.guestWins,
+        
+        this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+        r.players.forEach(p => {
+          p.socket.emit('custom_room_state', {
+            inRoom: true,
+            roomId: r.roomId,
+            name: r.name,
+            isOwner: r.ownerSocketId === p.socket.id,
+            players: r.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+            isPlaying: false
+          });
         });
       }
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
-    instance.addPlayer(activeRoom.ownerSocket.id, activeRoom.ownerId);
-    instance.addPlayer(activeRoom.guestSocket.id, activeRoom.guestId);
-
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
+    room.players.forEach(p => {
+      instance.addPlayer(p.socket.id, p.userId);
+    });
+    
     this.rooms.set(roomId, instance);
 
     this.server.to(roomId).emit(ServerEvent.MATCH_FOUND, {
@@ -424,15 +435,20 @@ export class GameGateway
       seed,
     });
 
-    setTimeout(() => instance.start(), 3000); // 3秒後にスタート
+    setTimeout(() => instance.start(), 3000);
   }
 
   // ── AI 対戦開始 ───────────────────────────────────────────
   @SubscribeMessage('game:start_vs_ai')
   handleStartVsAi(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { difficulty: AiDifficulty },
+    @MessageBody() data: { difficulty: AiDifficulty; actionDelayMs?: number },
   ) {
+    if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
+      client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
+      return;
+    }
+
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
 
@@ -441,7 +457,7 @@ export class GameGateway
       this.rooms.delete(rId);
     };
 
-    const instance = new GameInstance(roomId, this.server, seed, onGameOver);
+    const instance = new GameInstance(roomId, this.server, seed, onGameOver, this.aiAgentService);
 
     const userId = (client.data?.userId as string) ?? null;
     instance.addPlayer(client.id, userId);
@@ -452,7 +468,121 @@ export class GameGateway
     this.rooms.set(roomId, instance);
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
-    setTimeout(() => instance.start(data.difficulty), 1000);
+    const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
+    setTimeout(() => instance.start(data.difficulty, actionDelayMs), 1000);
+  }
+
+  // ── C++ AI Webプレビュー ──────────────────────────────────
+  @SubscribeMessage(ClientEvent.START_AI_PREVIEW)
+  handleStartAiPreview(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: AiPreviewStartRequest,
+  ) {
+    const allowedModels: AiAgentModel[] = ['easy', 'hard', 'expert'];
+    const mode = data?.mode === 'versus' ? 'versus' : 'solo';
+    const model = allowedModels.includes(data?.model) ? data.model : null;
+    if (!model) {
+      client.emit(ServerEvent.ERROR, {
+        message: 'model must be easy, hard, or expert',
+      });
+      return;
+    }
+    const opponentModel =
+      mode === 'versus' &&
+      allowedModels.includes(data?.opponentModel as AiAgentModel)
+        ? (data.opponentModel as AiAgentModel)
+        : mode === 'versus'
+          ? 'expert'
+          : undefined;
+
+    const previousRoomId = this.clientRoom.get(client.id);
+    if (previousRoomId) {
+      this.rooms.get(previousRoomId)?.stop();
+      this.rooms.delete(previousRoomId);
+      client.leave(previousRoomId);
+    }
+
+    const thinkTimeMs = this.clampInteger(data.thinkTimeMs, 50, 1, 5000);
+    const actionDelayMs = this.clampInteger(data.actionDelayMs, 100, 0, 1000);
+    const seed = this.clampInteger(
+      data.seed,
+      Math.floor(Math.random() * 0x100000000),
+      0,
+      0xffffffff,
+    );
+    const roomId = `ai_preview_${Date.now()}_${client.id}`;
+    const executable =
+      process.env.AI_AGENT_PATH ??
+      resolve(process.cwd(), '../../build/ai-agent/ai_agent');
+
+    const instance = new GameInstance(
+      roomId,
+      this.server,
+      seed,
+      (finishedRoomId) => {
+        this.rooms.delete(finishedRoomId);
+        if (this.clientRoom.get(client.id) === finishedRoomId) {
+          this.clientRoom.delete(client.id);
+        }
+      },
+    );
+    instance.addCppPreviewPlayer(
+      `ai_preview_left_${roomId}`,
+      'left',
+      model,
+    );
+    if (mode === 'versus' && opponentModel) {
+      instance.addCppPreviewPlayer(
+        `ai_preview_right_${roomId}`,
+        'right',
+        opponentModel,
+      );
+    }
+    client.join(roomId);
+    this.clientRoom.set(client.id, roomId);
+    this.rooms.set(roomId, instance);
+    client.emit(ServerEvent.MATCH_FOUND, {
+      roomId,
+      seed,
+      aiPreview: true,
+      mode,
+      model,
+      opponentModel,
+    });
+
+    void instance.startCppPreview({
+      executable,
+      mode,
+      model,
+      opponentModel,
+      thinkTimeMs,
+      responseTimeoutMs: thinkTimeMs * 4 + 500,
+      actionDelayMs,
+    });
+  }
+
+  @SubscribeMessage(ClientEvent.SET_AI_PREVIEW_SPEED)
+  handleSetAiPreviewSpeed(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { actionDelayMs?: number },
+  ) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    this.rooms
+      .get(roomId)
+      ?.setCppPreviewActionDelay(
+        this.clampInteger(data?.actionDelayMs, 100, 0, 1000),
+      );
+  }
+
+  @SubscribeMessage(ClientEvent.STOP_AI_PREVIEW)
+  handleStopAiPreview(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    this.rooms.get(roomId)?.stop();
+    this.rooms.delete(roomId);
+    this.clientRoom.delete(client.id);
+    client.leave(roomId);
   }
 
   // ── ゲーム入力 ────────────────────────────────────────────
@@ -503,6 +633,16 @@ export class GameGateway
     room?.applyInput(socketId, event);
   }
 
+  private clampInteger(
+    value: unknown,
+    fallback: number,
+    minimum: number,
+    maximum: number,
+  ): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+    return Math.max(minimum, Math.min(maximum, Math.trunc(value)));
+  }
+
   // ── P2P 通信 (フロントエンド主導の対戦用) ───────────────────
   @SubscribeMessage('board_update')
   handleBoardUpdate(
@@ -511,7 +651,13 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_board_update', data);
+    client.to(roomId).emit('opponent_board_update', { ...data, playerId: client.id });
+    
+    // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
+    const room = this.rooms.get(roomId);
+    if (room && room.isAiMatch) {
+      room.updatePlayerBoard(client.id, data.stage, data.score);
+    }
   }
 
   @SubscribeMessage('send_garbage')
@@ -521,6 +667,15 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
+    
+    // カスタムルームでGameInstanceが動いている場合はそちらに任せる
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.receiveGarbageFromClient(client.id, data.lines);
+      return;
+    }
+
+    // fallback (1v1 P2P mode)
     client.to(roomId).emit('receive_garbage', data);
   }
 
@@ -528,7 +683,16 @@ export class GameGateway
   handleGameOverEvent(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_game_over');
+    
+    // Trigger the server-side game over logic to clean up the room
+    const instance = this.rooms.get(roomId);
+    if (instance) {
+      if (instance.isAiMatch) {
+        instance.handleClientGameOver(client.id);
+      } else {
+        instance.handleGameOver(client.id);
+      }
+    }
   }
 
   // ── 観戦 ─────────────────────────────────────────────────

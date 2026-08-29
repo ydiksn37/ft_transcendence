@@ -32,17 +32,29 @@ const formatTime = (ms: number) => {
 
 
 const PlayPage = () => {
-  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' }>();
+  const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'VS_AI' }>();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
+  const requestedAiDifficulty = (queryParams.get('difficulty') || 'EASY').toUpperCase();
+  const aiDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedAiDifficulty)
+    ? requestedAiDifficulty
+    : 'EASY';
+  const requestedAiSpeedMs = Number(queryParams.get('aiSpeedMs') ?? 50);
+  const aiActionDelayMs = Number.isFinite(requestedAiSpeedMs)
+    ? Math.max(0, Math.min(1000, Math.trunc(requestedAiSpeedMs)))
+    : 50;
   const {
     appState, setAppState, appStateRef,
     socket, setSocket, socketRef,
     isWaiting, setIsWaiting,
+    connectionError, setConnectionError,
     opponentStage, setOpponentStage,
     opponentScore, setOpponentScore,
+    opponentNextPieceKeys, setOpponentNextPieceKeys,
+    opponentHoldMino, setOpponentHoldMino,
+    opponents, setOpponents,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -95,8 +107,7 @@ const PlayPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuning, setListeningAction } = useConfig();
-  const tuningRef = useRef(tuning);
+  const { keyConfig, setKeyConfig, keyConfigRef, tuning, tuningRef, setListeningAction } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
@@ -107,19 +118,7 @@ const PlayPage = () => {
   const [actionText, setActionText] = useState<string | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
-  const startGameRef = useRef<((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void) | null>(null);
-  const joinOnlineRef = useRef<(() => void) | null>(null);
-  const setupCustomRoomConnectionRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (mode === 'ONLINE_1V1') {
-      joinOnlineRef.current?.();
-    } else if (mode === 'CUSTOM_ROOMS') {
-      setupCustomRoomConnectionRef.current?.();
-    } else if (mode) {
-      startGameRef.current?.(mode);
-    }
-  }, [mode]);
+  const initializeRouteRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!lockEvent || lockEvent.id === lastProcessedEventIdRef.current) return;
@@ -591,6 +590,8 @@ const PlayPage = () => {
     resetHold();
     setGameOver(false);
     setMatchResult(null);
+    setOpponentStage(null);
+    setOpponentScore(0);
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
     setScore(0);
@@ -644,26 +645,52 @@ const PlayPage = () => {
     };
   }, [appState, gameOver, countdown]);
 
-  const { joinOnline, setupCustomRoomConnection } = useMultiplayer({
+  const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
     appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-    stage, score, socket, setSocket, socketRef, isWaiting, setIsWaiting,
-    setOpponentStage, setOpponentScore,
-    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef
+    stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
+    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
+
+  const quitGame = useCallback(() => {
+    if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+      setAppState('CUSTOM_ROOMS');
+    } else {
+      navigate(`/lobby/${mode}`);
+    }
+  }, [mode, navigate, setAppState]);
+
+  initializeRouteRef.current = () => {
+    if (!mode) return;
+    if (mode === 'ONLINE_1V1') {
+      joinOnline();
+    } else if (mode === 'CUSTOM_ROOMS') {
+      setupCustomRoomConnection();
+    } else if (mode === 'VS_AI') {
+      startVsAi(aiDifficulty, aiActionDelayMs);
+    } else {
+      startGame(mode);
+    }
+  };
+
+  useEffect(() => {
+    initializeRouteRef.current?.();
+
+    // StrictModeの setup -> cleanup -> setup でも古い接続を残さない。
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, [mode, location.search, socketRef]);
+
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
     movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-    socketRef, setSocket, setIsWaiting, setDropTime, quitGame: () => {
-      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-        setAppState('CUSTOM_ROOMS');
-      } else {
-        navigate(`/lobby/${mode}`);
-      }
-    }
+    socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
   useTouchControls({
@@ -682,10 +709,6 @@ const PlayPage = () => {
   useInterval(drop, dropTime);
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
-
-  startGameRef.current = startGame;
-  joinOnlineRef.current = joinOnline;
-  setupCustomRoomConnectionRef.current = setupCustomRoomConnection;
 
   if (appState === 'CUSTOM_ROOMS') {
     return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
@@ -708,9 +731,13 @@ const PlayPage = () => {
       nextPieceKeys={nextPieceKeys}
       holdInfo={holdInfo}
       isWaiting={isWaiting}
+      connectionError={connectionError}
       matchResult={matchResult}
       opponentStage={opponentStage}
       opponentScore={opponentScore}
+      opponentNextPieceKeys={opponentNextPieceKeys}
+      opponentHoldMino={opponentHoldMino}
+      opponents={opponents}
       pendingGarbage={pendingGarbage}
       actionText={actionText}
       countdown={countdown}
@@ -726,7 +753,11 @@ const PlayPage = () => {
       createStage={createStage}
       appState={appState}
       restartGame={() => startGame()}
-      joinOnline={joinOnline}
+      joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty, aiActionDelayMs) : joinOnline}
+      isCustomRoom={mode === 'CUSTOM_ROOMS'}
+      onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
+      onQuit={quitGame}
+
       onHold={() => playerHold(stage[0].length, stage)}
     />
   );

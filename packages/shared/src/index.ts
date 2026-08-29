@@ -6,7 +6,7 @@ export type TetrominoType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 /** 盤面のセル: null=空, string=ミノ種別 or ガーベージ */
 export type Cell = TetrominoType | 'GARBAGE' | null;
 
-/** テトリス盤面: 20行×10列 */
+/** テトリス盤面: バッファ20行 + 表示20行の40行×10列 */
 export type Board = Cell[][];
 
 /** アクティブなミノの状態 */
@@ -79,6 +79,9 @@ export const ClientEvent = {
   SOFT_DROP:   'game:soft_drop',
   HARD_DROP:   'game:hard_drop',
   HOLD:        'game:hold',
+  START_AI_PREVIEW: 'ai:preview_start',
+  STOP_AI_PREVIEW: 'ai:preview_stop',
+  SET_AI_PREVIEW_SPEED: 'ai:preview_speed',
   // マッチメイキング
   JOIN_QUEUE:    'match:join_queue',
   LEAVE_QUEUE:   'match:leave_queue',
@@ -104,6 +107,8 @@ export const ServerEvent = {
   GAME_OVER:         'game:over',
   GAME_START:        'game:start',
   GARBAGE_INCOMING:  'game:garbage',    // おじゃまライン予告
+  AI_PREVIEW_STATUS: 'ai:preview_status',
+  AI_PREVIEW_STATE:  'ai:preview_state',
   // マッチ
   MATCH_FOUND:       'match:found',
   ROOM_READY:        'room:ready',
@@ -121,6 +126,37 @@ export const ServerEvent = {
 } as const;
 
 export type ServerEventType = typeof ServerEvent[keyof typeof ServerEvent];
+
+export type AiAgentModel = 'easy' | 'hard' | 'expert';
+export type AiPreviewMode = 'solo' | 'versus';
+export type AiPreviewSide = 'left' | 'right';
+
+export interface AiPreviewStartRequest {
+  mode?: AiPreviewMode;
+  model: AiAgentModel;
+  opponentModel?: AiAgentModel;
+  thinkTimeMs?: number;
+  actionDelayMs?: number;
+  seed?: number;
+}
+
+export interface AiPreviewStatus {
+  phase: 'starting' | 'thinking' | 'executing' | 'stopped' | 'error';
+  model: AiAgentModel;
+  mode?: AiPreviewMode;
+  side?: AiPreviewSide;
+  actionDelayMs: number;
+  completedDepth?: number;
+  nodesVisited?: number;
+  decisionMs?: number;
+  message?: string;
+}
+
+export interface AiPreviewPlayerState {
+  side: AiPreviewSide;
+  model: AiAgentModel;
+  state: GameState;
+}
 
 // ───────────────────────────────────────────────
 //  API 共通レスポンス型
@@ -273,7 +309,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
 // ───────────────────────────────────────────────
 export const TETROMINO_SHAPES: Record<TetrominoType, [number, number][][]> = {
   I: [
-    [[0,0],[0,1],[0,2],[0,3]],
+    [[1,0],[1,1],[1,2],[1,3]],
     [[0,2],[1,2],[2,2],[3,2]],
     [[2,0],[2,1],[2,2],[2,3]],
     [[0,1],[1,1],[2,1],[3,1]],

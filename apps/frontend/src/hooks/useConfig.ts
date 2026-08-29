@@ -46,7 +46,41 @@ export const useConfig = () => {
         setIsInitialized(true);
         return;
       }
+      
       try {
+        // --- Migration & Cleanup Logic ---
+        const localTuning = localStorage.getItem('tetrisTuning');
+        const localVolume = localStorage.getItem('tetrisVolume');
+        const localKeyConfig = localStorage.getItem('tetrisKeyConfig');
+        
+        if (localTuning || localVolume || localKeyConfig) {
+          // Push guest settings to the DB
+          await fetch('/api/users/me/settings', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              das: tuningRef.current.das,
+              arr: tuningRef.current.arr,
+              dcd: tuningRef.current.dcd,
+              sdf: tuningRef.current.sdf,
+              touchFlick: tuningRef.current.touchFlick,
+              keyBindings: keyConfigRef.current,
+              volume: Math.round(Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100),
+              sfxEnabled: volumeRef.current.se > 0,
+              musicEnabled: volumeRef.current.bgm > 0
+            })
+          });
+
+          // Cleanup localStorage
+          localStorage.removeItem('tetrisTuning');
+          localStorage.removeItem('tetrisVolume');
+          localStorage.removeItem('tetrisKeyConfig');
+        }
+        // ---------------------------------
+
         const res = await fetch('/api/users/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -71,20 +105,23 @@ export const useConfig = () => {
   // Save changes
   useEffect(() => {
     if (!isInitialized) return;
-    localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
+
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
+      localStorage.setItem('tetrisVolume', JSON.stringify(volume));
+      localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
+    }
+
     tuningRef.current = tuning;
-
-    localStorage.setItem('tetrisVolume', JSON.stringify(volume));
     volumeRef.current = volume;
-
-    localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
     keyConfigRef.current = keyConfig;
 
-    const saveToDB = async () => {
-      const token = localStorage.getItem('token');
+    const timeoutId = setTimeout(async () => {
       if (!token) return;
       try {
-        await fetch('/api/users/me/settings', {
+        const res = await fetch('/api/users/me/settings', {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -97,16 +134,23 @@ export const useConfig = () => {
             sdf: tuning.sdf,
             touchFlick: tuning.touchFlick,
             keyBindings: keyConfig,
-            volume: Math.max(volume.se, volume.bgm) * 100,
+            volume: Math.round(Math.max(volume.se, volume.bgm) * 100),
             sfxEnabled: volume.se > 0,
             musicEnabled: volume.bgm > 0
           })
         });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Save config failed:", errData);
+          alert(`設定の保存に失敗しました: ${errData.message || res.status}`);
+        }
       } catch (err) {
         console.error("Failed to save settings to DB", err);
       }
-    };
-    saveToDB();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
   }, [tuning, volume, keyConfig, isInitialized]);
 
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);

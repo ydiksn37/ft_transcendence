@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
@@ -22,29 +22,43 @@ type UseMultiplayerProps = {
   startGame: (mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   stage: Cell[][];
   score: number;
+  nextPieceKeys: string[];
+  holdInfo: { tetromino: string | null; hasHeld: boolean };
   socket: Socket | null;
   setSocket: Dispatch<SetStateAction<Socket | null>>;
   socketRef: React.MutableRefObject<Socket | null>;
   isWaiting: boolean;
   setIsWaiting: Dispatch<SetStateAction<boolean>>;
+  setConnectionError: Dispatch<SetStateAction<string | null>>;
   setOpponentStage: Dispatch<SetStateAction<Cell[][] | null>>;
   setOpponentScore: Dispatch<SetStateAction<number>>;
+  setOpponentNextPieceKeys: React.Dispatch<React.SetStateAction<string[]>>;
+  setOpponentHoldMino: React.Dispatch<React.SetStateAction<string | null>>;
+  setOpponents: React.Dispatch<React.SetStateAction<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>>>;
   matchResult: 'WIN' | 'LOSE' | null;
   setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
   pendingGarbageRef: MutableRefObject<number[]>;
+  token: string | null;
 };
 
 export const useMultiplayer = ({
   appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
-  stage, score,
+  stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
-  isWaiting, setIsWaiting,
-  setOpponentStage, setOpponentScore,
+  isWaiting, setIsWaiting, setConnectionError,
+  setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
   matchResult, setMatchResult,
-  setPendingGarbage, pendingGarbageRef
+  setPendingGarbage, pendingGarbageRef, token
 }: UseMultiplayerProps) => {
+
+  const socketOptions = useMemo(
+    () => token
+      ? { forceNew: true as const, auth: { token } }
+      : { forceNew: true as const },
+    [token],
+  );
 
   const joinOnline = useCallback(() => {
     if (socket) {
@@ -54,6 +68,7 @@ export const useMultiplayer = ({
     setGameMode('ONLINE_1V1');
     setAppState('ONLINE_1V1');
     setIsWaiting(true);
+    setConnectionError(null);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
     setPendingGarbage([]);
@@ -70,26 +85,49 @@ export const useMultiplayer = ({
     setGameOver(false);
     setMatchResult(null);
 
-    const newSocket = io('/', { forceNew: true });
+    const newSocket = io('/', socketOptions);
+
     setSocket(newSocket);
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
+      setConnectionError(null);
       newSocket.emit('match:join_queue');
+    });
+
+    newSocket.on('connect_error', () => {
+      setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
     });
 
     newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
       setRandomSeed(data.seed);
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
+      startGame('ONLINE_1V1');
     });
 
     newSocket.on('waiting_for_match', () => {
       setIsWaiting(true);
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -108,12 +146,16 @@ export const useMultiplayer = ({
       setGameOver(true);
       setDropTime(null);
     });
-  }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
+  }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
+    setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
+    resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
+    setMatchResult, socketOptions, socketRef, startGame, setDropTime]);
 
   const setupCustomRoomConnection = useCallback(() => {
     setAppState('CUSTOM_ROOMS');
     setGameMode('ONLINE_1V1');
     setIsWaiting(true);
+    setConnectionError(null);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
     setPendingGarbage([]);
@@ -130,20 +172,147 @@ export const useMultiplayer = ({
     setGameOver(false);
     setMatchResult(null);
 
-    const newSocket = io('/', { forceNew: true });
+    const newSocket = io('/', socketOptions);
+
     setSocket(newSocket);
     socketRef.current = newSocket;
+
+    newSocket.on('connect', () => setConnectionError(null));
+    newSocket.on('connect_error', () => {
+      setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
+    });
 
     newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
       setRandomSeed(data.seed);
       setAppState('ONLINE_1V1');
       setIsWaiting(false);
-      setTimeout(() => startGame('ONLINE_1V1'), 100);
+      startGame('ONLINE_1V1');
     });
 
-    newSocket.on('opponent_board_update', (data: { stage: Cell[][]; score: number }) => {
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
+    });
+
+    newSocket.on('receive_garbage', (data: { lines: number }) => {
+      pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
+      setPendingGarbage(pendingGarbageRef.current);
+    });
+
+    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+      // 自分が負けた場合
+      if (data.loserId === newSocket.id) {
+        setMatchResult('LOSE');
+        setGameOver(true);
+        setDropTime(null);
+      }
+      // 勝者が決まった場合、自分が勝者かどうか
+      else if (data.winnerId) {
+        if (data.winnerId === newSocket.id) {
+          setMatchResult('WIN');
+        } else {
+          setMatchResult('LOSE'); // 自分以外の誰かが勝った
+        }
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
+
+    newSocket.on('opponent_disconnected', () => {
+      setMatchResult(prev => prev === null ? 'WIN' : prev);
+      setGameOver(true);
+      setDropTime(null);
+    });
+  }, [setAppState, setGameMode, setIsWaiting, setConnectionError, setOpponentStage, setOpponentScore,
+    setPendingGarbage, pendingGarbageRef, setStage, stageRef, resetPlayer,
+    resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
+    socketOptions, setSocket, socketRef, startGame, setDropTime]);
+
+  const startVsAi = useCallback((difficulty: string, actionDelayMs = 50) => {
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+    setGameMode('ONLINE_1V1'); // Reusing ONLINE_1V1 for game physics mode
+    setAppState('ONLINE_1V1'); // Reusing ONLINE_1V1 for UI state
+    setIsWaiting(true);
+    setConnectionError(null);
+    setOpponentStage(createStage(10));
+    setOpponentScore(0);
+    setPendingGarbage([]);
+    pendingGarbageRef.current = [];
+
+    const newStage = createStage(10);
+    setStage(newStage);
+    stageRef.current = newStage;
+    resetPlayer(10, newStage);
+    resetHold();
+    setScore(0);
+    setLevel(1);
+    setLines(0);
+    setGameOver(false);
+    setMatchResult(null);
+
+    const newSocket = io('/', socketOptions);
+    setSocket(newSocket);
+    socketRef.current = newSocket;
+
+    newSocket.on('connect', () => {
+      setConnectionError(null);
+      newSocket.emit('game:start_vs_ai', { difficulty, actionDelayMs });
+    });
+
+    newSocket.on('connect_error', () => {
+      setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
+    });
+
+    // バックエンドは match:found に seed を入れて送信する
+    newSocket.on('match:found', (data: { roomId: string; seed: number; vsAi: boolean }) => {
+      setRandomSeed(data.seed);
+    });
+
+    // game:start でゲームを開始する（GameInstance.start() から emit される）
+    newSocket.on('game:start', () => {
+      startGame('ONLINE_1V1');
+    });
+
+    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      // 従来の1対1用（後方互換）
+      setOpponentStage(data.stage);
+      setOpponentScore(data.score);
+      if (data.next) setOpponentNextPieceKeys(data.next);
+      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
+
+      // 複数人用
+      if (data.playerId) {
+        setOpponents(prev => ({
+          ...prev,
+          [data.playerId as string]: {
+            stage: data.stage,
+            score: data.score,
+            nextPieceKeys: data.next,
+            holdMino: data.hold,
+            isGameOver: data.isGameOver
+          }
+        }));
+      }
     });
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
@@ -157,12 +326,25 @@ export const useMultiplayer = ({
       setDropTime(null);
     });
 
-    newSocket.on('opponent_disconnected', () => {
-      setMatchResult(prev => prev === null ? 'WIN' : prev);
+    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+      const didAiLose = data.loserId.startsWith('ai_');
+      setMatchResult(didAiLose ? 'WIN' : 'LOSE');
       setGameOver(true);
       setDropTime(null);
     });
-  }, [setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver, startGame, setDropTime]);
+
+    newSocket.on('disconnect', (reason: string) => {
+      if (reason === 'io client disconnect') return;
+      if (!gameOver) {
+        setMatchResult(prev => prev === null ? 'WIN' : prev);
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
+  }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
+    setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
+    resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
+    setMatchResult, socketOptions, socketRef, startGame, setDropTime, gameOver]);
 
   useEffect(() => {
     return () => {
@@ -172,9 +354,9 @@ export const useMultiplayer = ({
 
   useEffect(() => {
     if (socket && appState === 'ONLINE_1V1' && !isWaiting) {
-      socket.emit('board_update', { stage, score });
+      socket.emit('board_update', { stage, score, next: nextPieceKeys, hold: holdInfo.tetromino });
     }
-  }, [stage, score, socket, appState, isWaiting]);
+  }, [stage, score, nextPieceKeys, holdInfo, socket, appState, isWaiting]);
 
   useEffect(() => {
     if (socket && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {
@@ -182,5 +364,5 @@ export const useMultiplayer = ({
     }
   }, [gameOver, socket, appState, matchResult]);
 
-  return { joinOnline, setupCustomRoomConnection };
+  return { joinOnline, setupCustomRoomConnection, startVsAi };
 };
