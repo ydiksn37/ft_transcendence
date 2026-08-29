@@ -130,7 +130,6 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
       target: ai-toolchain
-      network: host
     working_dir: /src
     volumes:
       - ./apps/ai-agent:/src:ro
