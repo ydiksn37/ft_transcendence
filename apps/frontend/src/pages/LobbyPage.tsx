@@ -113,6 +113,8 @@ export default function LobbyPage() {
   }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, token, user]);
 
   const [records, setRecords] = useState<any[]>([]);
+  const [myRecords, setMyRecords] = useState<any[]>([]);
+  const [recordTab, setRecordTab] = useState<'MY' | 'GLOBAL'>('MY');
 
   useEffect(() => {
     if (mode === '40_LINES') {
@@ -123,13 +125,22 @@ export default function LobbyPage() {
             const data = await res.json();
             setRecords(data);
           }
+          if (token) {
+            const resMe = await fetch(`/api/sprint/me`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (resMe.ok) {
+              const dataMe = await resMe.json();
+              setMyRecords(dataMe);
+            }
+          }
         } catch (e) {
-          console.error('Failed to fetch leaderboard', e);
+          console.error('Failed to fetch leaderboard or my records', e);
         }
       };
       fetchLeaderboard();
     }
-  }, [mode]);
+  }, [mode, token]);
 
   const getModeLabel = () => {
     switch (mode) {
@@ -369,8 +380,55 @@ export default function LobbyPage() {
           )}
           
           {mode === '40_LINES' && token && user && (
-            <div className="panel records-panel">
-              <Records records={records} />
+            <div className="panel records-panel" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, justifyContent: 'flex-start', overflow: 'hidden' }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                justifyContent: 'center', 
+                padding: '15px', 
+                backgroundColor: 'rgba(0,0,0,0.5)', 
+                borderBottom: '2px solid #444',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
+              }}>
+                <button 
+                  onClick={() => setRecordTab('MY')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'MY' ? '#ff9800' : '#222',
+                    border: recordTab === 'MY' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  MY RECORDS
+                </button>
+                <button 
+                  onClick={() => setRecordTab('GLOBAL')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'GLOBAL' ? '#ff9800' : '#222',
+                    border: recordTab === 'GLOBAL' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  GLOBAL
+                </button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', width: '100%', boxSizing: 'border-box' }}>
+                <Records 
+                  records={recordTab === 'MY' ? myRecords : records} 
+                  title={recordTab === 'MY' ? "MY TOP 10" : "GLOBAL TOP 10"} 
+                />
+              </div>
             </div>
           )}
         </div>

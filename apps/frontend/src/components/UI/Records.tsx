@@ -2,6 +2,7 @@ import React from 'react';
 
 type RecordsProps = {
   records: any[];
+  title?: string;
 };
 
 const formatTime = (ms: number) => {
@@ -11,10 +12,10 @@ const formatTime = (ms: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 };
 
-export const Records: React.FC<RecordsProps> = ({ records }) => {
+export const Records: React.FC<RecordsProps> = ({ records, title = "40 LINES TOP 10" }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-      <h2 style={{ margin: '0 0 20px 0', color: '#ff9800', textShadow: '2px 2px 0 #000', textAlign: 'center' }}>40 LINES TOP 10</h2>
+      <h2 style={{ margin: '0 0 20px 0', color: '#ff9800', textShadow: '2px 2px 0 #000', textAlign: 'center' }}>{title}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '14px', width: '100%', maxWidth: '500px' }}>
         {records.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#888' }}>No records yet.</p>

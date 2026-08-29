@@ -96,10 +96,15 @@ export class GameService {
     const losses = won ? stats.losses : stats.losses + 1;
     const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
 
-    const avgApm = (Number(stats.avgApm) * stats.totalGames + apm) / totalGames;
-    const avgPps = (Number(stats.avgPps) * stats.totalGames + pps) / totalGames;
-    const bestApm = Math.max(Number(stats.bestApm), apm);
-    const bestPps = Math.max(Number(stats.bestPps), pps);
+    const safeNum = (val: any) => {
+      const n = Number(val);
+      return isNaN(n) ? 0 : n;
+    };
+    
+    const avgApm = (safeNum(stats.avgApm) * stats.totalGames + (isNaN(apm) ? 0 : apm)) / totalGames;
+    const avgPps = (safeNum(stats.avgPps) * stats.totalGames + (isNaN(pps) ? 0 : pps)) / totalGames;
+    const bestApm = Math.max(safeNum(stats.bestApm), isNaN(apm) ? 0 : apm);
+    const bestPps = Math.max(safeNum(stats.bestPps), isNaN(pps) ? 0 : pps);
 
     const currentWinStreak = won ? stats.currentWinStreak + 1 : 0;
     const bestWinStreak = Math.max(stats.bestWinStreak, currentWinStreak);

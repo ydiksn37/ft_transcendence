@@ -71,7 +71,7 @@ export class ApiKeyGuard implements CanActivate {
     // 最終使用日時を更新（非同期）
     this.prisma.apiKey
       .update({ where: { id: keyRecord.id }, data: { lastUsedAt: new Date() } })
-      .catch((e) => this.logger.error(e));
+      .catch((e: any) => this.logger.error(e));
 
     request.apiKeyRecord = keyRecord;
     return true;

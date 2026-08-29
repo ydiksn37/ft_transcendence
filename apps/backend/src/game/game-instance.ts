@@ -654,7 +654,11 @@ export class GameInstance {
     return this.aiDifficulty !== null;
   }
 
-  public receiveGarbageFromClient(senderSocketId: string, lines: number): void {
+  public receiveGarbageFromClient(senderSocketId: string, lines: number, generated?: number): void {
+    const player = this.players.get(senderSocketId);
+    if (player) {
+      player.attacksSent += (generated ?? lines);
+    }
     this.sendGarbageToOpponent(senderSocketId, lines);
   }
 

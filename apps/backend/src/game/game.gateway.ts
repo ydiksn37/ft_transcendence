@@ -419,13 +419,14 @@ export class GameGateway
     room.isPlaying = true;
     const seed = Math.floor(Math.random() * 2147483647);
     
-    const onGameOver = (rId: string, winnerId: string | null) => {
+    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
       const r = this.customRooms.get(rId);
       if (r) {
         if (winnerId) {
           const winner = r.players.find(p => p.socket.id === winnerId);
           if (winner) winner.wins++;
         }
+        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
         r.isPlaying = false;
         this.rooms.delete(rId);
         
@@ -683,7 +684,7 @@ export class GameGateway
   @SubscribeMessage('send_garbage')
   handleSendGarbage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { lines: number },
+    @MessageBody() data: { lines: number; generated?: number },
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
@@ -691,7 +692,7 @@ export class GameGateway
     // カスタムルームでGameInstanceが動いている場合はそちらに任せる
     const room = this.rooms.get(roomId);
     if (room) {
-      room.receiveGarbageFromClient(client.id, data.lines);
+      room.receiveGarbageFromClient(client.id, data.lines, data.generated);
       return;
     }
 
