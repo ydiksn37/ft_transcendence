@@ -63,7 +63,7 @@ export default function Chat() {
 		});
 		setSocket(newSocket);
 
-		newSocket.on('chat_message', (msg: any) => {
+		newSocket.on('chat:message', (msg: any) => {
 			setMessages((prev) => [...prev, msg]);
 		});
 
@@ -75,15 +75,14 @@ export default function Chat() {
 	// Join socket room
 	useEffect(() => {
 		if (socket && activeRoomId) {
-			// A basic emit to notify the server about joining the room could be sent here
-			// if required, but socket.io broadcast to 'global' room might just work if server is configured.
+			socket.emit('chat:join', { roomId: activeRoomId });
 		}
 	}, [socket, activeRoomId]);
 
 	const handleSend = () => {
 		if (!inputText.trim() || !activeRoomId || !socket) return;
 		
-		socket.emit('chat_message', { 
+		socket.emit('chat:message', { 
 			roomId: activeRoomId, 
 			content: inputText.trim() 
 		});
@@ -144,7 +143,7 @@ export default function Chat() {
 							type="text" 
 							value={inputText}
 							onChange={(e) => setInputText(e.target.value)}
-							onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+							onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSend(); }}
 							placeholder="Type a message..."
 							style={{ 
 								flex: 1, padding: '10px', backgroundColor: '#000', color: '#fff',

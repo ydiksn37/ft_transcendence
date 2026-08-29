@@ -28,9 +28,9 @@ export class ChatService implements OnModuleInit {
       where: { userId },
       include: { room: true },
     });
-    const rooms = memberships.map((m) => m.room);
+    const rooms = memberships.map((m: any) => m.room);
 
-    if (globalRoom && !rooms.some((r) => r.id === globalRoom.id)) {
+    if (globalRoom && !rooms.some((r: any) => r.id === globalRoom.id)) {
       rooms.unshift(globalRoom);
     }
     return rooms;

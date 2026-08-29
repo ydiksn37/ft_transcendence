@@ -712,6 +712,17 @@ export class GameGateway
   }
 
   // ── チャット ──────────────────────────────────────────────
+  @SubscribeMessage('chat:join')
+  handleJoinChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    if (data.roomId) {
+      client.join(data.roomId);
+      this.logger.log(`Client ${client.id} joined chat room ${data.roomId}`);
+    }
+  }
+
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
   async handleChatMessage(
     @ConnectedSocket() client: Socket,
