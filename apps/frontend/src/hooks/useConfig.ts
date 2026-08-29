@@ -54,6 +54,23 @@ export const useConfig = () => {
         const localKeyConfig = localStorage.getItem('tetrisKeyConfig');
         
         if (localTuning || localVolume || localKeyConfig) {
+          const payload: any = {};
+          if (localTuning) {
+            payload.das = tuningRef.current.das;
+            payload.arr = tuningRef.current.arr;
+            payload.dcd = tuningRef.current.dcd;
+            payload.sdf = tuningRef.current.sdf;
+            payload.touchFlick = tuningRef.current.touchFlick;
+          }
+          if (localKeyConfig) {
+            payload.keyBindings = keyConfigRef.current;
+          }
+          if (localVolume) {
+            payload.volume = Math.round(Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100);
+            payload.sfxEnabled = volumeRef.current.se > 0;
+            payload.musicEnabled = volumeRef.current.bgm > 0;
+          }
+
           // Push guest settings to the DB
           await fetch('/api/users/me/settings', {
             method: 'PATCH',
@@ -61,17 +78,7 @@ export const useConfig = () => {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify({
-              das: tuningRef.current.das,
-              arr: tuningRef.current.arr,
-              dcd: tuningRef.current.dcd,
-              sdf: tuningRef.current.sdf,
-              touchFlick: tuningRef.current.touchFlick,
-              keyBindings: keyConfigRef.current,
-              volume: Math.round(Math.max(volumeRef.current.se, volumeRef.current.bgm) * 100),
-              sfxEnabled: volumeRef.current.se > 0,
-              musicEnabled: volumeRef.current.bgm > 0
-            })
+            body: JSON.stringify(payload)
           });
 
           // Cleanup localStorage
@@ -102,9 +109,20 @@ export const useConfig = () => {
     fetchSettings();
   }, []);
 
+  const isFirstRenderAfterInit = useRef(true);
+
   // Save changes
   useEffect(() => {
     if (!isInitialized) return;
+    
+    if (isFirstRenderAfterInit.current) {
+      isFirstRenderAfterInit.current = false;
+      // Update refs to DB values before returning
+      tuningRef.current = tuning;
+      volumeRef.current = volume;
+      keyConfigRef.current = keyConfig;
+      return;
+    }
 
     const token = localStorage.getItem('token');
 
