@@ -10,11 +10,14 @@ import '../pages/Dashboard.css'
 export default function Chat() {
 	const navigate = useNavigate();
 	const location = useLocation();
-	const mode = new URLSearchParams(location.search).get('mode');
+	const searchParams = new URLSearchParams(location.search);
+	const mode = searchParams.get('mode');
+	const initialRoomId = searchParams.get('room');
 	const { keyConfig } = useConfig();
 	const { user, token } = useAuth();
 
-	const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+	const [activeRoomId, setActiveRoomId] = useState<string | null>(initialRoomId);
+	const [rooms, setRooms] = useState<any[]>([]);
 	const [messages, setMessages] = useState<any[]>([]);
 	const [inputText, setInputText] = useState("");
 	const [socket, setSocket] = useState<Socket | null>(null);
@@ -37,7 +40,8 @@ export default function Chat() {
 		})
 		.then(res => res.json())
 		.then(data => {
-			if (data.length > 0) {
+			setRooms(data);
+			if (!activeRoomId && data.length > 0) {
 				const globalRoom = data.find((r: any) => r.type === 'GLOBAL') || data[0];
 				setActiveRoomId(globalRoom.id);
 			}
@@ -64,7 +68,13 @@ export default function Chat() {
 		setSocket(newSocket);
 
 		newSocket.on('chat:message', (msg: any) => {
-			setMessages((prev) => [...prev, msg]);
+			setMessages((prev) => {
+				// Only append if the message belongs to the currently active room
+				// To do this strictly, we could just re-fetch or check, but since we rely on socket broadcast
+				// we just append. It's safer to always append and filter in render, but let's just append for now 
+				// as room joining is managed per activeRoomId.
+				return [...prev, msg];
+			});
 		});
 
 		return () => {
@@ -100,11 +110,46 @@ export default function Chat() {
 				</button>
 			</div>
 
-			<div className="dashboard-content" style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-				<h1 className="dashboard-title" style={{ color: '#e91e63' }}>GLOBAL CHAT</h1>
-				<div className="dashboard-subtitle">Chat with other players</div>
+			<div className="dashboard-content" style={{ height: '90dvh', maxHeight: 'none', display: 'flex', flexDirection: 'column' }}>
+				<h1 className="dashboard-title" style={{ color: '#e91e63' }}>CHAT</h1>
+				<div className="dashboard-subtitle">Talk with friends and the world</div>
 
-				<div className="arcade-panel" style={{ flex: 1, width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+				<div className="chat-layout" style={{ flex: 1, width: '100%', maxWidth: '1000px', display: 'flex', gap: '20px', overflow: 'hidden' }}>
+					
+					{/* Rooms Sidebar */}
+					<div className="arcade-panel chat-sidebar" style={{ flex: '0 0 250px', display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', overflowY: 'auto' }}>
+						<div style={{ color: '#fff', fontSize: '12px', borderBottom: '2px solid #444', paddingBottom: '10px', marginBottom: '10px' }}>ROOMS</div>
+						{rooms.map(r => {
+							const isGlobal = r.type === 'GLOBAL';
+							const otherMember = !isGlobal ? r.memberships?.find((m:any) => m.userId !== user.id)?.user : null;
+							const roomName = isGlobal ? "🌍 GLOBAL CHAT" : (otherMember ? `@${otherMember.username}` : "DIRECT CHAT");
+							const isActive = r.id === activeRoomId;
+							
+							return (
+								<button 
+									key={r.id}
+									onClick={() => {
+										setActiveRoomId(r.id);
+										setMessages([]); // clear while loading
+									}}
+									style={{
+										padding: '15px 10px',
+										backgroundColor: isActive ? '#e91e63' : '#222',
+										border: isActive ? '2px solid #fff' : '2px solid #444',
+										color: '#fff',
+										cursor: 'pointer',
+										textAlign: 'left',
+										fontSize: '10px',
+										fontFamily: "'Press Start 2P', monospace"
+									}}
+								>
+									{roomName}
+								</button>
+							)
+						})}
+					</div>
+
+					<div className="arcade-panel chat-messages" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
 					
 					{/* Messages Area */}
 					<div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -161,6 +206,7 @@ export default function Chat() {
 						</button>
 					</div>
 
+				</div>
 				</div>
 			</div>
 		</div>

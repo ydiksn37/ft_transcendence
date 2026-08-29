@@ -26,6 +26,7 @@ import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -60,18 +61,27 @@ export class GameGateway
     private readonly chatService: ChatService,
     private readonly aiAgentService: AiAgentService,
     private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {}
 
   afterInit() {
     this.logger.log('GameGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token;
     if (typeof token === 'string' && token.length > 0) {
       try {
         const payload = this.jwtService.verify<{ sub: string }>(token);
-        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+        if (typeof payload.sub === 'string') {
+          client.data.userId = payload.sub;
+          // DBのオンラインステータスを更新し、全体に通知
+          await this.prisma.user.update({
+            where: { id: payload.sub },
+            data: { isOnline: true },
+          }).catch(() => {});
+          this.server.emit('user_status_changed', { userId: payload.sub, isOnline: true });
+        }
       } catch {
         this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
       }
@@ -79,8 +89,18 @@ export class GameGateway
     this.logger.log(`接続: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`切断: ${client.id}`);
+
+    const userId = client.data.userId;
+    if (userId) {
+      // DBのオンラインステータスをオフラインに更新し、全体に通知
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isOnline: false, lastSeenAt: new Date() },
+      }).catch(() => {});
+      this.server.emit('user_status_changed', { userId, isOnline: false });
+    }
 
     // マッチメイキングキューから除外
     this.matchmakingQueue = this.matchmakingQueue.filter(

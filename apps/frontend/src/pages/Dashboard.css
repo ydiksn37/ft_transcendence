@@ -102,3 +102,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+.chat-layout {
+  flex-direction: row;
+}
+
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column !important;
+  }
+  .chat-sidebar {
+    flex: none !important;
+    max-height: 250px;
+    overflow-y: auto;
+  }
+  .chat-messages {
+    flex: 1 !important;
+  }
+}
