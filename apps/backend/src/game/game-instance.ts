@@ -574,6 +574,7 @@ export class GameInstance {
         tspin,
         perfectClear,
         player.b2b > 0,
+        player.combo,
       );
 
       if (clearType === 'tetris') player.tetrises++;

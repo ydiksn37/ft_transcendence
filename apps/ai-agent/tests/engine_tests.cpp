@@ -1332,6 +1332,13 @@ void testGarbageCalculationMatchesTypeScript() {
          "T-Spin Mini must not receive a B2B attack bonus");
   expect(tetris::calculateGarbage(4, std::nullopt, true, true) == 10,
          "Perfect Clear must override line and B2B attack values");
+  expect(tetris::calculateGarbage(1, std::nullopt, false, false, 0) == 0 &&
+             tetris::calculateGarbage(1, std::nullopt, false, false, 1) == 1 &&
+             tetris::calculateGarbage(2, std::nullopt, false, false, 2) == 2 &&
+             tetris::calculateGarbage(4, std::nullopt, false, true, 3) == 7,
+         "REN garbage must match the frontend combo table");
+  expect(tetris::calculateGarbage(4, std::nullopt, true, true, 3) == 12,
+         "REN bonus must also apply to a perfect clear");
 }
 
 }  // namespace

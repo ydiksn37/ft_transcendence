@@ -1,7 +1,8 @@
 import { ServerEvent } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { AiAgentService } from './engine/ai-agent.service';
-import { calcGhostY } from './engine/board';
+import { calcGhostY, createEmptyBoard } from './engine/board';
+import { calcGarbage } from './engine/garbage';
 import { AgentAction, VISIBLE_ROW_OFFSET } from './headless/headless-battle';
 
 type Emission = {
@@ -53,6 +54,50 @@ describe('GameInstance AI matches', () => {
       piecesPlaced: 0,
     });
     expect(request.opponent.board).toHaveLength(40);
+  });
+
+  it('uses the frontend REN table for AI garbage', () => {
+    expect(calcGarbage(1, null, false, false, 0).garbage).toBe(0);
+    expect(calcGarbage(1, null, false, false, 1).garbage).toBe(1);
+    expect(calcGarbage(2, null, false, false, 2).garbage).toBe(2);
+    expect(calcGarbage(4, null, false, true, 3).garbage).toBe(7);
+    expect(calcGarbage(4, null, true, true, 3).garbage).toBe(12);
+  });
+
+  it('sends the REN bonus after consecutive AI line clears', () => {
+    const game = new GameInstance('ai_ren_room', server, 42);
+    game.addPlayer('ai_player', null);
+    game.addPlayer('human_player', 'human');
+    const ai = game.getPlayers().get('ai_player')!;
+    const human = game.getPlayers().get('human_player')!;
+    (game as any).isRunning = true;
+
+    const prepareSingle = () => {
+      ai.board = createEmptyBoard();
+      for (let column = 4; column < 10; column++) {
+        ai.board[39][column] = 'GARBAGE';
+      }
+      // Keep one cell after the clear so this tests REN, not Perfect Clear.
+      ai.board[38][9] = 'GARBAGE';
+      ai.activeMino = 'I';
+      ai.activeX = 0;
+      ai.activeY = 18;
+      ai.activeRotation = 0;
+      ai.lastMoveWasRotation = false;
+    };
+
+    prepareSingle();
+    (game as any).hardDrop('ai_player', ai);
+    expect(ai.combo).toBe(0);
+    expect(ai.attacksSent).toBe(0);
+
+    prepareSingle();
+    (game as any).hardDrop('ai_player', ai);
+    expect(ai.combo).toBe(1);
+    expect(ai.attacksSent).toBe(1);
+    expect(human.garbageQueue).toBe(1);
+
+    game.stop();
   });
 
   it('publishes a 40-row opponent stage including the active AI mino', () => {

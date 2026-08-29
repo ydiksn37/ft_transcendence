@@ -198,8 +198,9 @@ void countClear(GameResult& result, ClearKind kind) {
 
 int calculateGarbage(int linesCleared, std::optional<TSpin> tSpin,
                      bool perfectClear,
-                     bool backToBackActive) noexcept {
-  if (perfectClear) return 10;
+                     bool backToBackActive, int combo) noexcept {
+  const int comboBonus = combo > 0 ? (combo + 1) / 2 : 0;
+  if (perfectClear) return 10 + comboBonus;
 
   int garbage = 0;
   bool backToBackEligible = false;
@@ -218,7 +219,7 @@ int calculateGarbage(int linesCleared, std::optional<TSpin> tSpin,
   }
 
   if (backToBackActive && backToBackEligible) ++garbage;
-  return garbage;
+  return garbage + comboBonus;
 }
 
 double GameResult::averageDecisionMs() const noexcept {
@@ -331,7 +332,8 @@ GameResult simulateGame(Agent& agent, std::uint32_t seed,
       const ClearKind kind =
           classifyClear(cleared.linesCleared, tSpin, board.empty());
       result.attacksSent += calculateGarbage(
-          cleared.linesCleared, tSpin, board.empty(), backToBackChain > 0);
+          cleared.linesCleared, tSpin, board.empty(), backToBackChain > 0,
+          combo);
       const int comboBonus = combo > 0 ? 50 * combo * level : 0;
       result.score += static_cast<std::int64_t>(baseScore(kind)) * level +
                       comboBonus;

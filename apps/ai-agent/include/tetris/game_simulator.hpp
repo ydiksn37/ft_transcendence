@@ -51,7 +51,8 @@ struct GameResult {
 [[nodiscard]] int calculateGarbage(int linesCleared,
                                    std::optional<TSpin> tSpin,
                                    bool perfectClear,
-                                   bool backToBackActive) noexcept;
+                                   bool backToBackActive,
+                                   int combo = -1) noexcept;
 
 using FrameCallback = std::function<void(const Board&, const GameResult&,
                                          PieceType, int,
