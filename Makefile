@@ -157,6 +157,21 @@ ai-versus: ai-build ## TSルールでC++ AI同士を対戦 (例: make ai-versus 
 		--timeout-ms "$(versus_timeout_ms)" \
 		--format "$(versus_format)"
 
+# --- C++ CLI ---
+CLI_BUILD_DIR := build/cli
+
+cli-build: ## C++端末版テトリスをReleaseモードでビルドする
+	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+	cmake --build $(CLI_BUILD_DIR) --parallel
+
+cli: cli-build ## 端末版テトリスを起動する
+	./$(CLI_BUILD_DIR)/tetris_cli
+
+cli-test: ## C++端末版のルールテストを実行する
+	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+	cmake --build $(CLI_BUILD_DIR) --parallel
+	ctest --test-dir $(CLI_BUILD_DIR) --output-on-failure
+
 # --- テスト ---
 test: ## 全ての単体テストを実行する
 	npm run test
@@ -197,4 +212,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check

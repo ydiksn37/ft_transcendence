@@ -17,9 +17,17 @@ export function calcGarbage(
   tspinType: 'tspin' | 'tspin_mini' | null,
   isPerfectClear: boolean,
   b2bActive: boolean,
+  combo = -1,
 ): { garbage: number; clearType: ClearType | null } {
+  // Frontend PlayPage uses the same REN sequence: the first consecutive
+  // clear has combo=0 and no bonus; later clears add floor((combo + 1) / 2).
+  const comboBonus = combo > 0 ? Math.floor((combo + 1) / 2) : 0;
+
   if (isPerfectClear) {
-    return { garbage: GARBAGE_TABLE.perfect_clear, clearType: 'perfect_clear' };
+    return {
+      garbage: GARBAGE_TABLE.perfect_clear + comboBonus,
+      clearType: 'perfect_clear',
+    };
   }
 
   let clearType: ClearType | null = null;
@@ -52,7 +60,7 @@ export function calcGarbage(
     }
   }
 
-  return { garbage, clearType };
+  return { garbage: garbage + comboBonus, clearType };
 }
 
 /** パーフェクトクリア判定 */

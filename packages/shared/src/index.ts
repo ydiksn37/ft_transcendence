@@ -224,18 +224,31 @@ export interface UserStats {
 // ───────────────────────────────────────────────
 //  ゲーム難易度 (AI)
 // ───────────────────────────────────────────────
-export type AiDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+export const AI_DIFFICULTIES = ['EASY', 'HARD', 'EXPERT'] as const;
+export type AiDifficulty = typeof AI_DIFFICULTIES[number];
+
+export function isAiDifficulty(value: unknown): value is AiDifficulty {
+  return typeof value === 'string' &&
+    (AI_DIFFICULTIES as readonly string[]).includes(value);
+}
 
 export interface AiBotConfig {
   difficulty: AiDifficulty;
-  thinkDelayMs: number;    // EASY:800, MEDIUM:400, HARD:100
-  mistakeRate: number;     // EASY:0.3, MEDIUM:0.1, HARD:0.0
+  model: AiAgentModel;
+  thinkDelayMs: number;    // EASY:800, HARD:400, EXPERT:100
+  mistakeRate: number;     // EASY:0.3, HARD:0.1, EXPERT:0.0
 }
 
 export const AI_BOT_CONFIGS: Record<AiDifficulty, AiBotConfig> = {
-  EASY:   { difficulty: 'EASY',   thinkDelayMs: 800, mistakeRate: 0.3 },
-  MEDIUM: { difficulty: 'MEDIUM', thinkDelayMs: 400, mistakeRate: 0.1 },
-  HARD:   { difficulty: 'HARD',   thinkDelayMs: 100, mistakeRate: 0.0 },
+  EASY: {
+    difficulty: 'EASY', model: 'easy', thinkDelayMs: 800, mistakeRate: 0.3,
+  },
+  HARD: {
+    difficulty: 'HARD', model: 'hard', thinkDelayMs: 400, mistakeRate: 0.1,
+  },
+  EXPERT: {
+    difficulty: 'EXPERT', model: 'expert', thinkDelayMs: 100, mistakeRate: 0.0,
+  },
 };
 
 // ───────────────────────────────────────────────

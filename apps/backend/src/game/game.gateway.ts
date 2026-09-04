@@ -15,11 +15,12 @@ import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
   ServerEvent,
-  AiDifficulty,
   Cell,
+  isAiDifficulty,
 } from '@transcendence/shared';
 import type {
   AiAgentModel,
+  AiDifficulty,
   AiPreviewStartRequest,
 } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
@@ -160,7 +161,7 @@ export class GameGateway
     stats: Record<string, any>,
     gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
     isAiGame: boolean,
-    aiDifficulty?: string,
+    aiDifficulty?: AiDifficulty,
   ) {
     const socketIds = Object.keys(stats);
     if (socketIds.length < 2) return;
@@ -463,18 +464,19 @@ export class GameGateway
   @SubscribeMessage('game:start_vs_ai')
   handleStartVsAi(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { difficulty: AiDifficulty; actionDelayMs?: number },
+    @MessageBody() data: { difficulty?: unknown; actionDelayMs?: unknown },
   ) {
-    if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
+    if (!isAiDifficulty(data?.difficulty)) {
       client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
       return;
     }
+    const difficulty = data.difficulty;
 
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
 
     const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
-      this.saveGameStats(rId, winnerId, stats, 'AI', true, data.difficulty);
+      this.saveGameStats(rId, winnerId, stats, 'AI', true, difficulty);
       this.rooms.delete(rId);
     };
 
@@ -490,7 +492,7 @@ export class GameGateway
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
     const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
-    setTimeout(() => instance.start(data.difficulty, actionDelayMs), 1000);
+    setTimeout(() => instance.start(difficulty, actionDelayMs), 1000);
   }
 
   // ── C++ AI Webプレビュー ──────────────────────────────────

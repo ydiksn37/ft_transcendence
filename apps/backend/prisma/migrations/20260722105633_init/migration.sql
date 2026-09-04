@@ -11,7 +11,7 @@ CREATE TYPE "Rank" AS ENUM ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', '
 CREATE TYPE "MinoSkin" AS ENUM ('NEON', 'RETRO', 'MINIMAL');
 
 -- CreateEnum
-CREATE TYPE "AiDifficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD');
+CREATE TYPE "AiDifficulty" AS ENUM ('EASY', 'HARD', 'EXPERT');
 
 -- CreateEnum
 CREATE TYPE "GameMode" AS ENUM ('VERSUS', 'AI', 'TOURNAMENT');

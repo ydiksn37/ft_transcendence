@@ -15,6 +15,7 @@ import type { Cell } from '../utils/gameHelpers';
 import { soundManager } from '../utils/soundManager';
 import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
+import { isAiDifficulty } from '@transcendence/shared';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -38,7 +39,7 @@ const PlayPage = () => {
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
   const requestedAiDifficulty = (queryParams.get('difficulty') || 'EASY').toUpperCase();
-  const aiDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedAiDifficulty)
+  const aiDifficulty = isAiDifficulty(requestedAiDifficulty)
     ? requestedAiDifficulty
     : 'EASY';
   const requestedAiSpeedMs = Number(queryParams.get('aiSpeedMs') ?? 50);

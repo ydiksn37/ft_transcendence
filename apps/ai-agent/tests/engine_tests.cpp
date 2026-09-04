@@ -34,6 +34,18 @@ tetris::Board makeTetrisWell() {
   return board;
 }
 
+tetris::Board makeSolidColumns(
+    const std::array<int, tetris::kBoardCols>& heights) {
+  tetris::Board board;
+  for (int col = 0; col < tetris::kBoardCols; ++col) {
+    for (int height = 0; height < heights[col]; ++height) {
+      board.set(tetris::kBoardRows - 1 - height, col,
+                tetris::Cell::Garbage);
+    }
+  }
+  return board;
+}
+
 class HoldFirstAgent final : public tetris::Agent {
  public:
   std::string_view name() const noexcept override { return "hold-test"; }
@@ -289,6 +301,87 @@ void testHardAgentUsesEmptyHoldAndConsumesNext() {
          "first Next piece must become active after an empty Hold");
 }
 
+void testHardAgentIgnoresBackToBackState() {
+  tetris::DecisionContext context;
+  for (int col = 4; col < tetris::kBoardCols; ++col) {
+    context.board.set(visibleRow(19), col, tetris::Cell::Garbage);
+  }
+  context.active = tetris::PieceType::I;
+  context.canHold = false;
+
+  tetris::HardAgent withoutChain(std::chrono::milliseconds(100));
+  context.backToBack = 0;
+  const auto ordinaryDecision = withoutChain.decide(context);
+
+  tetris::HardAgent withChain(std::chrono::milliseconds(100));
+  context.backToBack = 8;
+  const auto chainedDecision = withChain.decide(context);
+
+  expect(ordinaryDecision.has_value() && chainedDecision.has_value(),
+         "hard agent must decide regardless of B2B state");
+  expect(ordinaryDecision->linesCleared == 1 &&
+             chainedDecision->linesCleared == 1,
+         "hard must take the same useful ordinary clear without preserving B2B");
+  expect(ordinaryDecision->placement == chainedDecision->placement &&
+             ordinaryDecision->actions == chainedDecision->actions,
+         "hard decision must be independent of the current B2B chain");
+}
+
+void testHardBoardStronglyRejectsBuriedHoles() {
+  tetris::Board clean;
+  for (int col = 0; col < 9; ++col) {
+    clean.set(visibleRow(19), col, tetris::Cell::Garbage);
+  }
+
+  tetris::Board buried;
+  for (int col = 0; col < 8; ++col) {
+    buried.set(visibleRow(19), col, tetris::Cell::Garbage);
+  }
+  buried.set(visibleRow(18), 8, tetris::Cell::Garbage);
+
+  const auto cleanEvaluation = tetris::evaluateHardBoard(clean);
+  const auto buriedEvaluation = tetris::evaluateHardBoard(buried);
+  expect(cleanEvaluation.holes == 0 && buriedEvaluation.holes == 1,
+         "Hard diagnostics must distinguish an open lane from a buried hole");
+  expect(cleanEvaluation.value > buriedEvaluation.value + 8000.0,
+         "one buried cell must cost more than an ordinary Tetris can earn");
+}
+
+void testHardBoardAllowsOnlyOneWell() {
+  const tetris::Board oneWell = makeSolidColumns(
+      {4, 4, 4, 0, 4, 4, 4, 4, 4, 4});
+  const tetris::Board twoWells = makeSolidColumns(
+      {4, 4, 0, 4, 4, 4, 0, 4, 4, 4});
+
+  const auto oneEvaluation = tetris::evaluateHardBoard(oneWell);
+  const auto twoEvaluation = tetris::evaluateHardBoard(twoWells);
+  expect(oneEvaluation.primaryWellDepth == 4 &&
+             oneEvaluation.extraWellCount == 0,
+         "one four-row I lane must be preserved as the primary Well");
+  expect(twoEvaluation.primaryWellDepth == 4 &&
+             twoEvaluation.extraWellCount >= 1,
+         "a second one-column valley must be classified as an extra Well");
+  expect(oneEvaluation.value > twoEvaluation.value + 1000.0,
+         "Hard must prefer one I lane over multiple deep Wells");
+}
+
+void testHardBoardPrefersFlatStacking() {
+  const tetris::Board flat =
+      makeSolidColumns({2, 2, 2, 2, 2, 2, 2, 2, 2, 2});
+  const tetris::Board jagged =
+      makeSolidColumns({1, 3, 1, 3, 1, 3, 1, 3, 1, 3});
+
+  const auto flatEvaluation = tetris::evaluateHardBoard(flat);
+  const auto jaggedEvaluation = tetris::evaluateHardBoard(jagged);
+  expect(flatEvaluation.aggregateHeight == jaggedEvaluation.aggregateHeight,
+         "flatness fixture must compare boards with equal aggregate height");
+  expect(flatEvaluation.flatSurfaceRoughness == 0 &&
+             jaggedEvaluation.flatSurfaceRoughness > 0,
+         "Hard diagnostics must measure roughness outside the primary Well");
+  expect(flatEvaluation.value > jaggedEvaluation.value,
+         "Hard must prefer a flat surface when height and holes are equal");
+}
+
 void testSimulatorAppliesHoldAndConsumesNext() {
   HoldFirstAgent agent;
   const auto result = tetris::simulateGame(agent, 42, 1);
@@ -319,6 +412,28 @@ void testHardAgentSimulatorDecisionsAreLegal() {
          "maximum B2B chain cannot exceed B2B clears");
 }
 
+void testHardAgentKeepsSoloStackHoleFree() {
+  tetris::HardAgent agent(std::chrono::milliseconds(50));
+  int maximumHoles = 0;
+  std::size_t firstHolePiece = 0;
+  const auto result = tetris::simulateGame(
+      agent, 192706392, 100,
+      [&](const tetris::Board& board, const tetris::GameResult& frameResult,
+          tetris::PieceType, int, std::optional<tetris::PieceType>) {
+        const int holes = tetris::evaluateHardBoard(board).holes;
+        maximumHoles = std::max(maximumHoles, holes);
+        if (holes > 0 && firstHolePiece == 0) {
+          firstHolePiece = frameResult.piecesPlaced;
+        }
+      });
+  expect(result.reachedPieceLimit && !result.invalidDecision,
+         "Hard must complete the flat-stacking regression simulation");
+  expect(maximumHoles == 0,
+         "Hard must not create a buried hole during clean solo stacking; "
+         "first=" + std::to_string(firstHolePiece) +
+             " max=" + std::to_string(maximumHoles));
+}
+
 void testExpertAgentChoosesTetris() {
   const tetris::Board board = makeTetrisWell();
   tetris::ExpertAgent agent(std::chrono::milliseconds(100));
@@ -347,6 +462,8 @@ void testExpertTSpinDoublePatternFeatures() {
          "completed TSD pattern must be weighted by its two real clears");
   expect(readyFeatures.preTSpinDoublePatterns >= 1,
          "completed TSD must retain its preceding setup feature");
+  expect(readyFeatures.unfillableCavityCells == 0,
+         "a cavity fillable by a reachable SRS TSD must not be rejected");
 
   tetris::Board blocked = ready;
   for (int col = 2; col <= 6; ++col) {
@@ -376,6 +493,32 @@ void testExpertTSpinDoublePatternFeatures() {
   expect(fakeFeatures.preTSpinDoublePatterns >= 1 &&
              fakeFeatures.completedTSpinDoubleLines == 0,
          "an unfilled TSD shape must not receive completed-pattern reward");
+}
+
+void testExpertDetectsCellsNoPieceCanFill() {
+  tetris::Board sealed;
+  for (int row = visibleRow(17); row <= visibleRow(19); ++row) {
+    for (int col = 3; col <= 5; ++col) {
+      if (row != visibleRow(18) || col != 4) {
+        sealed.set(row, col, tetris::Cell::J);
+      }
+    }
+  }
+
+  const auto sealedFeatures = tetris::extractExpertPatternFeatures(sealed);
+  const auto sealedEvaluation = tetris::evaluateExpertBoard(sealed);
+  expect(sealedFeatures.unfillableCavityCells == 1 &&
+             sealedEvaluation.unfillableCavityCells == 1,
+         "a sealed cell which no legal spin/drop can occupy must be counted");
+
+  tetris::Board repaired = sealed;
+  repaired.set(visibleRow(18), 4, tetris::Cell::T);
+  expect(tetris::extractExpertPatternFeatures(repaired)
+             .unfillableCavityCells == 0,
+         "repairing the sealed cell must remove the unfillable feature");
+  expect(tetris::evaluateExpertBoard(repaired).value >
+             sealedEvaluation.value,
+         "Expert must strongly prefer a board without unfillable cavities");
 }
 
 void testExpertOnlyBuildsTSpinSetupsOnCleanBoards() {
@@ -584,8 +727,10 @@ void testExpertRecognizesStructuredSplitStacks() {
   rough.set(visibleRow(15), 0, tetris::Cell::J);
   rough.set(visibleRow(15), 2, tetris::Cell::J);
   rough.set(visibleRow(14), 2, tetris::Cell::J);
+  rough.set(visibleRow(13), 2, tetris::Cell::J);
   const auto roughFeatures = tetris::extractExpertPatternFeatures(rough);
-  expect(roughFeatures.structuredSideRoughness > 0,
+  expect(roughFeatures.structuredSideRoughness > 0 &&
+             roughFeatures.attackLaneSideExcessRoughness > 0,
          "uneven split-stack surfaces must expose roughness");
   expect(structuredValue >
              tetris::evaluateExpertBoard(rough, weights, {}, availableI).value,
@@ -683,10 +828,7 @@ void testExpertPreventsSecondWellBeforeItBecomesDeep() {
   const auto before = tetris::extractExpertPatternFeatures(almostTwoWells);
   expect(before.openWellCount == 1,
          "the prospective second Well must start below the detection depth");
-  tetris::ExpertWeights weights;
-  weights.competingWellPenalty = 1.0e9;
-  weights.newCompetingWellPenalty = 1.0e9;
-  tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
   const auto decision = agent.decide(
       almostTwoWells, tetris::PieceType::O, {}, std::nullopt, false);
   expect(decision.has_value(),
@@ -697,7 +839,7 @@ void testExpertPreventsSecondWellBeforeItBecomesDeep() {
          "expert must choose an order which does not create a second Well");
 }
 
-void testExpertKeepsFiveFourAttackLaneOpen() {
+void testExpertKeepsChosenSplitAttackLaneOpen() {
   tetris::ExpertWeights weights;
   weights.attackLaneObstructionPenalty = 1.0e9;
   tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
@@ -705,14 +847,19 @@ void testExpertKeepsFiveFourAttackLaneOpen() {
       tetris::Board{}, tetris::PieceType::O,
       {tetris::PieceType::J, tetris::PieceType::L}, std::nullopt, false);
   expect(decision.has_value(),
-         "expert must place the opening piece around its 5-4 lane");
+         "expert must place the opening piece around a 5-4 or 6-3 lane");
   const tetris::Board after =
       tetris::lockMino(tetris::Board{}, decision->placement);
+  bool columnFiveOpen = true;
+  bool columnSixOpen = true;
   for (int row = 0; row < tetris::kBoardRows; ++row) {
-    expect(after.cells()[row][5] == tetris::Cell::Empty,
-           "ordinary opening pieces must not obstruct the fixed column-five "
-           "attack lane");
+    columnFiveOpen = columnFiveOpen &&
+                     after.cells()[row][5] == tetris::Cell::Empty;
+    columnSixOpen = columnSixOpen &&
+                    after.cells()[row][6] == tetris::Cell::Empty;
   }
+  expect(columnFiveOpen || columnSixOpen,
+         "ordinary opening pieces must preserve a 5-4 or 6-3 attack lane");
 }
 
 void testExpertWaitsForFourthTetrisRow() {
@@ -970,9 +1117,16 @@ void testExpertBoardStabilityPenalizesBuriedHoles() {
   twoHoles.set(visibleRow(17), 0, tetris::Cell::Garbage);
   twoHoles.set(visibleRow(19), 1, tetris::Cell::Garbage);
 
-  const double cleanValue = tetris::evaluateExpertBoard(clean).value;
-  const double oneHoleValue = tetris::evaluateExpertBoard(oneHole).value;
-  const double twoHoleValue = tetris::evaluateExpertBoard(twoHoles).value;
+  // Isolate the original hole-depth heuristic. Repairability is tested
+  // separately: a single hole can legitimately be worse than two holes when
+  // only the latter admits a legal tuck.
+  tetris::ExpertWeights weights;
+  weights.unfillableCavityPenalty = 0.0;
+  const double cleanValue = tetris::evaluateExpertBoard(clean, weights).value;
+  const double oneHoleValue =
+      tetris::evaluateExpertBoard(oneHole, weights).value;
+  const double twoHoleValue =
+      tetris::evaluateExpertBoard(twoHoles, weights).value;
   expect(cleanValue > oneHoleValue && oneHoleValue > twoHoleValue,
          "Expert stability must increasingly penalize buried holes");
 }
@@ -1030,6 +1184,38 @@ void testExpertPricesSafeTSpinSingleOpportunityCost() {
   expect(!decision->actions.empty() &&
              decision->actions.front() == tetris::Action::Hold,
          "a safe TSS must account for consuming the only visible T piece");
+}
+
+void testExpertPreservesTetrisWellForIncomingI() {
+  tetris::Board board;
+  board.set(visibleRow(17), 3, tetris::Cell::Garbage);
+  board.set(visibleRow(17), 5, tetris::Cell::Garbage);
+  for (int col = 0; col < tetris::kBoardCols; ++col) {
+    if (col < 3 || col > 5) {
+      board.set(visibleRow(18), col, tetris::Cell::Garbage);
+    }
+  }
+  board.set(visibleRow(19), 3, tetris::Cell::Garbage);
+  board.set(visibleRow(19), 5, tetris::Cell::Garbage);
+
+  const auto features = tetris::evaluateExpertBoard(board);
+  expect(features.attackLaneDepth >= 2,
+         "incoming-I fixture must contain a developing Tetris Well");
+
+  tetris::ExpertWeights weights;
+  weights.tSpinSingleOpportunityPenalty = 0.0;
+  weights.tSpinSingleBlocksTetrisPenalty = 1.0e9;
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
+  const auto decision = agent.decide(
+      board, tetris::PieceType::T,
+      {tetris::PieceType::S, tetris::PieceType::Z,
+       tetris::PieceType::I},
+      tetris::PieceType::O, true);
+  expect(decision.has_value(),
+         "expert must decide while I is three moves from the Well");
+  expect(!decision->actions.empty() &&
+             decision->actions.front() == tetris::Action::Hold,
+         "expert must not spend a local TSS that delays an incoming-I Tetris");
 }
 
 void testExpertUsesDirectHardDropForLineLessT() {
@@ -1146,6 +1332,13 @@ void testGarbageCalculationMatchesTypeScript() {
          "T-Spin Mini must not receive a B2B attack bonus");
   expect(tetris::calculateGarbage(4, std::nullopt, true, true) == 10,
          "Perfect Clear must override line and B2B attack values");
+  expect(tetris::calculateGarbage(1, std::nullopt, false, false, 0) == 0 &&
+             tetris::calculateGarbage(1, std::nullopt, false, false, 1) == 1 &&
+             tetris::calculateGarbage(2, std::nullopt, false, false, 2) == 2 &&
+             tetris::calculateGarbage(4, std::nullopt, false, true, 3) == 7,
+         "REN garbage must match the frontend combo table");
+  expect(tetris::calculateGarbage(4, std::nullopt, true, true, 3) == 12,
+         "REN bonus must also apply to a perfect clear");
 }
 
 }  // namespace
@@ -1166,17 +1359,23 @@ int main() {
     testHardAgentChoosesTetris();
     testHardAgentUsesExistingHoldForTetris();
     testHardAgentUsesEmptyHoldAndConsumesNext();
+    testHardAgentIgnoresBackToBackState();
+    testHardBoardStronglyRejectsBuriedHoles();
+    testHardBoardAllowsOnlyOneWell();
+    testHardBoardPrefersFlatStacking();
     testSimulatorAppliesHoldAndConsumesNext();
     testHardAgentSimulatorDecisionsAreLegal();
+    testHardAgentKeepsSoloStackHoleFree();
     testExpertAgentChoosesTetris();
     testExpertTSpinDoublePatternFeatures();
+    testExpertDetectsCellsNoPieceCanFill();
     testExpertOnlyBuildsTSpinSetupsOnCleanBoards();
     testExpertSevenBagTAvailability();
     testExpertSevenBagIAvailability();
     testExpertWellRewardFollowsIAvailability();
     testExpertRecognizesStructuredSplitStacks();
     testExpertPreventsSecondWellBeforeItBecomesDeep();
-    testExpertKeepsFiveFourAttackLaneOpen();
+    testExpertKeepsChosenSplitAttackLaneOpen();
     testExpertWaitsForFourthTetrisRow();
     testExpertPricesWellDemandAgainstVisibleISupply();
     testExpertImmediatelyResolvesSecondWellWithI();
@@ -1191,6 +1390,7 @@ int main() {
     testExpertAvoidsWastingTWithHold();
     testExpertTreatsZeroLineTSpinAsWastedT();
     testExpertPricesSafeTSpinSingleOpportunityCost();
+    testExpertPreservesTetrisWellForIncomingI();
     testExpertUsesDirectHardDropForLineLessT();
     testExpertAgentUsesHold();
     testExpertAgentSimulatorDecisionsAreLegal();

@@ -46,7 +46,7 @@ struct TunedParameter {
   WeightMember member;
 };
 
-constexpr std::array<TunedParameter, 48> kParameters{{
+constexpr std::array<TunedParameter, 56> kParameters{{
     {"board_stability_multiplier",
      &tetris::ExpertWeights::boardStabilityMultiplier},
     {"aggregate_height_penalty",
@@ -55,6 +55,12 @@ constexpr std::array<TunedParameter, 48> kParameters{{
     {"holes_quadratic_penalty",
      &tetris::ExpertWeights::holesQuadraticPenalty},
     {"covered_hole_penalty", &tetris::ExpertWeights::coveredHolePenalty},
+    {"unfillable_cavity_penalty",
+     &tetris::ExpertWeights::unfillableCavityPenalty},
+    {"new_unfillable_cavity_penalty",
+     &tetris::ExpertWeights::newUnfillableCavityPenalty},
+    {"unfillable_cavity_recovery_reward",
+     &tetris::ExpertWeights::unfillableCavityRecoveryReward},
     {"bumpiness_penalty", &tetris::ExpertWeights::bumpinessPenalty},
     {"maximum_height_penalty",
      &tetris::ExpertWeights::maximumHeightPenalty},
@@ -64,6 +70,8 @@ constexpr std::array<TunedParameter, 48> kParameters{{
      &tetris::ExpertWeights::structuredStackReward},
     {"structured_side_roughness_penalty",
      &tetris::ExpertWeights::structuredSideRoughnessPenalty},
+    {"flat_side_excess_roughness_penalty",
+     &tetris::ExpertWeights::flatSideExcessRoughnessPenalty},
     {"attack_lane_obstruction_penalty",
      &tetris::ExpertWeights::attackLaneObstructionPenalty},
     {"competing_well_penalty",
@@ -93,6 +101,8 @@ constexpr std::array<TunedParameter, 48> kParameters{{
     {"completed_tsd_break_penalty",
      &tetris::ExpertWeights::completedTSpinDoubleBreakPenalty},
     {"pre_tsd_reward", &tetris::ExpertWeights::preTSpinDoubleReward},
+    {"pre_tsd_break_penalty",
+     &tetris::ExpertWeights::preTSpinDoubleBreakPenalty},
     {"well_distance_0_penalty",
      &tetris::ExpertWeights::wellDistance0Penalty},
     {"well_distance_1_penalty",
@@ -120,8 +130,13 @@ constexpr std::array<TunedParameter, 48> kParameters{{
      &tetris::ExpertWeights::iCashoutDelayPenalty},
     {"tspin_single_opportunity_penalty",
      &tetris::ExpertWeights::tSpinSingleOpportunityPenalty},
+    {"tspin_single_blocks_tetris_penalty",
+     &tetris::ExpertWeights::tSpinSingleBlocksTetrisPenalty},
     {"tspin_double_reward", &tetris::ExpertWeights::tSpinDoubleReward},
     {"tetris_reward", &tetris::ExpertWeights::tetrisReward},
+    {"tetris_cashout_reward", &tetris::ExpertWeights::tetrisCashoutReward},
+    {"inefficient_three_line_penalty",
+     &tetris::ExpertWeights::inefficientThreeLinePenalty},
     {"b2b_continuation_reward",
      &tetris::ExpertWeights::backToBackContinuationReward},
     {"b2b_break_penalty", &tetris::ExpertWeights::backToBackBreakPenalty},
