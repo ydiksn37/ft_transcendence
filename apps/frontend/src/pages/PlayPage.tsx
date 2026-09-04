@@ -651,7 +651,7 @@ const PlayPage = () => {
   }, [appState, gameOver, countdown]);
 
   const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
-    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+    appState, appStateRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
     setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,

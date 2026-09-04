@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { Cell } from '../utils/gameHelpers';
 
 export const useGameState = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>('MENU');
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING'>('MENU');
   const appStateRef = useRef(appState);
   useEffect(() => { appStateRef.current = appState; }, [appState]);
 

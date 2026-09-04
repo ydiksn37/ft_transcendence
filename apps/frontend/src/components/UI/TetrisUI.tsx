@@ -46,7 +46,7 @@ type TetrisUIProps = {
   setDropTime: React.Dispatch<React.SetStateAction<number | null>>;
   formatTime: (ms: number) => string;
   createStage: (width?: number) => Cell[][];
-  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1' | 'CUSTOM_ROOMS';
+  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING';
   restartGame: () => void;
   joinOnline?: () => void;
   isCustomRoom?: boolean;
@@ -392,117 +392,124 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
 
           <div className="tetris-ui-layout touch-flick-area">
-            {!isMobileView && (
-              <div className="tetris-side-panel">
-                {holdBlock}
-                {extraLeftPanel}
-                {quitButton}
-                {renderTimeBlock()}
+          {appState !== 'SPECTATING' && (
+            <>
+              {!isMobileView && (
+                <div className="tetris-side-panel">
+                  {holdBlock}
+                  {extraLeftPanel}
+                  {quitButton}
+                  {renderTimeBlock()}
+                </div>
+              )}
+          <div className="tetris-board-container">
+              {gameMode === 'ONLINE_1V1' ? (
+                <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
+              ) : (
+                <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
+              )}
+            <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
+                  <GameBoard 
+                    stage={stage} 
+                    player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
+                    ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
+                    targetLine={
+                      gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                        ? 22 - (40 - lines) 
+                        : undefined
+                    }
+                  />
+                </Stage>
+              </div>
+
+            {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                bottom: 0,
+                left: '-20px',
+                width: '10px',
+                height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
+                backgroundColor: 'red',
+                borderRadius: '5px',
+                transition: 'height 0.2s',
+                boxShadow: '0 0 10px red'
+              }}>
+                <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
+                  {pendingGarbage.reduce((a,b)=>a+b,0)}
+                </span>
               </div>
             )}
-        <div className="tetris-board-container">
-            {gameMode === 'ONLINE_1V1' ? (
-              <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
-            ) : (
-              <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
-            )}
-          <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
-            <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-              <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={stage} 
-                  player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
-                  targetLine={
-                    gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                      ? 22 - (40 - lines) 
-                      : undefined
-                  }
-                />
-              </Stage>
-            </div>
+          </div>
+          </div>
 
-
-          {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
+          {actionText && (
             <div style={{
               position: 'absolute',
-              bottom: 0,
-              left: '-20px',
-              width: '10px',
-              height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
-              backgroundColor: 'red',
-              borderRadius: '5px',
-              transition: 'height 0.2s',
-              boxShadow: '0 0 10px red'
+              left: '50%',
+              top: '30%',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              color: '#fff',
+              textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              whiteSpace: 'pre-line',
+              animation: 'pop 0.3s ease-out',
+              zIndex: 10
             }}>
-              <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
-                {pendingGarbage.reduce((a,b)=>a+b,0)}
-              </span>
+              {actionText}
             </div>
           )}
-        </div>
-        </div>
 
-        {actionText && (
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '30%',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-            color: '#fff',
-            textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            textAlign: 'center',
-            whiteSpace: 'pre-line',
-            animation: 'pop 0.3s ease-out',
-            zIndex: 10
-          }}>
-            {actionText}
-          </div>
-        )}
+          <div className="tetris-right-panel">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
+              <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
+              <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {renderNextPieces(nextPieceKeys, 5)}
+              </div>
+            </div>
 
-        <div className="tetris-right-panel">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
-            <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
-            <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {renderNextPieces(nextPieceKeys, 5)}
+            <div className="score-container" style={{
+              backgroundColor: '#000',
+              border: '4px solid #fff',
+              boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
+              padding: '20px 16px',
+              display: 'flex', 
+              flexDirection: 'column',
+              gap: '20px',
+              fontFamily: '"Press Start 2P", monospace'
+            }}>
+              {[
+                { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
+                { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
+                { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
+              ].map((s) => (
+                <div key={s.label} className="score-item">
+                  <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
+                    {s.value}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-
-          <div className="score-container" style={{
-            backgroundColor: '#000',
-            border: '4px solid #fff',
-            boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
-            padding: '20px 16px',
-            display: 'flex', 
-            flexDirection: 'column',
-            gap: '20px',
-            fontFamily: '"Press Start 2P", monospace'
-          }}>
-            {[
-              { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
-              { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
-              { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
-            ].map((s) => (
-              <div key={s.label} className="score-item">
-                <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                  {s.label}
-                </div>
-                <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
-                  {s.value}
-                </div>
-              </div>
-            ))}
-          </div>
-
-
-        </div>
+          </>
+          )}
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: '40px', maxWidth: '600px' }}>
-            {(() => {
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {appState === 'SPECTATING' && (
+              <h1 style={{ color: '#f1c40f', fontFamily: '"Press Start 2P", monospace', marginBottom: '20px', textShadow: '2px 2px 0px #000' }}>
+                SPECTATING MATCH
+              </h1>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: '40px', maxWidth: '600px' }}>
+              {(() => {
               const numOpp = Math.max(1, Object.keys(opponents || {}).length);
               // 人数が多いほど小さくする (1人: 1.0, 2人: 0.55, 3人: 0.45...)
               const oppScale = numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45);
@@ -597,6 +604,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 ? Object.entries(opponents!).map(([id, opp], index) => renderOpponent(id, opp, index))
                 : renderOpponent('fallback', { stage: opponentStage, score: opponentScore, nextPieceKeys: opponentNextPieceKeys, holdMino: opponentHoldMino }, 0, true);
             })()}
+            </div>
           </div>
         )}
 

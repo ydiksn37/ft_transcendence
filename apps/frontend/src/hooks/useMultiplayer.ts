@@ -8,7 +8,8 @@ import { createStage, type Cell } from '../utils/gameHelpers';
 
 type UseMultiplayerProps = {
   appState: string;
-  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS') => void;
+  appStateRef: MutableRefObject<string>;
+  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING') => void;
   setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
   stageRef: MutableRefObject<Cell[][]>;
@@ -44,7 +45,7 @@ type UseMultiplayerProps = {
 };
 
 export const useMultiplayer = ({
-  appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  appState, appStateRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
   stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
@@ -309,6 +310,18 @@ export const useMultiplayer = ({
             isGameOver: data.isGameOver
           }
         }));
+      }
+    });
+
+    newSocket.on('spectating', () => {
+      setAppState('SPECTATING');
+      setGameMode('ONLINE_1V1');
+    });
+
+    newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
+      // Automatic return from spectating when the match ends
+      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
+        setAppState('CUSTOM_ROOMS');
       }
     });
 

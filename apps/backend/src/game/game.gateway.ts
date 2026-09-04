@@ -28,6 +28,21 @@ import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { generateTournamentBracket, Tournament } from './tournament.utils';
+
+interface CustomRoom {
+  roomId: string;
+  name: string;
+  ownerSocketId: string;
+  players: {
+    socket: Socket;
+    userId: string | null;
+    username: string | null;
+    wins: number;
+  }[];
+  isPlaying: boolean;
+  tournament?: Tournament;
+}
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -45,17 +60,7 @@ export class GameGateway
   private matchmakingQueue: Socket[] = [];
 
   // Custom Rooms
-  private customRooms = new Map<string, {
-    roomId: string;
-    name: string;
-    ownerSocketId: string;
-    players: {
-      socket: Socket;
-      userId: string | null;
-      wins: number;
-    }[];
-    isPlaying: boolean;
-  }>();
+  private customRooms = new Map<string, CustomRoom>();
 
   constructor(
     private readonly gameService: GameService,
@@ -76,6 +81,16 @@ export class GameGateway
         const payload = this.jwtService.verify<{ sub: string }>(token);
         if (typeof payload.sub === 'string') {
           client.data.userId = payload.sub;
+          
+          const user = await this.prisma.user.findUnique({
+            where: { id: payload.sub },
+            select: { username: true }
+          }).catch(() => null);
+          
+          if (user) {
+            client.data.username = user.username;
+          }
+
           // DBのオンラインステータスを更新し、全体に通知
           await this.prisma.user.update({
             where: { id: payload.sub },
@@ -135,7 +150,7 @@ export class GameGateway
               roomId: activeRoom.roomId,
               name: activeRoom.name,
               isOwner: activeRoom.ownerSocketId === p.socket.id,
-              players: activeRoom.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+              players: activeRoom.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
               isPlaying: activeRoom.isPlaying
             });
           });
@@ -287,7 +302,7 @@ export class GameGateway
       roomId,
       name: roomName,
       ownerSocketId: client.id,
-      players: [{ socket: client, userId: (client.data?.userId as string) || null, wins: 0 }],
+      players: [{ socket: client, userId: (client.data?.userId as string) || null, username: (client.data?.username as string) || null, wins: 0 }],
       isPlaying: false
     });
 
@@ -296,7 +311,7 @@ export class GameGateway
     client.emit('custom_room_created', { 
       roomId, 
       name: roomName,
-      players: [{ socketId: client.id, userId: (client.data?.userId as string) || null, wins: 0 }] 
+      players: [{ socketId: client.id, userId: (client.data?.userId as string) || null, username: (client.data?.username as string) || null, wins: 0 }] 
     });
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
@@ -365,8 +380,9 @@ export class GameGateway
         roomId: room.roomId,
         name: room.name,
         isOwner: room.ownerSocketId === client.id,
-        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
-        isPlaying: room.isPlaying
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
+        isPlaying: room.isPlaying,
+        tournament: room.tournament
       });
     }
   }
@@ -393,6 +409,7 @@ export class GameGateway
     room.players.push({
       socket: client,
       userId: (client.data?.userId as string) ?? null,
+      username: (client.data?.username as string) ?? null,
       wins: 0
     });
 
@@ -402,10 +419,123 @@ export class GameGateway
 
     room.players.forEach(p => {
       p.socket.emit('custom_room_players_updated', {
-        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins }))
+        players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins }))
       });
     });
   }
+
+  @SubscribeMessage('game:create_tournament')
+  handleCreateTournament(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || room.players.length < 4) return;
+    
+    const playerIds = room.players.map(p => p.socket.id);
+    room.tournament = generateTournamentBracket(playerIds);
+    
+    // Broadcast tournament state
+    room.players.forEach(p => {
+      p.socket.emit('tournament_state', { tournament: room.tournament });
+    });
+  }
+
+  @SubscribeMessage('game:start_tournament_match')
+  handleStartTournamentMatch(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || !room.tournament) return;
+
+    const tournament = room.tournament;
+    if (tournament.currentMatchIndex >= tournament.matches.length) return;
+
+    const currentMatch = tournament.matches[tournament.currentMatchIndex];
+    
+    // Check if assigned players are still in the room
+    const activePlayerSockets = currentMatch.playerIds
+      .map(id => room.players.find(p => p.socket.id === id))
+      .filter((p): p is { socket: Socket; userId: string | null; username: string | null; wins: number } => !!p);
+
+    if (activePlayerSockets.length < 2) {
+      // Not enough players left in this match (due to disconnects)
+      // Auto-advance the survivor or a random player if none
+      const survivor = activePlayerSockets.length === 1 ? activePlayerSockets[0]?.socket.id : (currentMatch.playerIds[0] || '');
+      currentMatch.winnerId = survivor || '';
+      
+      // Push winner to parent
+      const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
+      if (parentMatch && survivor) {
+        parentMatch.playerIds.push(survivor);
+      }
+
+      tournament.currentMatchIndex++;
+      room.players.forEach(p => {
+        p.socket.emit('tournament_state', { tournament: room.tournament });
+      });
+      return;
+    }
+
+    const seed = Math.floor(Math.random() * 2147483647);
+    
+    // Start a GameInstance for these players
+    const instance = new GameInstance(roomId, this.server, seed, (rId, winnerSocketId, stats) => {
+      // Tournament Match Finished
+      currentMatch.winnerId = winnerSocketId || activePlayerSockets[0]?.socket.id || '';
+      
+      const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
+      if (parentMatch) {
+        parentMatch.playerIds.push(currentMatch.winnerId);
+      }
+
+      tournament.currentMatchIndex++;
+      room.isPlaying = false;
+      this.rooms.delete(rId);
+
+      this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      
+      room.players.forEach(p => {
+        p.socket.emit('tournament_state', { tournament: room.tournament });
+        p.socket.emit('custom_room_state', {
+          inRoom: true,
+          roomId: room.roomId,
+          name: room.name,
+          isOwner: room.ownerSocketId === p.socket.id,
+          players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
+          isPlaying: room.isPlaying,
+          tournament: room.tournament
+        });
+      });
+    }, this.aiAgentService);
+
+    this.rooms.set(roomId, instance);
+    room.isPlaying = true;
+    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+
+    // Add active players
+    activePlayerSockets.forEach(p => {
+      if (!p || !p.socket) return;
+      instance.addPlayer(p.socket.id, p.userId);
+      p.socket.emit('match:found', { // ServerEvent.MATCH_FOUND string is 'match:found'
+        roomId,
+        seed,
+        players: activePlayerSockets.map(pl => pl?.socket?.id).filter(id => !!id),
+        isSpectator: false
+      });
+    });
+
+    // Add remaining players as spectators
+    room.players.forEach(p => {
+      if (!p || !p.socket) return;
+      if (!activePlayerSockets.find(s => s?.socket?.id === p.socket.id)) {
+        instance.addSpectator(p.socket.id);
+        p.socket.emit('spectating', { roomId });
+      }
+    });
+
+    instance.start();
+  }
+
 
   @SubscribeMessage('game:start_custom_room')
   handleStartCustomRoom(@ConnectedSocket() client: Socket) {
@@ -440,7 +570,7 @@ export class GameGateway
             roomId: r.roomId,
             name: r.name,
             isOwner: r.ownerSocketId === p.socket.id,
-            players: r.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, wins: pl.wins })),
+            players: r.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
             isPlaying: false
           });
         });

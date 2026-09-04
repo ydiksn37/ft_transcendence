@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Socket } from 'socket.io-client';
+import { TournamentBracket } from './TournamentBracket';
+import type { Tournament } from '../../types/tournament';
 
 type Room = {
   roomId: string;
@@ -19,8 +21,9 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const [customRoomId, setCustomRoomId] = useState('');
   const [inRoom, setInRoom] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
-  const [players, setPlayers] = useState<{ socketId: string; userId: string | null; wins: number }[]>([]);
+  const [players, setPlayers] = useState<{ socketId: string; userId: string | null; username: string | null; wins: number }[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -32,13 +35,19 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       setRooms(updatedRooms);
     };
 
-    const handleRoomState = (data: any) => {
-      if (data.inRoom) {
+    const handleRoomState = (data: { inRoom: boolean; roomId?: string; isOwner?: boolean; players?: any[]; isPlaying?: boolean; tournament?: Tournament }) => {
+      if (!data.inRoom) {
+        setInRoom(null);
+        setIsOwner(false);
+        setPlayers([]);
+        setTournament(null);
+      } else if (data.roomId) {
         setInRoom(data.roomId);
         setCustomRoomId(data.roomId);
-        setIsOwner(data.isOwner);
+        setIsOwner(data.isOwner || false);
         setPlayers(data.players || []);
         setIsPlaying(data.isPlaying || false);
+        setTournament(data.tournament || null);
       }
     };
 
@@ -47,6 +56,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       setCustomRoomId(data.roomId);
       setIsOwner(true);
       setPlayers(data.players || []);
+      setTournament(null);
     };
 
     const handleRoomUpdate = (data: { players: any[] }) => {
@@ -65,11 +75,16 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       setInRoom(null);
       setIsOwner(false);
       setPlayers([]);
+      setTournament(null);
     };
 
     const handleRoomUpdated = (data: { oldId: string; newId: string }) => {
       setInRoom(data.newId);
       setCustomRoomId(data.newId);
+    };
+
+    const handleTournamentState = (data: { tournament: Tournament }) => {
+      setTournament(data.tournament);
     };
 
     socket.on('custom_rooms_updated', handleRoomsUpdated);
@@ -78,6 +93,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     socket.on('custom_room_state', handleRoomState);
     socket.on('custom_room_players_updated', handleRoomUpdate);
     socket.on('match:found', handleMatchFound);
+    socket.on('tournament_state', handleTournamentState);
     socket.on('error', handleError);
 
     return () => {
@@ -87,6 +103,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       socket.off('custom_room_state', handleRoomState);
       socket.off('custom_room_players_updated', handleRoomUpdate);
       socket.off('match:found', handleMatchFound);
+      socket.off('tournament_state', handleTournamentState);
       socket.off('error', handleError);
     };
   }, [socket]);
@@ -110,6 +127,13 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       setCustomRoomId(roomId);
       setIsOwner(false);
     }
+  };
+
+  const getPlayerName = (socketId: string) => {
+    const idx = players.findIndex(p => p.socketId === socketId);
+    if (idx === -1) return socketId;
+    const p = players[idx];
+    return p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
   };
 
   return (
@@ -168,7 +192,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
           <div style={{ marginTop: '20px', fontSize: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             {players.map((p, idx) => {
               const isMe = p.socketId === socket?.id;
-              const displayName = p.userId ? p.userId : `Player ${idx + 1}`;
+              const displayName = getPlayerName(p.socketId);
               const roles = [];
               if (idx === 0) roles.push('Owner');
               if (isMe) roles.push('You');
@@ -182,14 +206,49 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             })}
           </div>
           
-          {isOwner && players.length >= 2 && (
-            <button 
-              onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
-              disabled={isPlaying}
-              style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-            >
-              {isPlaying ? 'GAME IN PROGRESS...' : 'START GAME'}
-            </button>
+          {tournament && (
+            <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#111', borderRadius: '8px', overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
+              <TournamentBracket 
+                node={tournament.root} 
+                activeMatchId={
+                  tournament.currentMatchIndex < tournament.matches.length 
+                    ? tournament.matches[tournament.currentMatchIndex].id 
+                    : undefined
+                } 
+                getPlayerName={getPlayerName} 
+              />
+            </div>
+          )}
+
+          {isOwner && players.length >= 2 && !tournament && (
+            <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+              <button 
+                onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
+                disabled={isPlaying}
+                style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+              >
+                {isPlaying ? 'GAME IN PROGRESS...' : 'START NORMAL GAME'}
+              </button>
+              
+              {players.length >= 4 && (
+                <button 
+                  onClick={() => { if (!isPlaying) socket?.emit('game:create_tournament') }}
+                  disabled={isPlaying}
+                  style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#f39c12', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+                >
+                  START TOURNAMENT
+                </button>
+              )}
+            </div>
+          )}
+
+          {isOwner && tournament && !isPlaying && tournament.currentMatchIndex < tournament.matches.length && (
+             <button 
+               onClick={() => socket?.emit('game:start_tournament_match')}
+               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+             >
+               START NEXT MATCH
+             </button>
           )}
 
           {isOwner && (

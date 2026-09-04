@@ -12,7 +12,7 @@ type UseKeyboardControlsProps = {
   keyConfigRef: MutableRefObject<Record<string, string>>;
   gameOver: boolean;
   dropTime: number | null;
-  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>;
+  appStateRef: MutableRefObject<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING'>;
   countdownRef: MutableRefObject<string | null>;
   listeningActionRef: MutableRefObject<string | null>;
   setKeyConfig: Dispatch<SetStateAction<Record<string, string>>>;
