@@ -5,6 +5,7 @@ import Login from "@/pages/Login"
 import Dashboard from "@/pages/Dashboard"
 import Chat from "@/pages/Chat"
 import Friends from "@/pages/Friends"
+import AdvancedSearch from "@/pages/AdvancedSearch"
 import Profile from "@/pages/Profile"
 import Settings from "@/pages/Settings"
 import AdminPanel from "@/pages/AdminPanel"
@@ -23,6 +24,7 @@ export default function App() {
       <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/chat" element={<Chat />} />
       <Route path="/friends" element={<Friends />} />
+              <Route path="/search" element={<AdvancedSearch />} />
 
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
