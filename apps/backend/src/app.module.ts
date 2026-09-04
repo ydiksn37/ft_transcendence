@@ -13,7 +13,6 @@ import { UsersModule } from './users/users.module';
 import { GameModule } from './game/game.module';
 import { PublicApiModule } from './public-api/public-api.module';
 import { TournamentModule } from './tournament/tournament.module';
-import { OrganizationModule } from './organization/organization.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -57,7 +56,6 @@ import { ChatModule } from './chat/chat.module';
     TournamentModule,
     PublicApiModule,
     SprintModule,
-    OrganizationModule,
   ],
   controllers: [AppController],
   providers: [

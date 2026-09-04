@@ -27,18 +27,7 @@ export class ExportService {
     };
   }
 
-  async recordExportRequest(userId: string, data: any) {
-    // In a real application, you might save the JSON to S3 and store the URL in DataExportRequest.
-    // For now, we will create a record and return the data directly.
-    await this.prisma.dataExportRequest.create({
-      data: {
-        userId,
-        status: 'READY',
-        processedAt: new Date(),
-      },
-    });
-    return data;
-  }
+  
 
   async importUserSettings(userId: string, settingsData: any) {
     if (!settingsData) return null;
