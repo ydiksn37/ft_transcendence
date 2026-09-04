@@ -71,6 +71,7 @@ export const useMultiplayer = ({
     setConnectionError(null);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
+    setOpponents({});
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
 
@@ -141,11 +142,7 @@ export const useMultiplayer = ({
       setDropTime(null);
     });
 
-    newSocket.on('opponent_disconnected', () => {
-      setMatchResult(prev => prev === null ? 'WIN' : prev);
-      setGameOver(true);
-      setDropTime(null);
-    });
+
   }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
     setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
     resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
@@ -158,6 +155,7 @@ export const useMultiplayer = ({
     setConnectionError(null);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
+    setOpponents({});
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
 
@@ -184,6 +182,7 @@ export const useMultiplayer = ({
 
     newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
       setRandomSeed(data.seed);
+      setOpponents({});
       setAppState('ONLINE_1V1');
       setIsWaiting(false);
       startGame('ONLINE_1V1');
@@ -235,11 +234,7 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('opponent_disconnected', () => {
-      setMatchResult(prev => prev === null ? 'WIN' : prev);
-      setGameOver(true);
-      setDropTime(null);
-    });
+
   }, [setAppState, setGameMode, setIsWaiting, setConnectionError, setOpponentStage, setOpponentScore,
     setPendingGarbage, pendingGarbageRef, setStage, stageRef, resetPlayer,
     resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
@@ -256,6 +251,7 @@ export const useMultiplayer = ({
     setConnectionError(null);
     setOpponentStage(createStage(10));
     setOpponentScore(0);
+    setOpponents({});
     setPendingGarbage([]);
     pendingGarbageRef.current = [];
 

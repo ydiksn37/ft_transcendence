@@ -313,10 +313,12 @@ const PlayPage = () => {
            
            stageRef.current = newStage;
            setStage(newStage);
+
+
            
            remainingAttacks = [];
            
-           if (isPushedOut) {
+           if (isPushedOut || checkCollision(player, newStage, { x: 0, y: 0 })) {
              setGameOver(true);
              if (gameModeRef.current === 'ONLINE_1V1') {
                setMatchResult('LOSE');
@@ -752,7 +754,9 @@ const PlayPage = () => {
       restartGame={() => startGame()}
       joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty) : joinOnline}
       isCustomRoom={mode === 'CUSTOM_ROOMS'}
+      isVsAi={mode === 'VS_AI'}
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
+      quitGame={quitGame}
       onQuit={quitGame}
 
       onHold={() => playerHold(stage[0].length, stage)}

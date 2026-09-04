@@ -50,6 +50,7 @@ type TetrisUIProps = {
   restartGame: () => void;
   joinOnline?: () => void;
   isCustomRoom?: boolean;
+  isVsAi?: boolean;
   quitGame?: () => void;
   onlineRestartLabel?: string;
   onHold: () => void;
@@ -62,7 +63,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, quitGame,
+  formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, isVsAi, quitGame,
   onlineRestartLabel, onHold, onQuit, extraLeftPanel, ghostYOverride
 }) => {
   const [scale, setScale] = useState(1);
@@ -203,12 +204,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>
         <h1 style={{ fontSize: '48px', color: '#e74c3c', textShadow: '4px 4px 0px #000', marginBottom: '40px', animation: 'blink 1s infinite alternate', textAlign: 'center', lineHeight: '1.5' }}>
-          SEARCHING FOR<br/>OPPONENT...
+          {isVsAi ? <>LOADING<br/>AI...</> : <>SEARCHING FOR<br/>OPPONENT...</>}
         </h1>
         <button
           onClick={() => {
             if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
-            navigate('/lobby/MULTI_PLAY');
+            navigate(isVsAi ? '/lobby/VS_AI' : '/lobby/MULTI_PLAY');
           }}
           style={{
             fontFamily: '"Press Start 2P", monospace', padding: '20px 40px',

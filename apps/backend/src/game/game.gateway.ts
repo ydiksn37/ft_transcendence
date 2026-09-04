@@ -90,11 +90,13 @@ export class GameGateway
     // ゲーム中だった場合
     const roomId = this.clientRoom.get(client.id);
     if (roomId) {
-      client.to(roomId).emit('opponent_disconnected');
       const room = this.rooms.get(roomId);
       if (room) {
-        room.stop();
-        this.rooms.delete(roomId);
+        if (room.isAiMatch) {
+          room.handleClientGameOver(client.id);
+        } else {
+          room.handleGameOver(client.id);
+        }
       }
       
       const activeRoom = this.customRooms.get(roomId);
