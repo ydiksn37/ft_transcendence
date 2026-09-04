@@ -39,4 +39,26 @@ export class ExportService {
     });
     return data;
   }
+
+  async importUserSettings(userId: string, settingsData: any) {
+    if (!settingsData) return null;
+    
+    // Whitelist the settings to update
+    const allowedKeys = ['minoSkin', 'showGhost', 'arr', 'das', 'dcd', 'sdf', 'keyBindings', 'volume', 'sfxEnabled', 'musicEnabled'];
+    const updateData: any = {};
+    for (const key of allowedKeys) {
+      if (settingsData[key] !== undefined) {
+        updateData[key] = settingsData[key];
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) return null;
+
+    return this.prisma.userGameSettings.upsert({
+      where: { userId },
+      create: { userId, ...updateData },
+      update: updateData,
+    });
+  }
 }
+

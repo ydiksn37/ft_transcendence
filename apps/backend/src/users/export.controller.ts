@@ -1,4 +1,4 @@
-import { Controller, Get, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
 import { ExportService } from './export.service';
 import {
   ApiTags,
@@ -23,4 +23,12 @@ export class ExportController {
     await this.exportService.recordExportRequest(req.user.id, data);
     return data;
   }
+
+  @Post('import')
+  @ApiOperation({ summary: '設定をインポート (JSON)' })
+  @ApiResponse({ status: 200, description: 'インポートした設定を保存します。' })
+  async importSettings(@Request() req: any, @Body() body: any) {
+    return this.exportService.importUserSettings(req.user.id, body.settings);
+  }
 }
+

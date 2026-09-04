@@ -29,6 +29,7 @@ import { Public } from '../auth/decorators/public.decorator';
 // ── Public API コントローラー (APIキー認証) ───────────────────────
 @ApiTags('Public API')
 @ApiSecurity('api-key')
+@Public()
 @UseGuards(ApiKeyGuard)
 @Controller('public')
 export class PublicApiController {

@@ -109,6 +109,44 @@ export default function Settings() {
     }
   };
 
+  const handleImportData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const json = JSON.parse(event.target?.result as string);
+          if (!json.settings) {
+            alert('Invalid JSON format. Expected "settings" object.');
+            return;
+          }
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/users/me/export/import', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ settings: json.settings })
+          });
+          if (res.ok) {
+            alert('Settings successfully imported!');
+          } else {
+            alert('Failed to import settings.');
+          }
+        } catch (err) {
+          alert('Invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   const handleExportData = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -297,12 +335,20 @@ export default function Settings() {
                 <span style={{ color: '#fff' }}>EXPORT YOUR DATA</span><br/><br/>
                 Download all your personal data, game history, and statistics in JSON format.
               </div>
-              <button 
-                onClick={handleExportData}
-                style={{ ...buttonStyle, backgroundColor: '#3498db' }}
-              >
-                EXPORT JSON
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={handleImportData} 
+                  style={{ ...buttonStyle, backgroundColor: '#f39c12' }}
+                >
+                  IMPORT SETTINGS
+                </button>
+                <button 
+                  onClick={handleExportData} 
+                  style={{ ...buttonStyle, backgroundColor: '#3498db' }}
+                >
+                  EXPORT JSON
+                </button>
+              </div>
             </div>
 
             <div className="gdpr-row" style={{ borderTop: '2px solid #444', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
