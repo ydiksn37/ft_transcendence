@@ -22,7 +22,7 @@ export default function Profile() {
 	const [user, setUser] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
-	const [selectedIndex, setSelectedIndex] = useState(0); // 0: BACK, 1: SETTINGS
+	const [selectedIndex, setSelectedIndex] = useState(-1); // 0: BACK, 1: SETTINGS, 2: ADMIN
 
 	// Cropper states
 	const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -50,6 +50,10 @@ export default function Profile() {
 				if (selectedIndex === 0) {
 					navigate(mode ? `/lobby/${mode}` : '/menu');
 				} else if (selectedIndex === 1) {
+					navigate(mode ? `/settings?mode=${mode}` : '/settings');
+				} else if (selectedIndex === 2) {
+					navigate(mode ? `/admin?mode=${mode}` : '/admin');
+				} else if (selectedIndex === 0) {
 					navigate(mode ? `/settings?mode=${mode}` : '/settings');
 				}
 			}
@@ -231,6 +235,17 @@ export default function Profile() {
 				>
 					{selectedIndex === 1 ? '▶ SETTINGS' : 'SETTINGS'}
 				</button>
+				{(user.role === 'ADMIN' || user.role === 'MODERATOR') && (
+					<button 
+						className={`nav-btn ${selectedIndex === 2 ? 'selected' : ''}`} 
+						onClick={() => navigate(mode ? `/admin?mode=${mode}` : '/admin')} 
+						onMouseEnter={() => setSelectedIndex(2)}
+						onMouseLeave={() => setSelectedIndex(-1)}
+						style={selectedIndex === 2 ? { backgroundColor: '#e74c3c' } : { borderColor: '#e74c3c', color: '#e74c3c' }}
+					>
+						{selectedIndex === 2 ? '▶ ADMIN PANEL' : 'ADMIN PANEL'}
+					</button>
+				)}
 			</div>
 
 			<div className="dashboard-content">

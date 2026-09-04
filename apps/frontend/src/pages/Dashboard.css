@@ -1,7 +1,9 @@
 .dashboard-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow-y: auto;
   background-color: #111;
   color: white;
   font-family: 'Press Start 2P', monospace;
@@ -48,7 +50,6 @@
   flex-direction: column;
   gap: 30px;
   width: 100%;
-  max-width: 1000px;
   justify-content: center;
 }
 
@@ -99,5 +100,29 @@
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.chat-layout {
+  flex-direction: row;
+}
+
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column !important;
+  }
+  .chat-sidebar {
+    flex: none !important;
+    max-height: 250px;
+    overflow-y: auto;
+  }
+  .chat-messages {
+    flex: 1 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-hide {
+    display: none !important;
   }
 }

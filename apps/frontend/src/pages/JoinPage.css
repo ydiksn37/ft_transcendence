@@ -141,22 +141,23 @@
     word-spacing: -6px;
   }
   .join-button {
-    font-size: 14px;
-    padding: 12px 24px;
+    font-size: 12px;
+    padding: 10px 20px;
   }
 }
 
 @media (max-width: 480px) {
   .title-text {
-    font-size: 32px;
+    font-size: 28px;
     letter-spacing: 0px;
-    word-spacing: -4px;
+    word-spacing: -2px;
   }
   .join-button {
-    font-size: 12px;
-    padding: 10px 20px;
+    font-size: 10px;
+    padding: 8px 16px;
   }
   .join-content > div {
-    width: 280px !important;
+    width: 240px !important;
+    gap: 12px !important;
   }
 }

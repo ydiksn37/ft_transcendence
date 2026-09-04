@@ -5,8 +5,10 @@ import Login from "@/pages/Login"
 import Dashboard from "@/pages/Dashboard"
 import Chat from "@/pages/Chat"
 import Friends from "@/pages/Friends"
+import AdvancedSearch from "@/pages/AdvancedSearch"
 import Profile from "@/pages/Profile"
 import Settings from "@/pages/Settings"
+import AdminPanel from "@/pages/AdminPanel"
 import JoinPage from "@/pages/JoinPage"
 import MenuPage from "@/pages/MenuPage"
 import LobbyPage from "@/pages/LobbyPage"
@@ -22,10 +24,12 @@ export default function App() {
       <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/chat" element={<Chat />} />
       <Route path="/friends" element={<Friends />} />
+              <Route path="/search" element={<AdvancedSearch />} />
 
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/admin" element={<AdminPanel />} />
 
       {/* TOPページ（JOIN -> ゲーム） */}
       <Route path="/" element={<JoinPage />} />

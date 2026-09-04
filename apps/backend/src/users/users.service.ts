@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateUserDto, SearchUsersDto, BanUserDto } from './dto/user.dto';
+import { UpdateUserDto, SearchUsersDto, BanUserDto, SearchHistoryDto } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -86,19 +86,27 @@ export class UsersService {
     const limit = Math.min(Number(dto.limit ?? 20), 50);
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: any = {
       deletedAt: null,
-      ...(dto.q
-        ? {
-            OR: [
-              { username: { contains: dto.q, mode: 'insensitive' as const } },
-              {
-                displayName: { contains: dto.q, mode: 'insensitive' as const },
-              },
-            ],
-          }
-        : {}),
     };
+
+    if (dto.q) {
+      where.OR = [
+        { username: { contains: dto.q, mode: 'insensitive' } },
+        { displayName: { contains: dto.q, mode: 'insensitive' } },
+      ];
+    }
+
+    if (dto.status === 'ONLINE') {
+      where.isOnline = true;
+    } else if (dto.status === 'OFFLINE') {
+      where.isOnline = false;
+    }
+
+    let orderBy: any = { stats: { rankPoints: 'desc' } };
+    if (dto.sortBy === 'WIN_RATE_DESC') orderBy = { stats: { winRate: 'desc' } };
+    else if (dto.sortBy === 'WIN_RATE_ASC') orderBy = { stats: { winRate: 'asc' } };
+    else if (dto.sortBy === 'GAMES_DESC') orderBy = { stats: { totalGames: 'desc' } };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -110,9 +118,9 @@ export class UsersService {
           avatarUrl: true,
           isOnline: true,
           role: true,
-          stats: { select: { rank: true, rankPoints: true, winRate: true } },
+          stats: { select: { rank: true, rankPoints: true, winRate: true, totalGames: true } },
         },
-        orderBy: { stats: { rankPoints: 'desc' } },
+        orderBy,
         skip,
         take: limit,
       }),
@@ -138,12 +146,24 @@ export class UsersService {
   }
 
   // ── 対戦履歴取得 ──────────────────────────────────────────
-  async getGameHistory(id: string, page = 1, limit = 20, mode?: string) {
+  async getGameHistory(userId: string, dto: SearchHistoryDto) {
+    const page = Number(dto.page ?? 1);
+    const limit = Math.min(Number(dto.limit ?? 20), 50);
     const skip = (page - 1) * limit;
-    const where = {
-      OR: [{ player1Id: id }, { player2Id: id }],
-      ...(mode ? { gameMode: mode as any } : {}),
+
+    const where: any = {
+      OR: [{ player1Id: userId }, { player2Id: userId }],
     };
+
+    if (dto.mode && dto.mode !== 'ALL') {
+      where.gameMode = dto.mode;
+    }
+
+    if (dto.result === 'WIN') {
+      where.winnerId = userId;
+    } else if (dto.result === 'LOSE') {
+      where.winnerId = { not: userId };
+    }
 
     const [results, total] = await Promise.all([
       this.prisma.gameResult.findMany({
@@ -153,20 +173,10 @@ export class UsersService {
         take: limit,
         include: {
           player1: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              avatarUrl: true,
-            },
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
           },
           player2: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              avatarUrl: true,
-            },
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
           },
           winner: { select: { id: true, username: true } },
         },
@@ -210,6 +220,7 @@ export class UsersService {
 
     const existing = await this.prisma.friendship.findFirst({
       where: {
+        status: { in: ['PENDING', 'ACCEPTED'] },
         OR: [
           { requesterId, addresseeId },
           { requesterId: addresseeId, addresseeId: requesterId },
@@ -220,6 +231,17 @@ export class UsersService {
     if (existing) {
       throw new BadRequestException('既にフレンド関係または申請中です');
     }
+
+    // もし過去に拒否された(REJECTED)レコードがあれば削除して新しく作る
+    await this.prisma.friendship.deleteMany({
+      where: {
+        status: 'REJECTED',
+        OR: [
+          { requesterId, addresseeId },
+          { requesterId: addresseeId, addresseeId: requesterId },
+        ],
+      },
+    });
 
     return this.prisma.friendship.create({
       data: { requesterId, addresseeId, status: 'PENDING' },
@@ -284,7 +306,6 @@ export class UsersService {
   async removeFriend(userId: string, friendId: string) {
     const friendship = await this.prisma.friendship.findFirst({
       where: {
-        status: 'ACCEPTED',
         OR: [
           { requesterId: userId, addresseeId: friendId },
           { requesterId: friendId, addresseeId: userId },

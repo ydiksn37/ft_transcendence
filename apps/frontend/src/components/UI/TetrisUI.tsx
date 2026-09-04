@@ -247,7 +247,21 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox(holdInfo.tetromino)}
-      {!(gameMode === 'ONLINE_1V1' && isWaiting) && holdInfo.hasHeld && !isMobileView && <span style={{ color: 'gray', fontSize: '10px', marginTop: '10px', fontFamily: '"Press Start 2P", monospace' }}>LOCKED</span>}
+      {!(gameMode === 'ONLINE_1V1' && isWaiting) &&
+        !isMobileView &&
+        (holdInfo.hasHeld || gameMode === 'AI_PREVIEW') && (
+          <span
+            style={{
+              color: 'gray',
+              fontSize: '10px',
+              marginTop: '10px',
+              fontFamily: '"Press Start 2P", monospace',
+              visibility: holdInfo.hasHeld ? 'visible' : 'hidden',
+            }}
+          >
+            LOCKED
+          </span>
+        )}
     </div>
   );
 
@@ -306,6 +320,37 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     </button>
   ) : null;
 
+  const renderTimeBlock = () => {
+    if (gameMode !== '40_LINES') return null;
+    const timeStr = formatTime(finalTime || elapsedTime);
+    const parts = timeStr.split('.');
+
+    return (
+      <div style={{ 
+        marginTop: isMobileView ? '5px' : '20px',
+        textAlign: 'center', 
+        fontFamily: '"Press Start 2P", monospace',
+        color: finalTime ? 'gold' : 'white',
+        backgroundColor: '#000',
+        padding: isMobileView ? '4px' : '10px',
+        border: isMobileView ? '2px solid #555' : '4px solid #fff',
+        boxShadow: isMobileView ? 'none' : '4px 4px 0px rgba(0,0,0,0.8)',
+        fontSize: isMobileView ? '10px' : '14px',
+        position: isMobileView ? 'absolute' : 'static',
+        top: isMobileView ? '100%' : 'auto',
+        left: isMobileView ? '0' : 'auto',
+        width: isMobileView ? '100%' : 'auto',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ fontSize: isMobileView ? '8px' : '10px', color: 'gray', marginBottom: isMobileView ? '2px' : '4px' }}>TIME</div>
+        <div>
+          {parts[0]}
+          {parts[1] && <span style={{ fontSize: isMobileView ? '6px' : '9px', color: '#aaa' }}>.{parts[1]}</span>}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="tetris-ui-container" style={{
       backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`
@@ -332,7 +377,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
           {appState !== 'MENU' && isMobileView && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '380px', marginBottom: '10px' }}>
-              {quitButton}
+              <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                {quitButton}
+                {renderTimeBlock()}
+              </div>
               <h2 style={{ 
                 margin: '0', textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
                 color: modeMeta.color, textShadow: '2px 2px 0px #000', fontSize: '16px', letterSpacing: '1px'
@@ -349,6 +397,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 {holdBlock}
                 {extraLeftPanel}
                 {quitButton}
+                {renderTimeBlock()}
               </div>
             )}
         <div className="tetris-board-container">

@@ -1,0 +1,20 @@
+{
+  "color": true,
+  "softDropFactor": 0,
+  "dasMilliseconds": 133,
+  "arrMilliseconds": 33,
+  "softDropIntervalMilliseconds": 33,
+  "keyBindings": {
+    "moveLeft": "left",
+    "moveRight": "right",
+    "softDrop": "down",
+    "hardDrop": "up",
+    "rotateCW": "d",
+    "rotateCCW": "a",
+    "rotate180": "s",
+    "hold": "w",
+    "pause": "p",
+    "restart": "r",
+    "quit": "q"
+  }
+}

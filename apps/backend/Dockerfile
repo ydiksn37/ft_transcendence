@@ -1,6 +1,9 @@
+# ─── AI Agent ツールチェーン ────────────────────────────
+FROM node:22-alpine AS ai-toolchain
+RUN apk add --no-cache cmake make g++
+
 # ─── AI Agent ビルドステージ ────────────────────────────
-FROM node:22-alpine AS ai-builder
-RUN apk add --no-cache cmake make g++ git
+FROM ai-toolchain AS ai-builder
 WORKDIR /app
 COPY apps/ai-agent ./apps/ai-agent
 RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \
@@ -8,8 +11,6 @@ RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \
 
 # ─── 開発ステージ ─────────────────────────────
 FROM node:22-alpine AS development
-
-RUN apk add --no-cache libstdc++
 
 WORKDIR /app
 
@@ -21,6 +22,8 @@ COPY packages/shared/package.json ./packages/shared/
 
 RUN --mount=type=cache,target=/root/.npm npm ci
 
+RUN apk add --no-cache libstdc++
+
 # Prisma クライアントを生成
 COPY apps/backend/prisma ./apps/backend/prisma/
 RUN cd apps/backend && npx prisma generate
@@ -28,8 +31,7 @@ RUN cd apps/backend && npx prisma generate
 # ソースコード全体をコピー
 COPY . .
 
-# AI Agentバイナリをコピー
-COPY --from=ai-builder /app/build/ai_agent /usr/local/bin/ai_agent
+# AI Agentバイナリはローカルからマウントするため開発環境ではコピーしない
 
 # 共有パッケージをビルド
 RUN --mount=type=cache,target=/app/node_modules/.cache npm run build --workspace=@transcendence/shared

@@ -4,13 +4,13 @@ help: ## コマンド一覧を表示する
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # --- Docker Compose 基本操作 ---
-up: ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
+up: shared-build ai-web-build ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
 	docker compose up -d
 
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
 
-build: ## Dockerイメージをビルドしてコンテナを起動する
+build: ai-web-build ## Dockerイメージをビルドしてコンテナを起動する
 	docker compose up -d --build
 
 logs: ## 全コンテナのログをリアルタイムで表示する (Ctrl+Cで終了)
@@ -61,6 +61,8 @@ install: ## 依存パッケージをすべてインストールする
 
 # --- C++ AI ---
 AI_BUILD_DIR := build/ai-agent
+AI_WEB_BUILD_DIR := build/ai-agent-web
+AI_COMPILER_IMAGE := ft_transcendence-ai-compiler:latest
 model ?= easy
 games ?= 1
 seed ?= $(shell od -An -N4 -tu4 /dev/urandom | tr -d ' ')
@@ -92,9 +94,23 @@ versus_max_pieces ?= 500
 versus_format ?= table
 versus_timeout_ms ?= $(shell expr $(think_ms) \* 4 + 500)
 
+shared-build: ## 開発コンテナへmountする共有Socket型をビルドする
+	npm run build --workspace=@transcendence/shared
+
 ai-build: ## C++ AIをReleaseモードで設定・ビルドする
 	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
 	cmake --build $(AI_BUILD_DIR) --parallel
+
+ai-web-toolchain: ## Web用C++コンパイライメージを初回だけ作成する
+	@docker image inspect $(AI_COMPILER_IMAGE) >/dev/null 2>&1 || \
+		docker compose --profile tools build ai-compiler
+
+ai-web-build: ai-web-toolchain ## Web用C++ AIだけを再コンパイルする（イメージ再ビルドなし）
+	@mkdir -p $(AI_WEB_BUILD_DIR)
+	docker compose --profile tools run --rm --no-deps ai-compiler
+
+ai-web-restart: ai-web-build ## Web用C++ AIを再コンパイルし、VS AI用常駐プロセスも更新する
+	docker compose restart backend
 
 ai-run: ai-build ## C++ AIを実行する (例: make ai-run model=easy)
 	./$(AI_BUILD_DIR)/ai_benchmark \
@@ -141,6 +157,21 @@ ai-versus: ai-build ## TSルールでC++ AI同士を対戦 (例: make ai-versus 
 		--timeout-ms "$(versus_timeout_ms)" \
 		--format "$(versus_format)"
 
+# --- C++ CLI ---
+CLI_BUILD_DIR := build/cli
+
+cli-build: ## C++端末版テトリスをReleaseモードでビルドする
+	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+	cmake --build $(CLI_BUILD_DIR) --parallel
+
+cli: cli-build ## 端末版テトリスを起動する
+	./$(CLI_BUILD_DIR)/tetris_cli
+
+cli-test: ## C++端末版のルールテストを実行する
+	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+	cmake --build $(CLI_BUILD_DIR) --parallel
+	ctest --test-dir $(CLI_BUILD_DIR) --output-on-failure
+
 # --- テスト ---
 test: ## 全ての単体テストを実行する
 	npm run test
@@ -181,4 +212,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install ai-build ai-run ai-versus test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
