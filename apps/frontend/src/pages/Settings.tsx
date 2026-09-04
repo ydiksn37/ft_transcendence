@@ -15,7 +15,7 @@ interface ApiKey {
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const mode = new URLSearchParams(location.search).get('mode');
   const { keyConfig } = useConfig();
 
@@ -23,6 +23,76 @@ export default function Settings() {
   const [newKey, setNewKey] = useState<string | null>(null);
   const [newKeyLabel, setNewKeyLabel] = useState('');
   const [loading, setLoading] = useState(false);
+  const [show2FASetup, setShow2FASetup] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [is2FAEnabled, setIs2FAEnabled] = useState(user?.twoFactorEnabled || false);
+
+  const handleGenerate2FA = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/auth/2fa/generate', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQrCodeDataUrl(data.qrCodeDataUrl);
+        setShow2FASetup(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTurnOn2FA = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/auth/2fa/turn-on', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ code: twoFactorCode })
+      });
+      if (res.ok) {
+        setIs2FAEnabled(true);
+        setShow2FASetup(false);
+        setTwoFactorCode('');
+        alert('2FA is now ENABLED!');
+      } else {
+        alert('Invalid code!');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTurnOff2FA = async () => {
+    const code = prompt('Enter current 2FA code to disable:');
+    if (!code) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/auth/2fa/turn-off', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ code })
+      });
+      if (res.ok) {
+        setIs2FAEnabled(false);
+        alert('2FA is now DISABLED!');
+      } else {
+        alert('Invalid code!');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: PROFILE
 
   useEffect(() => {
@@ -324,14 +394,70 @@ export default function Settings() {
           </div>
         </div>
 
+        
+        {/* SECURITY & 2FA SECTION */}
+        <div style={panelStyle}>
+          <h2 style={{ fontSize: '16px', color: '#e74c3c', marginBottom: '20px', borderBottom: '2px solid #444', paddingBottom: '10px' }}>SECURITY & 2FA</h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '15px' }}>
+              <span style={{ color: '#ccc', lineHeight: '1.5' }}>Two-Factor Authentication</span>
+              {is2FAEnabled ? (
+                <button 
+                  onClick={handleTurnOff2FA}
+                  style={{ backgroundColor: '#e74c3c', color: '#fff', border: '2px solid #fff', padding: '10px 20px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", fontSize: '12px' }}
+                >
+                  DISABLE 2FA
+                </button>
+              ) : (
+                <button 
+                  onClick={handleGenerate2FA}
+                  style={{ backgroundColor: '#2ecc71', color: '#fff', border: '2px solid #fff', padding: '10px 20px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", fontSize: '12px' }}
+                >
+                  SETUP 2FA
+                </button>
+              )}
+            </div>
+
+            {show2FASetup && !is2FAEnabled && (
+              <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#222', border: '2px dashed #555', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+                <p style={{ color: '#fff', fontSize: '12px', lineHeight: '1.5', textAlign: 'center' }}>Scan this QR code with Google Authenticator or similar app.</p>
+                {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="2FA QR Code" style={{ width: '200px', height: '200px', imageRendering: 'pixelated' }} />}
+                <input 
+                  type="text" 
+                  placeholder="ENTER 6-DIGIT CODE" 
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '10px', width: '100%', maxWidth: '250px', outline: 'none', fontFamily: "'Press Start 2P', monospace", fontSize: '14px', textAlign: 'center' }}
+                  maxLength={6}
+                />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    onClick={handleTurnOn2FA}
+                    style={{ backgroundColor: '#3498db', color: '#fff', border: '2px solid #fff', padding: '10px 20px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", fontSize: '12px' }}
+                  >
+                    CONFIRM & ENABLE
+                  </button>
+                  <button 
+                    onClick={() => setShow2FASetup(false)}
+                    style={{ backgroundColor: '#555', color: '#fff', border: '2px solid #fff', padding: '10px 20px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace", fontSize: '12px' }}
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* GDPR PRIVACY SECTION */}
         <div style={panelStyle}>
-          <h2 style={{ fontSize: '16px', color: '#9b59b6', marginBottom: '20px', borderBottom: '2px solid #444', paddingBottom: '10px' }}>PRIVACY & DATA (GDPR)</h2>
+          <h2 style={{ fontSize: '16px', color: '#9b59b6', marginBottom: '20px', borderBottom: '2px solid #444', paddingBottom: '10px' }}>ACCOUNT MANAGEMENT</h2>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            <div className="gdpr-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
+            <div className="gdpr-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '15px' }}>
+              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6' }}>
                 <span style={{ color: '#fff' }}>EXPORT YOUR DATA</span><br/><br/>
                 Download all your personal data, game history, and statistics in JSON format.
               </div>
@@ -351,8 +477,8 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="gdpr-row" style={{ borderTop: '2px solid #444', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6', maxWidth: '60%' }}>
+            <div className="gdpr-row" style={{ borderTop: '2px solid #444', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '15px' }}>
+              <div className="gdpr-text" style={{ fontSize: '10px', color: '#ccc', lineHeight: '1.6' }}>
                 <span style={{ color: '#e74c3c' }}>DANGER ZONE: DELETE ACCOUNT</span><br/><br/>
                 Permanently delete your account. This action cannot be undone.
               </div>

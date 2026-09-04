@@ -92,11 +92,7 @@ enum MatchStatus {
   BYE
 }
 
-enum OrgRole {
-  OWNER
-  ADMIN
-  MEMBER
-}
+
 
 enum AchievementCategory {
   GAME
@@ -111,13 +107,7 @@ enum FilePurpose {
   EXPORT
 }
 
-enum ExportStatus {
-  PENDING
-  PROCESSING
-  READY
-  DOWNLOADED
-  EXPIRED
-}
+
 
 // ─────────────────────────────────────────────
 //  User（全機能の中心エンティティ）
@@ -139,6 +129,7 @@ model User {
   oauthProvider    String? // "42"
   oauthId          String?
   twoFactorEnabled Boolean   @default(false)
+  twoFactorSecret  String?
   deletedAt        DateTime? // ソフトデリート (GDPR)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -160,13 +151,9 @@ model User {
   tournamentEntries      TournamentEntry[]
   tournamentsCreated     Tournament[]         @relation("TournamentCreator")
   tournamentsWon         Tournament[]         @relation("TournamentWinner")
-  orgMemberships         OrgMembership[]
-  orgsCreated            Organization[]       @relation("OrgCreator")
-  orgInvitesSent         OrgMembership[]      @relation("Inviter")
   achievements           UserAchievement[]
   apiKeys                ApiKey[]
   fileUploads            FileUpload[]
-  dataExports            DataExportRequest[]
   tmatchAsP1             TournamentMatch[]    @relation("TMatchP1")
   tmatchAsP2             TournamentMatch[]    @relation("TMatchP2")
   tmatchWon              TournamentMatch[]    @relation("TMatchWinner")
@@ -469,44 +456,7 @@ model TournamentMatch {
   @@index([player2Id])
 }
 
-// ─────────────────────────────────────────────
-//  Organization / OrgMembership（中間テーブル）
-// ─────────────────────────────────────────────
 
-model Organization {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?  @db.Text
-  avatarUrl   String?
-  maxMembers  Int      @default(50)
-  isPublic    Boolean  @default(true)
-  creatorId   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  creator     User?           @relation("OrgCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  memberships OrgMembership[]
-
-  @@index([name])
-}
-
-model OrgMembership {
-  id        String   @id @default(uuid())
-  orgId     String
-  userId    String
-  role      OrgRole  @default(MEMBER)
-  invitedBy String?
-  joinedAt  DateTime @default(now())
-
-  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inviter User?        @relation("Inviter", fields: [invitedBy], references: [id], onDelete: SetNull)
-
-  @@unique([orgId, userId])
-  @@index([orgId, role])
-  @@index([userId])
-}
 
 // ─────────────────────────────────────────────
 //  Achievement / UserAchievement（中間テーブル）
@@ -583,23 +533,7 @@ model FileUpload {
   @@index([uploaderId])
 }
 
-// ─────────────────────────────────────────────
-//  DataExportRequest（GDPR データ開示）
-// ─────────────────────────────────────────────
 
-model DataExportRequest {
-  id          String       @id @default(uuid())
-  userId      String
-  status      ExportStatus @default(PENDING)
-  requestedAt DateTime     @default(now())
-  processedAt DateTime?
-  fileUrl     String?
-  expiresAt   DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status])
-}
 
 // ─────────────────────────────────────────────
 //  SprintRecord（40 Lines等のソロプレイ記録）

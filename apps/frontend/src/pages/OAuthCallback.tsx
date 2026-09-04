@@ -11,7 +11,13 @@ export const OAuthCallback: React.FC = () => {
     const accessToken = searchParams.get('accessToken');
     const refreshToken = searchParams.get('refreshToken');
 
-    if (accessToken && refreshToken) {
+    const require2FA = searchParams.get('require2FA');
+    const tempToken = searchParams.get('tempToken');
+    const userId = searchParams.get('userId');
+
+    if (require2FA === 'true' && tempToken && userId) {
+      navigate(`/login?require2FA=true&tempToken=${tempToken}&userId=${userId}`, { replace: true });
+    } else if (accessToken && refreshToken) {
       fetch('/api/users/me', {
         headers: { Authorization: `Bearer ${accessToken}` },
       })

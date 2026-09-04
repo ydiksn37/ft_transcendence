@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { WinRatePanel } from "@/components/dashboard/WinRatePanel"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
+import { TrendChart } from "@/components/dashboard/TrendChart"
+import { DataExportButtons } from "@/components/dashboard/DataExportButtons"
 import type { UserStats, GameRecordView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
 import { useConfig } from '../hooks/useConfig'
@@ -16,6 +18,7 @@ export default function Dashboard() {
 	const mode = new URLSearchParams(location.search).get('mode');
 	const { keyConfig } = useConfig();
 	const [stats, setStats] = useState<UserStats | null>(null);
+	const [username, setUsername] = useState<string>("");
 	const [games, setGames] = useState<GameRecordView[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
@@ -51,6 +54,7 @@ export default function Dashboard() {
 				const meRes = await fetch('/api/users/me', { headers });
 				if (!meRes.ok) throw new Error('Failed to fetch user');
 				const me = await meRes.json();
+				setUsername(me.username);
 
 				// Fetch stats
 				const statsRes = await fetch('/api/users/me/stats', { headers });
@@ -136,10 +140,11 @@ export default function Dashboard() {
 
 	return (
 		<div className="dashboard-container">
-			<div className="dashboard-header">
+			<div className="dashboard-header" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
 				<button className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
-					◀ BACK TO LOBBY
+					◀ BACK
 				</button>
+				{stats && <DataExportButtons stats={stats} games={games} username={username} />}
 			</div>
 
 			<div className="dashboard-content">
@@ -182,6 +187,9 @@ export default function Dashboard() {
 							👥 FRIENDS LIST
 						</button>
 					</div>
+
+					{/* Trend Chart */}
+					<TrendChart games={games} />
 
 					{/* Recent Battles */}
 					<RecentBattles games={games} />
