@@ -64,7 +64,13 @@ export class AuthController {
   @ApiOperation({ summary: '42 OAuthコールバック' })
   async ftCallback(@Req() req: Request, @Res() res: Response) {
     const oauthUser = req.user as any;
-    const result = await this.authService.loginOrRegisterOauth(oauthUser);
+    let result;
+    try {
+      result = await this.authService.loginOrRegisterOauth(oauthUser);
+    } catch (e) {
+      console.error('Error in loginOrRegisterOauth:', e);
+      throw e;
+    }
 
     const tokens = result;
 
