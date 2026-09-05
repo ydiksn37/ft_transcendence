@@ -7,9 +7,7 @@ import type { Player } from '../../hooks/usePlayer';
 import { Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 
-// import bg1 from "../../assets/images/tetrisbg_paris.jpeg"
-// import bg2 from "../../assets/images/tetrisbg_tokyo.jpg"
-// const BG_IMAGES = [bg1, bg2];
+import campuses from "../../assets/images/campuses.json"
 
 import { colorMap } from "../Cell"
 import { soundManager } from '../../utils/soundManager';
@@ -153,23 +151,25 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
 
   const modules = import.meta.glob<string>(
-    "../../assets/images/tetrisbg_*.{jpg,jpeg,png,webp,avif}",
+    "../../assets/images/tetrisbg_*.png",
     { import: "default" }
   );
 
-  const [ bgImage, setBgImage ] = useState<string | null>(null);
+  const [ bg, setBg ] = useState<{ image: string; campus: typeof campuses[0]} | null>(null);
   useEffect(() => {
-    const loaders = Object.values(modules);
-    const randomLoader = loaders[Math.floor(Math.random() * loaders.length)];
-    randomLoader().then(setBgImage);
-  }, []);
+    const picked = campuses[Math.floor(Math.random() * campuses.length)];
+    const loader = modules["../../assets/images/" + picked.file];
+    if (!loader)
+        return ;
+    loader().then((image) => {setBg({image, campus: picked})});
+  }, [])
 
   if (gameMode === 'ONLINE_1V1' && connectionError) {
     return (
       <div style={{
         width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`,
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>
@@ -199,7 +199,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{
         width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`,
+        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`,
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>
@@ -353,7 +353,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   return (
     <div className="tetris-ui-container" style={{
-      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bgImage})`
+      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`
      }}>
       <div className="tetris-ui-content">
         <div className="tetris-ui-scaling-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: isMobileView ? 'top center' : 'center center' }}>
@@ -391,6 +391,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           )}
 
+          <div style={{ display: 'flex', flexDirection: isMobileView ? 'column' : 'row', gap: isMobileView ? '20px' : '40px', justifyContent: 'center', alignItems: isMobileView ? 'center' : 'flex-start', width: '100%' }}>
           <div className="tetris-ui-layout touch-flick-area">
           {appState !== 'SPECTATING' && (
             <>
@@ -500,6 +501,47 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           </div>
           </>
           )}
+        </div>
+
+        {bg?.campus && !isMobileView && (
+          <div style={{
+            position: 'absolute',
+            left: '100%', 
+            bottom: 0,
+            marginLeft: '20px',
+            alignSelf: 'flex-start',
+            width: '220px',
+            backgroundColor: '#0000007c',
+            // border: '4px solid #fff',
+            // boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
+            padding: '16px',
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '9px',
+            lineHeight: 2,
+            color: '#fff',
+          }}>
+            <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '12px' }}>
+              CAMPUS
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--color-neon-cyan)', textShadow: '2px 2px 0px #000' }}>
+              {bg?.campus.flag} {bg?.campus.campus}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.7)' }}>{bg?.campus.country}</div>
+            <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.45)', lineHeight: 1.8, marginTop: '8px', wordBreak: 'break-word' }}>
+              {bg?.campus.address}
+            </div>
+            {bg?.campus.url && (
+              <a 
+                href={bg?.campus.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'block', marginTop: '8px', fontSize: '7px', color: 'var(--color-neon-magenta)', wordBreak: 'break-all' }}
+              >
+                {bg?.campus.url}
+              </a>
+            )}
+          </div>
+         )}
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -607,8 +649,22 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           </div>
         )}
+        </div>
 
       </div>
+      {bg?.campus && !isMobileView && (
+        <div
+          style={{
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '8px',
+            color: "#fff",
+            position: 'absolute',
+            bottom: '0'
+          }}
+        >
+          <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
+        </div>
+      )}
               {countdown && (
             <div style={{
               position: 'fixed',
@@ -753,7 +809,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           )}
 </div>
-    </div>
     </div>
   );
 };
