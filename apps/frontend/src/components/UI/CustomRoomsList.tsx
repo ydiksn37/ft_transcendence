@@ -246,6 +246,15 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
              </div>
           )}
 
+          {tournament && isPlaying && (
+             <button 
+               onClick={() => { socket?.emit('room:spectate', { roomId: inRoom }) }}
+               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+             >
+               SPECTATE MATCH
+             </button>
+          )}
+
           {isOwner && tournament && tournament.root.winnerId && (
              <button 
                onClick={() => socket?.emit('game:clear_tournament')}

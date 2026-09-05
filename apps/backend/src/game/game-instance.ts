@@ -829,6 +829,32 @@ export class GameInstance {
     });
     this.spectators.forEach((sid) => {
       this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
+
+      // フロントエンド互換の盤面データをスペクテイターにも送信
+      const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
+        if (cell === null) return [0, 'clear'];
+        if (cell === 'GARBAGE') return ['X', 'merged'];
+        return [cell, 'merged'];
+      }));
+      // 操作中ミノも重ねる
+      if (!player.isGameOver) {
+        for (const [row, col] of getMinoCells(
+          player.activeMino,
+          player.activeX,
+          player.activeY,
+          player.activeRotation,
+        )) {
+          if (row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS) {
+            frontendStage[row][col] = [player.activeMino, 'merged'];
+          }
+        }
+      }
+      this.server.to(sid).emit('opponent_board_update', {
+        playerId: socketId,
+        stage: frontendStage,
+        score: player.score,
+        isGameOver: player.isGameOver
+      });
     });
   }
 

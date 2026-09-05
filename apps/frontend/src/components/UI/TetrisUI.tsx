@@ -55,6 +55,7 @@ type TetrisUIProps = {
   onQuit?: () => void;
   extraLeftPanel?: React.ReactNode;
   ghostYOverride?: number;
+  onSpectate?: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
@@ -62,7 +63,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, isVsAi, quitGame,
-  onlineRestartLabel, onHold, onQuit, extraLeftPanel, ghostYOverride
+  onlineRestartLabel, onHold, onQuit, onSpectate, extraLeftPanel, ghostYOverride
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
@@ -550,7 +551,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 SPECTATING MATCH
               </h1>
             )}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: '40px', maxWidth: '600px' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: appState === 'SPECTATING' ? '0px' : '40px', maxWidth: appState === 'SPECTATING' ? 'none' : '600px' }}>
               {(() => {
               const numOpp = Math.max(1, Object.keys(opponents || {}).length);
               // 人数が多いほど小さくする (1人: 1.0, 2人: 0.55, 3人: 0.45...)
@@ -722,26 +723,40 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
                 {isCustomRoom ? (
-                  <button
-                    autoFocus
-                    onClick={() => {
-                      if (quitGame) {
-                        quitGame();
-                      }
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      if (quitGame) {
-                        quitGame();
-                      }
-                    }}
-                    style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                    onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                    onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                  >
-                    {isMobileView ? 'RETURN TO ROOM' : 'RETURN TO ROOM (ENTER)'}
-                  </button>
+                  <>
+                    <button
+                      autoFocus
+                      onClick={() => {
+                        if (quitGame) {
+                          quitGame();
+                        }
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        if (quitGame) {
+                          quitGame();
+                        }
+                      }}
+                      style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                      onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                      onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                    >
+                      {isMobileView ? 'RETURN TO ROOM' : 'RETURN TO ROOM (ENTER)'}
+                    </button>
+                    {onSpectate && (
+                      <button
+                        onClick={() => onSpectate()}
+                        onTouchEnd={(e) => { e.preventDefault(); onSpectate(); }}
+                        style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                        onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                      >
+                        SPECTATE MATCH
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     {gameMode === 'ONLINE_1V1' ? (

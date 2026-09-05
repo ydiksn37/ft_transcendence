@@ -40,6 +40,8 @@ export const useGameState = () => {
 
   const [dropTime, setDropTime] = useState<number | null>(null);
   const [gameOver, setGameOver] = useState(false);
+  const gameOverRef = useRef(false);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   const [score, setScore] = useState(0);
 
   const [level, setLevel] = useState(1);
@@ -73,7 +75,7 @@ export const useGameState = () => {
     finalTime, setFinalTime,
     countdown, setCountdown, countdownRef, countdownTimeoutsRef,
     dropTime, setDropTime,
-    gameOver, setGameOver,
+    gameOver, setGameOver, gameOverRef,
     score, setScore,
     level, setLevel,
     lines, setLines,

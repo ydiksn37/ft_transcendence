@@ -64,7 +64,7 @@ const PlayPage = () => {
     finalTime, setFinalTime,
     countdown, setCountdown, countdownRef, countdownTimeoutsRef,
     dropTime, setDropTime,
-    gameOver, setGameOver,
+    gameOver, setGameOver, gameOverRef,
     score, setScore,
     level, setLevel,
     lines, setLines,
@@ -650,8 +650,8 @@ const PlayPage = () => {
     };
   }, [appState, gameOver, countdown]);
 
-  const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
-    appState, appStateRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying } = useMultiplayer({
+    appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
     setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
@@ -764,7 +764,7 @@ const PlayPage = () => {
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
       quitGame={quitGame}
       onQuit={quitGame}
-
+      onSpectate={customRoomIsPlaying ? () => socketRef.current?.emit('room:spectate', {}) : undefined}
       onHold={() => playerHold(stage[0].length, stage)}
     />
   );

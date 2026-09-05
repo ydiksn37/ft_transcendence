@@ -407,10 +407,6 @@ export class GameGateway
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-    if (room.isPlaying) {
-      client.emit('error', { message: 'すでにゲームが進行中です' });
-      return;
-    }
     if (room.players.find(p => p.socket.id === client.id)) {
       client.emit('error', { message: 'すでにルームに参加しています' });
       return;
@@ -432,6 +428,21 @@ export class GameGateway
         players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins }))
       });
     });
+
+    if (room.isPlaying && room.tournament) {
+      const activeMatch = room.tournament.matches.find(m => m.isPlaying);
+      if (activeMatch) {
+        const gameRoomId = `${room.roomId}_${activeMatch.id}`;
+        const instance = this.rooms.get(gameRoomId);
+        if (instance) {
+          instance.addSpectator(client.id);
+          this.clientGameRoom.set(client.id, gameRoomId);
+          client.join(gameRoomId);
+          client.emit('spectating', { roomId: gameRoomId });
+        }
+      }
+      client.emit('tournament_state', { tournament: room.tournament });
+    }
   }
 
   @SubscribeMessage('game:create_tournament')
@@ -853,9 +864,12 @@ export class GameGateway
   }
 
   private routeInput(socketId: string, event: string): void {
+    // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
+    const gameRoomId = this.clientGameRoom.get(socketId);
     const roomId = this.clientRoom.get(socketId);
-    if (!roomId) return;
-    const room = this.rooms.get(roomId);
+    const room =
+      (gameRoomId ? this.rooms.get(gameRoomId) : null) ??
+      (roomId ? this.rooms.get(roomId) : null);
     room?.applyInput(socketId, event);
   }
 
@@ -892,27 +906,36 @@ export class GameGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { lines: number; generated?: number },
   ) {
+    // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
+    const gameRoomId = this.clientGameRoom.get(client.id);
     const roomId = this.clientRoom.get(client.id);
-    if (!roomId) return;
-    
-    // カスタムルームでGameInstanceが動いている場合はそちらに任せる
-    const room = this.rooms.get(roomId);
-    if (room) {
-      room.receiveGarbageFromClient(client.id, data.lines, data.generated);
+
+    // GameInstance が動いているルームを特定する（gameRoomId → roomId の順で探す）
+    const gameRoom =
+      (gameRoomId ? this.rooms.get(gameRoomId) : null) ??
+      (roomId ? this.rooms.get(roomId) : null);
+
+    if (gameRoom) {
+      gameRoom.receiveGarbageFromClient(client.id, data.lines, data.generated);
       return;
     }
 
-    // fallback (1v1 P2P mode)
-    client.to(roomId).emit('receive_garbage', data);
+    // fallback (P2P mode): 同じルームにいる相手にのみ転送
+    if (roomId) {
+      client.to(roomId).emit('receive_garbage', data);
+    }
   }
 
   @SubscribeMessage('game_over')
   handleGameOverEvent(@ConnectedSocket() client: Socket) {
+    // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
+    const gameRoomId = this.clientGameRoom.get(client.id);
     const roomId = this.clientRoom.get(client.id);
-    if (!roomId) return;
-    
-    // Trigger the server-side game over logic to clean up the room
-    const instance = this.rooms.get(roomId);
+
+    const instance =
+      (gameRoomId ? this.rooms.get(gameRoomId) : null) ??
+      (roomId ? this.rooms.get(roomId) : null);
+
     if (instance) {
       if (instance.isAiMatch) {
         instance.handleClientGameOver(client.id);
@@ -926,16 +949,41 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.SPECTATE)
   handleSpectate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string },
+    @MessageBody() data: { roomId?: string },
   ) {
-    const room = this.rooms.get(data.roomId);
+    let targetRoomId = data?.roomId;
+    if (!targetRoomId) {
+      targetRoomId = this.clientRoom.get(client.id);
+    }
+    if (!targetRoomId) {
+      client.emit(ServerEvent.ERROR, { message: 'ルームが見つかりません' });
+      return;
+    }
+
+    let gameRoomId: string = targetRoomId;
+    let room = this.rooms.get(gameRoomId);
+    
+    if (!room) {
+      // Try to find if it's a custom room ID
+      const customRoom = this.customRooms.get(targetRoomId);
+      if (customRoom && customRoom.isPlaying && customRoom.tournament) {
+        const activeMatch = customRoom.tournament.matches.find(m => m.isPlaying);
+        if (activeMatch) {
+          gameRoomId = `${targetRoomId}_${activeMatch.id}`;
+          room = this.rooms.get(gameRoomId);
+        }
+      }
+    }
+
     if (!room) {
       client.emit(ServerEvent.ERROR, { message: 'ルームが見つかりません' });
       return;
     }
-    client.join(data.roomId);
+    
+    this.clientGameRoom.set(client.id, gameRoomId);
+    client.join(gameRoomId);
     room.addSpectator(client.id);
-    client.emit('spectating', { roomId: data.roomId });
+    client.emit('spectating', { roomId: gameRoomId });
   }
 
   // ── チャット ──────────────────────────────────────────────

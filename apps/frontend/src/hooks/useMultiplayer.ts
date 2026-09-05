@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
@@ -9,6 +9,7 @@ import { createStage, type Cell } from '../utils/gameHelpers';
 type UseMultiplayerProps = {
   appState: string;
   appStateRef: MutableRefObject<string>;
+  gameOverRef: MutableRefObject<boolean>;
   setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING') => void;
   setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
@@ -45,7 +46,7 @@ type UseMultiplayerProps = {
 };
 
 export const useMultiplayer = ({
-  appState, appStateRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
   stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
@@ -61,6 +62,8 @@ export const useMultiplayer = ({
       : { forceNew: true as const },
     [token],
   );
+
+  const [customRoomIsPlaying, setCustomRoomIsPlaying] = useState(false);
 
   const joinOnline = useCallback(() => {
     if (socket) {
@@ -144,11 +147,36 @@ export const useMultiplayer = ({
       setDropTime(null);
     });
 
+    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+      if (data.loserId === newSocket.id) {
+        setMatchResult('LOSE');
+        setGameOver(true);
+        setDropTime(null);
+      } else if (data.winnerId === newSocket.id) {
+        setMatchResult('WIN');
+        setGameOver(true);
+        setDropTime(null);
+      } else if (data.winnerId) {
+        // 勝者が自分以外に決まった
+        setMatchResult('LOSE');
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
+
+    newSocket.on('disconnect', (reason: string) => {
+      if (reason === 'io client disconnect') return;
+      if (!gameOverRef.current) {
+        setMatchResult(prev => prev === null ? 'WIN' : prev);
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
 
   }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
     setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
     resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
-    setMatchResult, socketOptions, socketRef, startGame, setDropTime]);
+    setMatchResult, socketOptions, socketRef, startGame, setDropTime, gameOverRef]);
 
   const setupCustomRoomConnection = useCallback(() => {
     setAppState('CUSTOM_ROOMS');
@@ -236,11 +264,40 @@ export const useMultiplayer = ({
       }
     });
 
+    newSocket.on('spectating', () => {
+      // ゲームがすでに終了している（WIN/LOSE表示中）は上書きしない（stale closure回避のためrefを使う）
+      if (gameOverRef.current) return;
+      setAppState('SPECTATING');
+      setGameMode('ONLINE_1V1');
+    });
+
+    newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
+      setCustomRoomIsPlaying(data.isPlaying);
+      // Automatic return from spectating when the match ends
+      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
+        setAppState('CUSTOM_ROOMS');
+      }
+    });
+
+    newSocket.on('game:start', () => {
+      startGame('ONLINE_1V1');
+    });
+
+    newSocket.on('disconnect', (reason: string) => {
+      if (reason === 'io client disconnect') return;
+      if (!gameOver) {
+        setMatchResult(prev => prev === null ? 'WIN' : prev);
+        setGameOver(true);
+        setDropTime(null);
+      }
+    });
+
+
 
   }, [setAppState, setGameMode, setIsWaiting, setConnectionError, setOpponentStage, setOpponentScore,
     setPendingGarbage, pendingGarbageRef, setStage, stageRef, resetPlayer,
     resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
-    socketOptions, setSocket, socketRef, startGame, setDropTime]);
+    socketOptions, setSocket, socketRef, startGame, setDropTime, appStateRef, gameOverRef]);
 
   const startVsAi = useCallback((difficulty: AiDifficulty, actionDelayMs = 50) => {
     if (socket) {
@@ -313,27 +370,9 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('spectating', () => {
-      setAppState('SPECTATING');
-      setGameMode('ONLINE_1V1');
-    });
-
-    newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
-      // Automatic return from spectating when the match ends
-      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
-        setAppState('CUSTOM_ROOMS');
-      }
-    });
-
     newSocket.on('receive_garbage', (data: { lines: number }) => {
       pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
       setPendingGarbage(pendingGarbageRef.current);
-    });
-
-    newSocket.on('opponent_game_over', () => {
-      setMatchResult(prev => prev === null ? 'WIN' : prev);
-      setGameOver(true);
-      setDropTime(null);
     });
 
     newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
@@ -374,5 +413,5 @@ export const useMultiplayer = ({
     }
   }, [gameOver, socket, appState, matchResult]);
 
-  return { joinOnline, setupCustomRoomConnection, startVsAi };
+  return { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying };
 };
