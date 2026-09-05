@@ -15,6 +15,7 @@ import type { Cell } from '../utils/gameHelpers';
 import { soundManager } from '../utils/soundManager';
 import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
+import { isAiDifficulty } from '@transcendence/shared';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -38,7 +39,7 @@ const PlayPage = () => {
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
   const requestedAiDifficulty = (queryParams.get('difficulty') || 'EASY').toUpperCase();
-  const aiDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(requestedAiDifficulty)
+  const aiDifficulty = isAiDifficulty(requestedAiDifficulty)
     ? requestedAiDifficulty
     : 'EASY';
   const requestedAiSpeedMs = Number(queryParams.get('aiSpeedMs') ?? 50);
@@ -107,7 +108,7 @@ const PlayPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuning, tuningRef, setListeningAction } = useConfig();
+  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
@@ -246,33 +247,34 @@ const PlayPage = () => {
     }
      
      // Garbage Lines Logic
+     let generatedGarbage = 0;
+     if (tSpinType === 't-spin') {
+       if (lines === 1) generatedGarbage = 2;
+       else if (lines === 2) generatedGarbage = 4;
+       else if (lines === 3) generatedGarbage = 6;
+     } else if (tSpinType === 'mini-t-spin') {
+       if (lines === 1) generatedGarbage = 1;
+       else if (lines === 2) generatedGarbage = 1;
+     } else {
+       if (lines === 2) generatedGarbage = 1;
+       else if (lines === 3) generatedGarbage = 2;
+       else if (lines === 4) generatedGarbage = 4;
+     }
+
+     if (isB2B && lines > 0) generatedGarbage += 1;
+     if (perfectClear) generatedGarbage += 10;
+     
+     if (comboRef.current > 0) {
+        generatedGarbage += Math.floor((comboRef.current + 1) / 2);
+     }
+
+     if (generatedGarbage > 0) {
+        setAttackLines(prev => prev + generatedGarbage);
+     }
+
      if (gameModeRef.current === 'ONLINE_1V1') {
-        let generatedGarbage = 0;
-        if (tSpinType === 't-spin') {
-          if (lines === 1) generatedGarbage = 2;
-          else if (lines === 2) generatedGarbage = 4;
-          else if (lines === 3) generatedGarbage = 6;
-        } else if (tSpinType === 'mini-t-spin') {
-          if (lines === 1) generatedGarbage = 1;
-          else if (lines === 2) generatedGarbage = 1;
-        } else {
-          if (lines === 2) generatedGarbage = 1;
-          else if (lines === 3) generatedGarbage = 2;
-          else if (lines === 4) generatedGarbage = 4;
-        }
-
-        if (isB2B && lines > 0) generatedGarbage += 1;
-        if (perfectClear) generatedGarbage += 10;
-        
-        if (comboRef.current > 0) {
-           generatedGarbage += Math.floor((comboRef.current + 1) / 2);
-        }
-
-        if (generatedGarbage > 0) {
-           setAttackLines(prev => prev + generatedGarbage);
-        }
-
         let remainingAttacks = [...pendingGarbageRef.current];
+        const originalGeneratedGarbage = generatedGarbage;
         
         if (generatedGarbage > 0) {
            while (remainingAttacks.length > 0 && generatedGarbage > 0) {
@@ -284,10 +286,11 @@ const PlayPage = () => {
                  generatedGarbage = 0;
               }
            }
-           if (generatedGarbage > 0 && socketRef.current) {
-              socketRef.current.emit('send_garbage', { lines: generatedGarbage });
-           }
         }
+        if (originalGeneratedGarbage > 0 && socketRef.current) {
+           socketRef.current.emit('send_garbage', { lines: generatedGarbage, generated: originalGeneratedGarbage });
+        }
+
 
         if (lines === 0 && remainingAttacks.length > 0) {
            const linesToAdd = remainingAttacks.reduce((a, b) => a + b, 0);

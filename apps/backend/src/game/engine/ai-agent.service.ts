@@ -1,7 +1,12 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as readline from 'readline';
-import { AiDifficulty } from '@transcendence/shared';
+import {
+  AI_BOT_CONFIGS,
+  AI_DIFFICULTIES,
+  type AiAgentModel,
+  type AiDifficulty,
+} from '@transcendence/shared';
 import * as crypto from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -31,11 +36,15 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
   private pendingRequests = new Map<string, PendingRequest>();
 
   onModuleInit() {
-    this.agents = {
-      EASY: this.spawnAgent('EASY', 'easy', 50),
-      MEDIUM: this.spawnAgent('MEDIUM', 'hard', 50),
-      HARD: this.spawnAgent('HARD', 'expert', 50),
-    };
+    this.agents = Object.fromEntries(
+      AI_DIFFICULTIES.map((difficulty) => {
+        const config = AI_BOT_CONFIGS[difficulty];
+        return [
+          difficulty,
+          this.spawnAgent(difficulty, config.model, 50),
+        ];
+      }),
+    ) as Record<AiDifficulty, ChildProcessWithoutNullStreams>;
   }
 
   onModuleDestroy() {
@@ -65,7 +74,11 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
     return localCandidates.find(existsSync) ?? 'ai_agent';
   }
 
-  private spawnAgent(difficulty: AiDifficulty, model: string, thinkMs: number) {
+  private spawnAgent(
+    difficulty: AiDifficulty,
+    model: AiAgentModel,
+    thinkMs: number,
+  ) {
     const executable = this.resolveAgentExecutable();
     const agent = spawn(executable, ['--model', model, '--think-ms', thinkMs.toString()]);
 

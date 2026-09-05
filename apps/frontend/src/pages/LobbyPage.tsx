@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AI_DIFFICULTIES, type AiDifficulty } from '@transcendence/shared';
 import { Config } from '../components/UI/Config';
 import { Records } from '../components/UI/Records';
 import { useAuth } from '../hooks/useAuth';
@@ -7,6 +8,11 @@ import { useConfig } from '../hooks/useConfig';
 import './LobbyPage.css';
 
 const MAX_AI_ACTION_DELAY_MS = 250;
+const AI_DIFFICULTY_COLORS: Record<AiDifficulty, string> = {
+  EASY: '#2ecc71',
+  HARD: '#f1c40f',
+  EXPERT: '#9b59b6',
+};
 
 export default function LobbyPage() {
   const { mode } = useParams<{ mode: string }>();
@@ -113,6 +119,8 @@ export default function LobbyPage() {
   }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, token, user]);
 
   const [records, setRecords] = useState<any[]>([]);
+  const [myRecords, setMyRecords] = useState<any[]>([]);
+  const [recordTab, setRecordTab] = useState<'MY' | 'GLOBAL'>('MY');
 
   useEffect(() => {
     if (mode === '40_LINES') {
@@ -123,13 +131,22 @@ export default function LobbyPage() {
             const data = await res.json();
             setRecords(data);
           }
+          if (token) {
+            const resMe = await fetch(`/api/sprint/me`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (resMe.ok) {
+              const dataMe = await resMe.json();
+              setMyRecords(dataMe);
+            }
+          }
         } catch (e) {
-          console.error('Failed to fetch leaderboard', e);
+          console.error('Failed to fetch leaderboard or my records', e);
         }
       };
       fetchLeaderboard();
     }
-  }, [mode]);
+  }, [mode, token]);
 
   const getModeLabel = () => {
     switch (mode) {
@@ -312,27 +329,27 @@ export default function LobbyPage() {
                 <span>INSTANT</span>
               </div>
             </fieldset>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=EASY&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#2ecc71', boxShadow: `0 0 20px #2ecc71`, color: '#2ecc71', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (EASY)
-            </button>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=MEDIUM&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#f1c40f', boxShadow: `0 0 20px #f1c40f`, color: '#f1c40f', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (MEDIUM)
-            </button>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/VS_AI?difficulty=HARD&aiSpeedMs=${aiActionDelayMs}`)}
-              style={{ borderColor: '#9b59b6', boxShadow: `0 0 20px #9b59b6`, color: '#9b59b6', marginBottom: 0, fontSize: '12px' }}
-            >
-              VS AI (HARD)
-            </button>
+            {AI_DIFFICULTIES.map((difficulty) => {
+              const color = AI_DIFFICULTY_COLORS[difficulty];
+              return (
+                <button
+                  key={difficulty}
+                  className="start-game-btn"
+                  onClick={() => handleStartGame(
+                    `/play/VS_AI?difficulty=${difficulty}&aiSpeedMs=${aiActionDelayMs}`,
+                  )}
+                  style={{
+                    borderColor: color,
+                    boxShadow: `0 0 20px ${color}`,
+                    color,
+                    marginBottom: 0,
+                    fontSize: '12px',
+                  }}
+                >
+                  VS AI ({difficulty})
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -369,8 +386,55 @@ export default function LobbyPage() {
           )}
           
           {mode === '40_LINES' && token && user && (
-            <div className="panel records-panel">
-              <Records records={records} />
+            <div className="panel records-panel" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, justifyContent: 'flex-start', overflow: 'hidden' }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                justifyContent: 'center', 
+                padding: '15px', 
+                backgroundColor: 'rgba(0,0,0,0.5)', 
+                borderBottom: '2px solid #444',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
+              }}>
+                <button 
+                  onClick={() => setRecordTab('MY')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'MY' ? '#ff9800' : '#222',
+                    border: recordTab === 'MY' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  MY RECORDS
+                </button>
+                <button 
+                  onClick={() => setRecordTab('GLOBAL')}
+                  style={{
+                    flex: 1,
+                    padding: '15px 10px',
+                    backgroundColor: recordTab === 'GLOBAL' ? '#ff9800' : '#222',
+                    border: recordTab === 'GLOBAL' ? '2px solid #fff' : '2px solid #555',
+                    color: '#fff',
+                    fontFamily: "'Press Start 2P', monospace",
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  GLOBAL
+                </button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', width: '100%', boxSizing: 'border-box' }}>
+                <Records 
+                  records={recordTab === 'MY' ? myRecords : records} 
+                  title={recordTab === 'MY' ? "MY TOP 10" : "GLOBAL TOP 10"} 
+                />
+              </div>
             </div>
           )}
         </div>

@@ -27,16 +27,27 @@ export class ExportService {
     };
   }
 
-  async recordExportRequest(userId: string, data: any) {
-    // In a real application, you might save the JSON to S3 and store the URL in DataExportRequest.
-    // For now, we will create a record and return the data directly.
-    await this.prisma.dataExportRequest.create({
-      data: {
-        userId,
-        status: 'READY',
-        processedAt: new Date(),
-      },
+  
+
+  async importUserSettings(userId: string, settingsData: any) {
+    if (!settingsData) return null;
+    
+    // Whitelist the settings to update
+    const allowedKeys = ['minoSkin', 'showGhost', 'arr', 'das', 'dcd', 'sdf', 'keyBindings', 'volume', 'sfxEnabled', 'musicEnabled'];
+    const updateData: any = {};
+    for (const key of allowedKeys) {
+      if (settingsData[key] !== undefined) {
+        updateData[key] = settingsData[key];
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) return null;
+
+    return this.prisma.userGameSettings.upsert({
+      where: { userId },
+      create: { userId, ...updateData },
+      update: updateData,
     });
-    return data;
   }
 }
+

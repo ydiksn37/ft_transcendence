@@ -1,4 +1,4 @@
-import { Controller, Get, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
 import { ExportService } from './export.service';
 import {
   ApiTags,
@@ -8,7 +8,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 
-@ApiTags('Export (GDPR)')
+@ApiTags('Data Export/Import')
 @Controller('users/me/export')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
@@ -20,7 +20,14 @@ export class ExportController {
   @ApiResponse({ status: 200, description: '全データを含むJSONを返します。' })
   async downloadExportData(@Request() req: any) {
     const data = await this.exportService.exportUserData(req.user.id);
-    await this.exportService.recordExportRequest(req.user.id, data);
     return data;
   }
+
+  @Post('import')
+  @ApiOperation({ summary: '設定をインポート (JSON)' })
+  @ApiResponse({ status: 200, description: 'インポートした設定を保存します。' })
+  async importSettings(@Request() req: any, @Body() body: any) {
+    return this.exportService.importUserSettings(req.user.id, body.settings);
+  }
 }
+

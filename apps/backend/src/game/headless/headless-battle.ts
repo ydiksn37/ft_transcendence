@@ -562,6 +562,7 @@ export class HeadlessBattle {
         tspin,
         perfectClear,
         player.b2b > 0,
+        player.combo,
       );
       const previousB2b = player.b2b;
       const isB2b =

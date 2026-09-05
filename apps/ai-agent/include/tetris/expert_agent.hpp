@@ -26,6 +26,7 @@ struct ExpertPatternFeatures {
   int attackLaneColumn = -1;
   int attackLaneDepth = 0;
   int attackLaneSideRoughness = 0;
+  int attackLaneSideExcessRoughness = 0;
   int attackLaneOccupiedCells = 0;
   // The one central surface valley which the stack is allowed to develop
   // into an I-piece Well. Other simultaneous valleys are competing Wells.
@@ -35,6 +36,9 @@ struct ExpertPatternFeatures {
   int openWellPieceDemand = 0;
   int competingWellUnits = 0;
   int garbageRecoveryShaftDepth = 0;
+  // Empty cells below the surface which no collision-free grounded placement
+  // of any of the seven pieces in any TS/SRS orientation can occupy.
+  int unfillableCavityCells = 0;
 };
 
 struct ExpertPieceAvailability {
@@ -58,18 +62,22 @@ struct ExpertWeights {
   double holesPenalty = 64.56912613860791;
   double holesQuadraticPenalty = 45.0;
   double coveredHolePenalty = 14.665124928338635;
+  double unfillableCavityPenalty = 5000.0;
+  double newUnfillableCavityPenalty = 1000000.0;
+  double unfillableCavityRecoveryReward = 5000.0;
   double bumpinessPenalty = 0.6736262582190178;
   double rowTransitionsPenalty = 2.2;
   double columnTransitionsPenalty = 1.7;
   double maximumHeightPenalty = 6.9260761886542195;
   double cleanBoardReward = 120.0;
-  double wellReward = 11.684005869505752;
-  double structuredStackReward = 100.0;
-  double structuredSideRoughnessPenalty = 8.0;
-  double attackLaneObstructionPenalty = 350.0;
+  double wellReward = 40.0;
+  double structuredStackReward = 400.0;
+  double structuredSideRoughnessPenalty = 20.0;
+  double flatSideExcessRoughnessPenalty = 150.0;
+  double attackLaneObstructionPenalty = 2000.0;
   double competingWellPenalty = 15.0;
   double newCompetingWellPenalty = 40.0;
-  double secondWellCreationPenalty = 4000.0;
+  double secondWellCreationPenalty = 1000000.0;
   double multipleWellResolutionReward = 6000.0;
   double multipleWellDelayPenalty = 600.0;
   double wellSupplyDeficitPenalty = 300.0;
@@ -81,7 +89,8 @@ struct ExpertWeights {
   double readyTSpinDoubleReward = 2176.130766469647;
   double completedTSpinDoublePatternReward = 800.0;
   double completedTSpinDoubleBreakPenalty = 6000.0;
-  double preTSpinDoubleReward = 350.0;
+  double preTSpinDoubleReward = 900.0;
+  double preTSpinDoubleBreakPenalty = 4000.0;
   double wellDistance0Penalty = 10.0;
   double wellDistance1Penalty = 5.0;
   double wellDistance2Reward = 10.0;
@@ -104,10 +113,15 @@ struct ExpertWeights {
   // A T piece is a scarce once-per-bag resource.  Spending it on a safe,
   // isolated TSS can prevent the search from completing a higher-output TSD
   // one or two placements later, even when the immediate TSS scores well.
-  double tSpinSingleOpportunityPenalty = 800.0;
+  double tSpinSingleOpportunityPenalty = 5000.0;
+  // A TSS must not consume or obstruct a developing four-row Well when the I
+  // piece that cashes it out is already visible a few moves ahead.
+  double tSpinSingleBlocksTetrisPenalty = 6000.0;
   double tSpinDoubleReward = 1815.0855564666347;
   double tSpinTripleReward = 2600.0;
   double tetrisReward = 1800.0;
+  double tetrisCashoutReward = 3000.0;
+  double inefficientThreeLinePenalty = 5000.0;
   double perfectClearReward = 4200.0;
   double backToBackContinuationReward = 813.0628762324335;
   double backToBackStartReward = 180.0;
@@ -123,8 +137,13 @@ struct ExpertBoardEvaluation {
   int aggregateHeight = 0;
   int holes = 0;
   int coveredHoleDepth = 0;
+  int unfillableCavityCells = 0;
   int garbageCells = 0;
   int attackLaneColumn = -1;
+  int attackLaneDepth = 0;
+  int attackLaneOccupiedCells = 0;
+  int attackLaneSideRoughness = 0;
+  int attackLaneSideExcessRoughness = 0;
   int structuredWellDepth = 0;
   int garbageRecoveryShaftDepth = 0;
   int openWellCount = 0;

@@ -15,17 +15,19 @@ import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
   ServerEvent,
-  AiDifficulty,
   Cell,
+  isAiDifficulty,
 } from '@transcendence/shared';
 import type {
   AiAgentModel,
+  AiDifficulty,
   AiPreviewStartRequest,
 } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -60,18 +62,27 @@ export class GameGateway
     private readonly chatService: ChatService,
     private readonly aiAgentService: AiAgentService,
     private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {}
 
   afterInit() {
     this.logger.log('GameGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token;
     if (typeof token === 'string' && token.length > 0) {
       try {
         const payload = this.jwtService.verify<{ sub: string }>(token);
-        if (typeof payload.sub === 'string') client.data.userId = payload.sub;
+        if (typeof payload.sub === 'string') {
+          client.data.userId = payload.sub;
+          // DBのオンラインステータスを更新し、全体に通知
+          await this.prisma.user.update({
+            where: { id: payload.sub },
+            data: { isOnline: true },
+          }).catch(() => {});
+          this.server.emit('user_status_changed', { userId: payload.sub, isOnline: true });
+        }
       } catch {
         this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
       }
@@ -79,8 +90,18 @@ export class GameGateway
     this.logger.log(`接続: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`切断: ${client.id}`);
+
+    const userId = client.data.userId;
+    if (userId) {
+      // DBのオンラインステータスをオフラインに更新し、全体に通知
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isOnline: false, lastSeenAt: new Date() },
+      }).catch(() => {});
+      this.server.emit('user_status_changed', { userId, isOnline: false });
+    }
 
     // マッチメイキングキューから除外
     this.matchmakingQueue = this.matchmakingQueue.filter(
@@ -140,7 +161,7 @@ export class GameGateway
     stats: Record<string, any>,
     gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
     isAiGame: boolean,
-    aiDifficulty?: string,
+    aiDifficulty?: AiDifficulty,
   ) {
     const socketIds = Object.keys(stats);
     if (socketIds.length < 2) return;
@@ -399,13 +420,14 @@ export class GameGateway
     room.isPlaying = true;
     const seed = Math.floor(Math.random() * 2147483647);
     
-    const onGameOver = (rId: string, winnerId: string | null) => {
+    const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
       const r = this.customRooms.get(rId);
       if (r) {
         if (winnerId) {
           const winner = r.players.find(p => p.socket.id === winnerId);
           if (winner) winner.wins++;
         }
+        this.saveGameStats(rId, winnerId, stats, 'VERSUS', false);
         r.isPlaying = false;
         this.rooms.delete(rId);
         
@@ -442,18 +464,19 @@ export class GameGateway
   @SubscribeMessage('game:start_vs_ai')
   handleStartVsAi(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { difficulty: AiDifficulty; actionDelayMs?: number },
+    @MessageBody() data: { difficulty?: unknown; actionDelayMs?: unknown },
   ) {
-    if (!['EASY', 'MEDIUM', 'HARD'].includes(data?.difficulty)) {
+    if (!isAiDifficulty(data?.difficulty)) {
       client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
       return;
     }
+    const difficulty = data.difficulty;
 
     const roomId = `ai_${Date.now()}_${client.id}`;
     const seed = Math.floor(Math.random() * 2147483647);
 
     const onGameOver = (rId: string, winnerId: string | null, stats: any) => {
-      this.saveGameStats(rId, winnerId, stats, 'AI', true, data.difficulty);
+      this.saveGameStats(rId, winnerId, stats, 'AI', true, difficulty);
       this.rooms.delete(rId);
     };
 
@@ -469,7 +492,7 @@ export class GameGateway
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
     const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
-    setTimeout(() => instance.start(data.difficulty, actionDelayMs), 1000);
+    setTimeout(() => instance.start(difficulty, actionDelayMs), 1000);
   }
 
   // ── C++ AI Webプレビュー ──────────────────────────────────
@@ -663,7 +686,7 @@ export class GameGateway
   @SubscribeMessage('send_garbage')
   handleSendGarbage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { lines: number },
+    @MessageBody() data: { lines: number; generated?: number },
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
@@ -671,7 +694,7 @@ export class GameGateway
     // カスタムルームでGameInstanceが動いている場合はそちらに任せる
     const room = this.rooms.get(roomId);
     if (room) {
-      room.receiveGarbageFromClient(client.id, data.lines);
+      room.receiveGarbageFromClient(client.id, data.lines, data.generated);
       return;
     }
 
@@ -712,6 +735,17 @@ export class GameGateway
   }
 
   // ── チャット ──────────────────────────────────────────────
+  @SubscribeMessage('chat:join')
+  handleJoinChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    if (data.roomId) {
+      client.join(data.roomId);
+      this.logger.log(`Client ${client.id} joined chat room ${data.roomId}`);
+    }
+  }
+
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
   async handleChatMessage(
     @ConnectedSocket() client: Socket,

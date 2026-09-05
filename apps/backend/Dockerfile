@@ -12,8 +12,6 @@ RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \
 # ─── 開発ステージ ─────────────────────────────
 FROM node:22-alpine AS development
 
-RUN apk add --no-cache libstdc++
-
 WORKDIR /app
 
 # モノレポ全体の依存関係を解決するために必要なファイルをコピー
@@ -24,6 +22,8 @@ COPY packages/shared/package.json ./packages/shared/
 
 RUN --mount=type=cache,target=/root/.npm npm ci
 
+RUN apk add --no-cache libstdc++
+
 # Prisma クライアントを生成
 COPY apps/backend/prisma ./apps/backend/prisma/
 RUN cd apps/backend && npx prisma generate
@@ -31,8 +31,7 @@ RUN cd apps/backend && npx prisma generate
 # ソースコード全体をコピー
 COPY . .
 
-# AI Agentバイナリをコピー
-COPY --from=ai-builder /app/build/ai_agent /usr/local/bin/ai_agent
+# AI Agentバイナリはローカルからマウントするため開発環境ではコピーしない
 
 # 共有パッケージをビルド
 RUN --mount=type=cache,target=/app/node_modules/.cache npm run build --workspace=@transcendence/shared

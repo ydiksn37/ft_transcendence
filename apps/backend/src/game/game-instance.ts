@@ -301,15 +301,16 @@ export class GameInstance {
         player.startTime = Date.now();
         this.broadcastState(socketId, player);
       });
-      await Promise.all(
-        previewPlayers.map(([socketId, player]) => {
-          const agent = this.cppAgents.get(socketId);
-          if (!agent) {
-            throw new Error(`AI preview process missing for ${socketId}`);
-          }
-          return this.runCppPreviewLoop(socketId, player, agent);
-        }),
-      );
+      if (options.mode === 'versus') {
+        await this.runCppVersusPreviewLoop(previewPlayers);
+      } else {
+        const [socketId, player] = previewPlayers[0];
+        const agent = this.cppAgents.get(socketId);
+        if (!agent) {
+          throw new Error(`AI preview process missing for ${socketId}`);
+        }
+        await this.runCppPreviewLoop(socketId, player, agent);
+      }
     } catch (error) {
       if (!this.isRunning) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -477,7 +478,11 @@ export class GameInstance {
   }
 
   /** ハードドロップ */
-  private hardDrop(socketId: string, player: PlayerState): void {
+  private hardDrop(
+    socketId: string,
+    player: PlayerState,
+    deferGarbage?: (lines: number) => void,
+  ): void {
     let dropY = player.activeY;
     while (
       isValidPosition(
@@ -493,7 +498,7 @@ export class GameInstance {
     }
     if (dropY > player.activeY) player.lastMoveWasRotation = false;
     player.activeY = dropY;
-    this.lockPiece(socketId, player);
+    this.lockPiece(socketId, player, deferGarbage);
   }
 
   /** ホールド */
@@ -511,7 +516,11 @@ export class GameInstance {
   }
 
   /** ピースをロック（固定） */
-  private lockPiece(socketId: string, player: PlayerState): void {
+  private lockPiece(
+    socketId: string,
+    player: PlayerState,
+    deferGarbage?: (lines: number) => void,
+  ): void {
     this.clearLockTimer(socketId);
 
     // ピースを固定し、消去行数を確定してから T-Spin を分類する。
@@ -565,6 +574,7 @@ export class GameInstance {
         tspin,
         perfectClear,
         player.b2b > 0,
+        player.combo,
       );
 
       if (clearType === 'tetris') player.tetrises++;
@@ -579,7 +589,8 @@ export class GameInstance {
 
       if (garbage > 0) {
         player.attacksSent += garbage;
-        this.sendGarbageToOpponent(socketId, garbage);
+        if (deferGarbage) deferGarbage(garbage);
+        else this.sendGarbageToOpponent(socketId, garbage);
       }
     } else {
       player.combo = -1;
@@ -654,7 +665,11 @@ export class GameInstance {
     return this.aiDifficulty !== null;
   }
 
-  public receiveGarbageFromClient(senderSocketId: string, lines: number): void {
+  public receiveGarbageFromClient(senderSocketId: string, lines: number, generated?: number): void {
+    const player = this.players.get(senderSocketId);
+    if (player) {
+      player.attacksSent += (generated ?? lines);
+    }
     this.sendGarbageToOpponent(senderSocketId, lines);
   }
 
@@ -996,6 +1011,147 @@ export class GameInstance {
         }
       }
     }
+  }
+
+  /**
+   * Versus preview advances one piece per side in lockstep.
+   *
+   * Search time and the number of movement commands must not decide how many
+   * pieces an AI gets to place.  Both agents therefore see the same turn
+   * boundary, their movement frames are still streamed independently, and
+   * both hard drops are committed before this turn's garbage is delivered.
+   */
+  private async runCppVersusPreviewLoop(
+    previewPlayers: [string, PlayerState][],
+  ): Promise<void> {
+    while (
+      this.isRunning &&
+      previewPlayers.every(
+        ([socketId, player]) =>
+          !player.isGameOver && this.cppAgents.has(socketId),
+      )
+    ) {
+      const turns = await Promise.all(
+        previewPlayers.map(async ([socketId, player]) => {
+          const agent = this.cppAgents.get(socketId);
+          if (!agent) {
+            throw new Error(`AI preview process missing for ${socketId}`);
+          }
+
+          const request = this.makeCppDecisionRequest(socketId, player);
+          this.emitCppPreviewStatus('thinking', {}, socketId);
+          const startedAt = performance.now();
+          const decision = await agent.decide(request);
+          return {
+            socketId,
+            player,
+            agent,
+            decision,
+            decisionMs: performance.now() - startedAt,
+          };
+        }),
+      );
+
+      if (!this.isRunning) return;
+      for (const turn of turns) {
+        if (this.cppAgents.get(turn.socketId) !== turn.agent) return;
+      }
+
+      const gameOverTurns = turns.filter((turn) => turn.decision.gameOver);
+      if (gameOverTurns.length > 0) {
+        await this.handleGameOver(gameOverTurns[0].socketId);
+        return;
+      }
+
+      for (const turn of turns) {
+        this.validateCppDecision(turn.player, turn.decision);
+        this.emitCppPreviewStatus(
+          'executing',
+          {
+            completedDepth: turn.decision.completedDepth,
+            nodesVisited: turn.decision.nodesVisited,
+            decisionMs: Math.round(turn.decisionMs * 100) / 100,
+          },
+          turn.socketId,
+        );
+      }
+
+      // Show rotations, horizontal movement and soft drops for both players.
+      // Even at INF, yielding a microtask between commands keeps the two
+      // streams interleaved instead of running one complete side first.
+      await Promise.all(
+        turns.map((turn) =>
+          this.replayCppPreviewMovement(
+            turn.socketId,
+            turn.player,
+            turn.agent,
+            turn.decision.actions.slice(0, -1),
+          ),
+        ),
+      );
+
+      if (!this.isRunning) return;
+      for (const turn of turns) {
+        if (
+          turn.player.isGameOver ||
+          this.cppAgents.get(turn.socketId) !== turn.agent
+        ) {
+          return;
+        }
+      }
+
+      // A shorter operation sequence must not make its attack land before the
+      // opponent locks the same turn.  Defer all outgoing garbage until both
+      // TS-engine hard drops have completed.
+      const outgoingGarbage: { socketId: string; lines: number }[] = [];
+      for (const turn of turns) {
+        this.hardDrop(turn.socketId, turn.player, (lines) => {
+          outgoingGarbage.push({ socketId: turn.socketId, lines });
+        });
+        if (!this.isRunning) return;
+      }
+      for (const outgoing of outgoingGarbage) {
+        this.sendGarbageToOpponent(outgoing.socketId, outgoing.lines);
+      }
+
+      // Garbage is queued after the lock broadcasts above, so publish the
+      // resulting queue before the next search/movement starts.
+      for (const turn of turns) {
+        if (!turn.player.isGameOver) {
+          this.broadcastState(turn.socketId, turn.player);
+        }
+      }
+
+      await this.waitForCppPreviewActionDelay();
+    }
+  }
+
+  private async replayCppPreviewMovement(
+    socketId: string,
+    player: PlayerState,
+    agent: CppAgentProcess,
+    actions: AgentAction[],
+  ): Promise<void> {
+    for (const action of actions) {
+      if (
+        !this.isRunning ||
+        player.isGameOver ||
+        this.cppAgents.get(socketId) !== agent
+      ) {
+        return;
+      }
+      this.applyInput(socketId, this.agentActionToClientEvent(action));
+      await this.waitForCppPreviewActionDelay();
+    }
+  }
+
+  private async waitForCppPreviewActionDelay(): Promise<void> {
+    const delay = this.cppPreviewOptions?.actionDelayMs ?? 0;
+    if (delay > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      return;
+    }
+    await Promise.resolve();
   }
 
   private makeCppDecisionRequest(

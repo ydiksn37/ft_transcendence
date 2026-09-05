@@ -36,7 +36,7 @@ export class SprintService {
       },
     });
 
-    return records.map((record, index) => ({
+    return records.map((record: any, index: any) => ({
       rank: index + 1,
       record: {
         id: record.id,
@@ -55,9 +55,19 @@ export class SprintService {
       where: { userId, lines: 40 },
       orderBy: { timeMs: 'asc' },
       take: limit,
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
     });
 
-    return records.map((record, index) => ({
+    return records.map((record: any, index: any) => ({
       rank: index + 1,
       record: {
         id: record.id,
@@ -66,6 +76,7 @@ export class SprintService {
         lines: record.lines,
         pieces: record.pieces,
         createdAt: record.createdAt.toISOString(),
+        user: record.user,
       },
     }));
   }

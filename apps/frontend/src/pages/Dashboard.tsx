@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { WinRatePanel } from "@/components/dashboard/WinRatePanel"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
+import { TrendChart } from "@/components/dashboard/TrendChart"
+import { DataExportButtons } from "@/components/dashboard/DataExportButtons"
 import type { UserStats, GameRecordView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
 import { useConfig } from '../hooks/useConfig'
@@ -16,7 +18,10 @@ export default function Dashboard() {
 	const mode = new URLSearchParams(location.search).get('mode');
 	const { keyConfig } = useConfig();
 	const [stats, setStats] = useState<UserStats | null>(null);
+	const [username, setUsername] = useState<string>("");
 	const [games, setGames] = useState<GameRecordView[]>([]);
+	const [historyMode, setHistoryMode] = useState<'ALL' | 'CLASSIC' | 'MODERN'>('ALL');
+	const [historyResult, setHistoryResult] = useState<'ALL' | 'WIN' | 'LOSE'>('ALL');
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
 
@@ -51,6 +56,7 @@ export default function Dashboard() {
 				const meRes = await fetch('/api/users/me', { headers });
 				if (!meRes.ok) throw new Error('Failed to fetch user');
 				const me = await meRes.json();
+				setUsername(me.username);
 
 				// Fetch stats
 				const statsRes = await fetch('/api/users/me/stats', { headers });
@@ -58,7 +64,7 @@ export default function Dashboard() {
 				const statsData = await statsRes.json();
 
 				// Fetch history
-				const historyRes = await fetch('/api/users/me/history', { headers });
+				const historyRes = await fetch(`/api/users/me/history?mode=${historyMode}&result=${historyResult}&limit=50`, { headers });
 				if (!historyRes.ok) throw new Error('Failed to fetch history');
 				const historyData = await historyRes.json();
 
@@ -96,7 +102,7 @@ export default function Dashboard() {
 		}
 
 		fetchData();
-	}, [navigate]);
+	}, [navigate, historyMode, historyResult]);
 
 	if (loading) {
 		return (
@@ -136,10 +142,11 @@ export default function Dashboard() {
 
 	return (
 		<div className="dashboard-container">
-			<div className="dashboard-header">
+			<div className="dashboard-header" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
 				<button className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
-					◀ BACK TO LOBBY
+					◀ BACK
 				</button>
+				{stats && <DataExportButtons stats={stats} games={games} username={username} />}
 			</div>
 
 			<div className="dashboard-content">
@@ -181,7 +188,41 @@ export default function Dashboard() {
 						>
 							👥 FRIENDS LIST
 						</button>
+						<button 
+							onClick={() => navigate('/search')}
+							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#9b59b6', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
+							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+							onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+						>
+							🔍 SEARCH USERS
+						</button>
 					</div>
+
+					{/* History Filters */}
+					<div style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'flex-start', marginBottom: '10px' }}>
+						<select 
+							value={historyMode} 
+							onChange={e => setHistoryMode(e.target.value as any)}
+							style={{ padding: '10px', backgroundColor: '#000', color: '#fff', border: '2px solid #333', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}
+						>
+							<option value="ALL">ALL MODES</option>
+							<option value="CLASSIC">CLASSIC</option>
+							<option value="MODERN">MODERN</option>
+						</select>
+						<select 
+							value={historyResult} 
+							onChange={e => setHistoryResult(e.target.value as any)}
+							style={{ padding: '10px', backgroundColor: '#000', color: '#fff', border: '2px solid #333', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}
+						>
+							<option value="ALL">ALL RESULTS</option>
+							<option value="WIN">WINS</option>
+							<option value="LOSE">LOSSES</option>
+						</select>
+					</div>
+
+					{/* Trend Chart */}
+					<TrendChart games={games} />
 
 					{/* Recent Battles */}
 					<RecentBattles games={games} />
