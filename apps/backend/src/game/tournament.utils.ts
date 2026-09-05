@@ -3,7 +3,8 @@ export interface TournamentNode {
   type: 'MATCH' | 'LEAF';
   playerIds: string[]; // Active players in this match
   winnerId?: string; // Socket ID of the winner
-  children: TournamentNode[]; // Length 0 for LEAF, 2 or 3 for MATCH
+  children: TournamentNode[];
+  isPlaying?: boolean; // Length 0 for LEAF, 2 or 3 for MATCH
 }
 
 export interface Tournament {

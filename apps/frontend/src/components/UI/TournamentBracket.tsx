@@ -3,13 +3,12 @@ import type { TournamentNode } from '../../types/tournament';
 
 type BracketProps = {
   node: TournamentNode;
-  activeMatchId?: string;
   getPlayerName: (id: string) => string;
 };
 
-export const TournamentBracket: React.FC<BracketProps> = ({ node, activeMatchId, getPlayerName }) => {
+export const TournamentBracket: React.FC<BracketProps> = ({ node, getPlayerName }) => {
   const isLeaf = node.type === 'LEAF';
-  const isActive = node.id === activeMatchId;
+  const isActive = node.isPlaying;
 
   if (isLeaf) {
     return (
@@ -32,7 +31,7 @@ export const TournamentBracket: React.FC<BracketProps> = ({ node, activeMatchId,
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {node.children.map((child) => (
           <div key={child.id} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-            <TournamentBracket node={child} activeMatchId={activeMatchId} getPlayerName={getPlayerName} />
+            <TournamentBracket node={child} getPlayerName={getPlayerName} />
             {/* simple line connector */}
             <div style={{ width: '20px', height: '1px', backgroundColor: '#666' }} />
           </div>

@@ -4,6 +4,7 @@ export interface TournamentNode {
   playerIds: string[];
   winnerId?: string;
   children: TournamentNode[];
+  isPlaying?: boolean;
 }
 
 export interface Tournament {

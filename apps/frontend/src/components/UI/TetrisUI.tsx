@@ -316,7 +316,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
       onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
     >
-      QUIT
+      {isCustomRoom && gameOver ? 'RETURN TO ROOM' : 'QUIT'}
     </button>
   ) : null;
 

@@ -210,11 +210,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#111', borderRadius: '8px', overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
               <TournamentBracket 
                 node={tournament.root} 
-                activeMatchId={
-                  tournament.currentMatchIndex < tournament.matches.length 
-                    ? tournament.matches[tournament.currentMatchIndex].id 
-                    : undefined
-                } 
+
                 getPlayerName={getPlayerName} 
               />
             </div>
@@ -222,13 +218,15 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
           {isOwner && players.length >= 2 && !tournament && (
             <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
-              <button 
-                onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
-                disabled={isPlaying}
-                style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-              >
-                {isPlaying ? 'GAME IN PROGRESS...' : 'START NORMAL GAME'}
-              </button>
+              {players.length <= 3 && (
+                <button 
+                  onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
+                  disabled={isPlaying}
+                  style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+                >
+                  {isPlaying ? 'GAME IN PROGRESS...' : 'START NORMAL GAME'}
+                </button>
+              )}
               
               {players.length >= 4 && (
                 <button 
@@ -242,12 +240,18 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             </div>
           )}
 
-          {isOwner && tournament && !isPlaying && tournament.currentMatchIndex < tournament.matches.length && (
+          {tournament && !isPlaying && !tournament.root.winnerId && (
+             <div style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', backgroundColor: '#34495e', color: '#f1c40f', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', animation: 'pulse 1.5s infinite' }}>
+               NEXT MATCH STARTING SOON...
+             </div>
+          )}
+
+          {isOwner && tournament && tournament.root.winnerId && (
              <button 
-               onClick={() => socket?.emit('game:start_tournament_match')}
-               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+               onClick={() => socket?.emit('game:clear_tournament')}
+               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
              >
-               START NEXT MATCH
+               FINISH TOURNAMENT
              </button>
           )}
 

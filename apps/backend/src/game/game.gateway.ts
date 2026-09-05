@@ -57,6 +57,7 @@ export class GameGateway
   private readonly logger = new Logger(GameGateway.name);
   private rooms = new Map<string, GameInstance>();
   private clientRoom = new Map<string, string>(); // socketId -> roomId
+  private clientGameRoom = new Map<string, string>(); // socketId -> gameRoomId
   private matchmakingQueue: Socket[] = [];
 
   // Custom Rooms
@@ -125,7 +126,14 @@ export class GameGateway
 
     // ゲーム中だった場合
     const roomId = this.clientRoom.get(client.id);
-    if (roomId) {
+    const gameRoomId = this.clientGameRoom.get(client.id);
+    
+    if (gameRoomId) {
+      const room = this.rooms.get(gameRoomId);
+      if (room) {
+        room.handleGameOver(client.id);
+      }
+    } else if (roomId) {
       const room = this.rooms.get(roomId);
       if (room) {
         if (room.isAiMatch) {
@@ -134,7 +142,9 @@ export class GameGateway
           room.handleGameOver(client.id);
         }
       }
-      
+    }
+
+    if (roomId) {
       const activeRoom = this.customRooms.get(roomId);
       if (activeRoom) {
         activeRoom.players = activeRoom.players.filter(p => p.socket.id !== client.id);
@@ -438,64 +448,21 @@ export class GameGateway
     room.players.forEach(p => {
       p.socket.emit('tournament_state', { tournament: room.tournament });
     });
+
+    setTimeout(() => {
+      this.startNextTournamentRound(roomId);
+    }, 5000);
   }
 
-  @SubscribeMessage('game:start_tournament_match')
-  handleStartTournamentMatch(@ConnectedSocket() client: Socket) {
+  @SubscribeMessage('game:clear_tournament')
+  handleClearTournament(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     const room = this.customRooms.get(roomId);
-    if (!room || room.ownerSocketId !== client.id || !room.tournament) return;
-
-    const tournament = room.tournament;
-    if (tournament.currentMatchIndex >= tournament.matches.length) return;
-
-    const currentMatch = tournament.matches[tournament.currentMatchIndex];
-    
-    // Check if assigned players are still in the room
-    const activePlayerSockets = currentMatch.playerIds
-      .map(id => room.players.find(p => p.socket.id === id))
-      .filter((p): p is { socket: Socket; userId: string | null; username: string | null; wins: number } => !!p);
-
-    if (activePlayerSockets.length < 2) {
-      // Not enough players left in this match (due to disconnects)
-      // Auto-advance the survivor or a random player if none
-      const survivor = activePlayerSockets.length === 1 ? activePlayerSockets[0]?.socket.id : (currentMatch.playerIds[0] || '');
-      currentMatch.winnerId = survivor || '';
-      
-      // Push winner to parent
-      const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
-      if (parentMatch && survivor) {
-        parentMatch.playerIds.push(survivor);
-      }
-
-      tournament.currentMatchIndex++;
+    if (room && room.ownerSocketId === client.id) {
+      room.tournament = undefined;
       room.players.forEach(p => {
-        p.socket.emit('tournament_state', { tournament: room.tournament });
-      });
-      return;
-    }
-
-    const seed = Math.floor(Math.random() * 2147483647);
-    
-    // Start a GameInstance for these players
-    const instance = new GameInstance(roomId, this.server, seed, (rId, winnerSocketId, stats) => {
-      // Tournament Match Finished
-      currentMatch.winnerId = winnerSocketId || activePlayerSockets[0]?.socket.id || '';
-      
-      const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
-      if (parentMatch) {
-        parentMatch.playerIds.push(currentMatch.winnerId);
-      }
-
-      tournament.currentMatchIndex++;
-      room.isPlaying = false;
-      this.rooms.delete(rId);
-
-      this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
-      
-      room.players.forEach(p => {
-        p.socket.emit('tournament_state', { tournament: room.tournament });
+        p.socket.emit('tournament_state', { tournament: undefined });
         p.socket.emit('custom_room_state', {
           inRoom: true,
           roomId: room.roomId,
@@ -503,37 +470,141 @@ export class GameGateway
           isOwner: room.ownerSocketId === p.socket.id,
           players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
           isPlaying: room.isPlaying,
-          tournament: room.tournament
+          tournament: undefined
         });
       });
-    }, this.aiAgentService);
+      this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+    }
+  }
 
-    this.rooms.set(roomId, instance);
-    room.isPlaying = true;
-    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+  private startNextTournamentRound(roomId: string) {
+    const room = this.customRooms.get(roomId);
+    if (!room || !room.tournament) return;
 
-    // Add active players
-    activePlayerSockets.forEach(p => {
-      if (!p || !p.socket) return;
-      instance.addPlayer(p.socket.id, p.userId);
-      p.socket.emit('match:found', { // ServerEvent.MATCH_FOUND string is 'match:found'
-        roomId,
-        seed,
-        players: activePlayerSockets.map(pl => pl?.socket?.id).filter(id => !!id),
-        isSpectator: false
-      });
-    });
+    const tournament = room.tournament;
+    
+    const matchesToStart = tournament.matches.filter(m => 
+      !m.winnerId && !m.isPlaying && 
+      ((m.children.length > 0 && m.playerIds.length >= m.children.length) || 
+       (m.children.length === 0 && m.playerIds.length >= 2))
+    );
 
-    // Add remaining players as spectators
-    room.players.forEach(p => {
-      if (!p || !p.socket) return;
-      if (!activePlayerSockets.find(s => s?.socket?.id === p.socket.id)) {
-        instance.addSpectator(p.socket.id);
-        p.socket.emit('spectating', { roomId });
+    let startedCount = 0;
+
+    matchesToStart.forEach(currentMatch => {
+      const activePlayerSockets = currentMatch.playerIds
+        .map(id => room.players.find(p => p.socket.id === id))
+        .filter((p): p is { socket: Socket; userId: string | null; username: string | null; wins: number } => !!p);
+
+      if (activePlayerSockets.length < 2) {
+        const survivor = activePlayerSockets.length === 1 ? activePlayerSockets[0]?.socket.id : (currentMatch.playerIds[0] || '');
+        currentMatch.winnerId = survivor || '';
+        
+        const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
+        if (parentMatch && survivor) {
+          parentMatch.playerIds.push(survivor);
+        }
+        return;
       }
+
+      startedCount++;
+      currentMatch.isPlaying = true;
+
+      const gameRoomId = `${roomId}_${currentMatch.id}`;
+      const seed = Math.floor(Math.random() * 2147483647);
+      
+      const instance = new GameInstance(gameRoomId, this.server, seed, (rId, winnerSocketId, stats) => {
+        currentMatch.winnerId = winnerSocketId || activePlayerSockets[0]?.socket.id || '';
+        currentMatch.isPlaying = false;
+        
+        const parentMatch = tournament.matches.find(m => m.children.some(c => c.id === currentMatch.id));
+        if (parentMatch) {
+          parentMatch.playerIds.push(currentMatch.winnerId);
+        }
+
+        for (const [sid, rId] of this.clientGameRoom.entries()) {
+          if (rId === gameRoomId) {
+            this.clientGameRoom.delete(sid);
+          }
+        }
+        this.server.in(gameRoomId).socketsLeave(gameRoomId);
+
+        this.rooms.delete(rId);
+
+        const anyPlaying = tournament.matches.some(m => m.isPlaying);
+        room.isPlaying = anyPlaying;
+
+        if (!anyPlaying) {
+          this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+          if (!tournament.root.winnerId) {
+            setTimeout(() => {
+              this.startNextTournamentRound(roomId);
+            }, 5000);
+          }
+        }
+        
+        room.players.forEach(p => {
+          p.socket.emit('tournament_state', { tournament: room.tournament });
+          p.socket.emit('custom_room_state', {
+            inRoom: true,
+            roomId: room.roomId,
+            name: room.name,
+            isOwner: room.ownerSocketId === p.socket.id,
+            players: room.players.map(pl => ({ socketId: pl.socket.id, userId: pl.userId, username: pl.username, wins: pl.wins })),
+            isPlaying: room.isPlaying,
+            tournament: room.tournament
+          });
+        });
+      }, this.aiAgentService);
+
+      this.rooms.set(gameRoomId, instance);
+
+      activePlayerSockets.forEach(p => {
+        if (!p || !p.socket) return;
+        instance.addPlayer(p.socket.id, p.userId);
+        this.clientGameRoom.set(p.socket.id, gameRoomId);
+        p.socket.join(gameRoomId);
+        p.socket.emit('match:found', {
+          roomId: gameRoomId,
+          seed,
+          players: activePlayerSockets.map(pl => pl?.socket?.id).filter(id => !!id),
+          isSpectator: false
+        });
+      });
+
+      instance.start();
     });
 
-    instance.start();
+    if (startedCount > 0) {
+      room.isPlaying = true;
+      this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+
+      const firstStartedMatch = matchesToStart.find(m => m.isPlaying);
+      if (firstStartedMatch) {
+        const gameRoomId = `${roomId}_${firstStartedMatch.id}`;
+        const instance = this.rooms.get(gameRoomId);
+        if (instance) {
+          room.players.forEach(p => {
+            if (!p || !p.socket) return;
+            const isPlayingInAny = matchesToStart.some(m => m.isPlaying && m.playerIds.includes(p.socket.id));
+            if (!isPlayingInAny) {
+              instance.addSpectator(p.socket.id);
+              this.clientGameRoom.set(p.socket.id, gameRoomId);
+              p.socket.join(gameRoomId);
+              p.socket.emit('spectating', { roomId: gameRoomId });
+            }
+          });
+        }
+      }
+    } else {
+      const anyPlaying = tournament.matches.some(m => m.isPlaying);
+      if (!anyPlaying && !tournament.root.winnerId && matchesToStart.length > 0) {
+        this.startNextTournamentRound(roomId);
+      }
+      room.players.forEach(p => {
+        p.socket.emit('tournament_state', { tournament: room.tournament });
+      });
+    }
   }
 
 
@@ -542,7 +613,7 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     const room = this.customRooms.get(roomId);
-    if (!room || room.ownerSocketId !== client.id || room.players.length < 2) return;
+    if (!room || room.ownerSocketId !== client.id || room.players.length < 2 || room.players.length > 3) return;
 
     if (this.rooms.has(roomId)) {
       client.emit('error', { message: 'Game already running' });
@@ -806,10 +877,11 @@ export class GameGateway
   ) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
-    client.to(roomId).emit('opponent_board_update', { ...data, playerId: client.id });
+    const gameRoomId = this.clientGameRoom.get(client.id) ?? roomId;
+    client.to(gameRoomId).emit('opponent_board_update', { ...data, playerId: client.id });
     
     // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
-    const room = this.rooms.get(roomId);
+    const room = this.rooms.get(gameRoomId);
     if (room && room.isAiMatch) {
       room.updatePlayerBoard(client.id, data.stage, data.score);
     }
