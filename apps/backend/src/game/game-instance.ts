@@ -215,6 +215,7 @@ export class GameInstance {
 
     // AI戦には盤面を送る第2のブラウザがないため、初期状態もサーバーから配信する。
     this.players.forEach((player, socketId) => {
+      player.activeX = this.spawnColumn(player);
       this.broadcastState(socketId, player);
     });
 
@@ -621,9 +622,20 @@ export class GameInstance {
     }
   }
 
+  private spawnColumn(player: PlayerState): number {
+    // The local frontend centers the shape's bounding box: O is 2 columns
+    // wide, all other spawn matrices are 3 or 4 columns wide. Human matches
+    // must use that same origin, rather than spawning O one column left.
+    // C++/AI routes retain their existing x=3 Hold/spawn protocol; they are
+    // separate from authoritative human multiplayer and are not rebased here.
+    if (this.isAiMatch || this.cppPreviewSides.has(player.socketId)) return 3;
+    const width = player.activeMino === 'O' ? 2 : player.activeMino === 'I' ? 4 : 3;
+    return Math.floor(BOARD_COLS / 2) - Math.ceil(width / 2);
+  }
+
   /** ミノをスポーンさせる (TETR.IO仕様: 1マス上にスポーン後、即時落下可能なら落下) */
   private spawnPiece(socketId: string, player: PlayerState): void {
-    player.activeX = 3;
+    player.activeX = this.spawnColumn(player);
     player.activeY = 17; // 1マス上にスポーン
     player.activeRotation = 0;
     player.lastMoveWasRotation = false;

@@ -1,4 +1,4 @@
-import { ServerEvent } from '@transcendence/shared';
+import { ClientEvent, ServerEvent, TETROMINO_SHAPES, type TetrominoType } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { AiAgentService } from './engine/ai-agent.service';
 import { calcGhostY, createEmptyBoard } from './engine/board';
@@ -29,6 +29,60 @@ describe('GameInstance AI matches', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it.each(['I', 'O', 'T', 'S', 'Z', 'J', 'L'] as TetrominoType[])(
+    'centers initial and held %s using the frontend spawn matrix width', type => {
+      const game = new GameInstance('spawn_room', server, 42);
+      game.addPlayer('a', null);
+      game.addPlayer('b', null);
+      const player = game.getPlayers().get('a')!;
+      player.activeMino = type;
+      game.start();
+      const expectedX = type === 'O' ? 4 : 3;
+      expect(player.activeX).toBe(expectedX);
+      player.activeMino = 'I';
+      player.activeX = 0;
+      player.holdMino = type;
+      game.applyInput('a', ClientEvent.HOLD);
+      expect(player.activeMino).toBe(type);
+      expect(player.activeX).toBe(expectedX);
+      game.stop();
+    },
+  );
+
+  it('keeps O coordinates identical in player, opponent, spectator and locked snapshots', () => {
+    const game = new GameInstance('o_room', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.addSpectator('viewer');
+    const player = game.getPlayers().get('a')!;
+    player.activeMino = 'O';
+    game.start();
+    const own = emissions.find(e => e.target === 'a' && e.event === ServerEvent.GAME_STATE)!.payload;
+    expect(own.activeMino.x).toBe(4);
+    for (const target of ['b', 'viewer']) {
+      const other = emissions.find(e => e.target === target && e.event === 'opponent_board_update' && e.payload.playerId === 'a')!.payload;
+      for (const [r, c] of TETROMINO_SHAPES.O[0])
+        expect(other.stage[own.activeMino.y + r][own.activeMino.x + c][0]).toBe('O');
+    }
+    game.applyInput('a', ClientEvent.HARD_DROP);
+    for (const row of [38, 39]) {
+      expect(player.board[row][3]).toBeNull();
+      expect(player.board[row][4]).toBe('O');
+      expect(player.board[row][5]).toBe('O');
+    }
+    // Force O at the head of Next: locking the current I must use the same
+    // spawn origin as the initial piece and a Hold swap.
+    player.board = createEmptyBoard();
+    player.activeMino = 'I';
+    player.activeX = 3;
+    player.activeY = 18;
+    jest.spyOn((game as any).playerBags.get('a'), 'next').mockReturnValue('O');
+    game.applyInput('a', ClientEvent.HARD_DROP);
+    expect(player.activeMino).toBe('O');
+    expect(player.activeX).toBe(4);
+    game.stop();
   });
 
   it('advances human boards equally without browser updates', () => {
