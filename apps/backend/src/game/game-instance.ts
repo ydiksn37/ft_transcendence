@@ -953,12 +953,17 @@ export class GameInstance {
 
         // Socketの連続更新が1描画にまとめられないよう、操作を短い間隔で再生する。
         // 最終操作の後は次の探索へそのまま進む。
+        const replayDelayMs = this.aiReplayDelayMs(
+          action,
+          decision.actions[index + 1],
+          this.aiActionIntervalMs,
+        );
         if (
           index < decision.actions.length - 1 &&
-          this.aiActionIntervalMs > 0
+          replayDelayMs > 0
         ) {
           await new Promise<void>((resolve) =>
-            setTimeout(resolve, this.aiActionIntervalMs),
+            setTimeout(resolve, replayDelayMs),
           );
         }
       }
@@ -997,7 +1002,8 @@ export class GameInstance {
         socketId,
       );
 
-      for (const action of decision.actions) {
+      for (let index = 0; index < decision.actions.length; index++) {
+        const action = decision.actions[index];
         if (
           !this.isRunning ||
           this.cppAgents.get(socketId) !== agent ||
@@ -1005,7 +1011,11 @@ export class GameInstance {
         )
           return;
         this.applyInput(socketId, this.agentActionToClientEvent(action));
-        const delay = this.cppPreviewOptions?.actionDelayMs ?? 0;
+        const delay = this.aiReplayDelayMs(
+          action,
+          decision.actions[index + 1],
+          this.cppPreviewOptions?.actionDelayMs ?? 0,
+        );
         if (delay > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, delay));
         }
@@ -1132,7 +1142,8 @@ export class GameInstance {
     agent: CppAgentProcess,
     actions: AgentAction[],
   ): Promise<void> {
-    for (const action of actions) {
+    for (let index = 0; index < actions.length; index++) {
+      const action = actions[index];
       if (
         !this.isRunning ||
         player.isGameOver ||
@@ -1141,12 +1152,34 @@ export class GameInstance {
         return;
       }
       this.applyInput(socketId, this.agentActionToClientEvent(action));
-      await this.waitForCppPreviewActionDelay();
+      await this.waitForCppPreviewActionDelay(action, actions[index + 1]);
     }
   }
 
-  private async waitForCppPreviewActionDelay(): Promise<void> {
-    const delay = this.cppPreviewOptions?.actionDelayMs ?? 0;
+  private aiReplayDelayMs(
+    action: AgentAction,
+    nextAction: AgentAction | undefined,
+    normalDelayMs: number,
+  ): number {
+    // AI SDF is infinite: consecutive soft-drop cells are applied without a
+    // timer. Keep the normal pause after the final cell so the reached
+    // position is still visible before a rotation, movement, or lock.
+    if (action === 'soft_drop' && nextAction === 'soft_drop') return 0;
+    return normalDelayMs;
+  }
+
+  private async waitForCppPreviewActionDelay(
+    action?: AgentAction,
+    nextAction?: AgentAction,
+  ): Promise<void> {
+    const delay =
+      action === undefined
+        ? (this.cppPreviewOptions?.actionDelayMs ?? 0)
+        : this.aiReplayDelayMs(
+            action,
+            nextAction,
+            this.cppPreviewOptions?.actionDelayMs ?? 0,
+          );
     if (delay > 0) {
       await new Promise<void>((resolve) => setTimeout(resolve, delay));
       return;

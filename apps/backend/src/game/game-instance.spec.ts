@@ -170,7 +170,7 @@ describe('GameInstance AI matches', () => {
         .fn()
         .mockResolvedValueOnce({
           gameOver: false,
-          actions: ['move_left', 'soft_drop', 'hard_drop'],
+          actions: ['move_left', 'soft_drop', 'soft_drop', 'hard_drop'],
         })
         .mockImplementation(() => new Promise(() => undefined)),
     } as unknown as AiAgentService;
@@ -206,7 +206,8 @@ describe('GameInstance AI matches', () => {
         emission.target === humanSocketId &&
         emission.event === 'opponent_board_update',
     );
-    expect(updatesAfterSoftDrop).toHaveLength(3);
+    // SDF INF applies consecutive soft-drop cells in the same timer tick.
+    expect(updatesAfterSoftDrop).toHaveLength(4);
 
     await jest.advanceTimersByTimeAsync(125);
 
@@ -215,7 +216,7 @@ describe('GameInstance AI matches', () => {
         emission.target === humanSocketId &&
         emission.event === 'opponent_board_update',
     );
-    expect(updates).toHaveLength(4);
+    expect(updates).toHaveLength(5);
     expect(updates.some((update) => update.payload.score > 0)).toBe(true);
     expect(
       updates.some((update) =>
@@ -226,6 +227,17 @@ describe('GameInstance AI matches', () => {
     ).toBe(true);
 
     game.stop();
+  });
+
+  it('uses infinite SDF only between consecutive AI soft-drop cells', () => {
+    const game = new GameInstance('ai_sdf_room', server, 11);
+    const replayDelay = (action: AgentAction, next?: AgentAction) =>
+      (game as any).aiReplayDelayMs(action, next, 125);
+
+    expect(replayDelay('soft_drop', 'soft_drop')).toBe(0);
+    expect(replayDelay('move_left', 'soft_drop')).toBe(125);
+    expect(replayDelay('soft_drop', 'rotate_cw')).toBe(125);
+    expect(replayDelay('soft_drop', 'hard_drop')).toBe(125);
   });
 
   it('waits for both versus agents before placing either next piece', async () => {

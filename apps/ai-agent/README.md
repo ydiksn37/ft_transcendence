@@ -147,8 +147,16 @@ rotation; a sealed slot under stacked roof blocks receives no reward. Destroying
 a reachable completed slot before firing its TSD also has an explicit penalty.
 The preceding `000/101` pattern receives a smaller reward to keep a useful setup
 from being pruned before its roof is built. A five-category well-distance
-feature favors central wells, and placing a T without a detected T-Spin receives
-a small `tWasted` penalty. These three
+feature favors central wells, and placing a T without a line-clearing T-Spin
+receives a `tWasted` opportunity cost (base `t_wasted_penalty`: 400). A
+zero-line spin is also ordinary T consumption for this purpose. The multiplier
+is 0.20 if another T remains in Hold, rises with the visible replacement's
+distance (0.40 to 1.50), and is 1.50 when no replacement is visible. A safe
+existing TSD setup increases the cost by 25%. Damage repair/garbage excavation
+reduces it to 15%, high-board urgency further reduces it, and emergency mode
+disables it. Perfect clears are exempt. This encourages saving T through legal
+Hold choices, not withholding a needed rescue placement or forcing Hold when
+it is locked. These three
 rewards are 7-bag-aware: the evaluator finds the distance to T in Hold/Next,
 values a completed slot most when T is immediately available, and values a
 preceding setup most when T is two to four moves away. If T is outside the
@@ -178,6 +186,90 @@ make ai-run model=expert think_ms=50
 
 Expert always starts a decision from the server-supplied board. Its returned
 operation sequence remains subject to replay by the authoritative game engine.
+
+#### Opening book (Expert only)
+
+Ordinary Expert search considers all four central split stacks: 3-6, 4-5,
+5-4 and 6-3 (one Well column between the two blocks). It chooses a lane
+from the current board and visible supply when ordinary search first runs,
+including after the opening book. The lane is then retained until the board
+is empty again; it is not hard-coded to the right side. Both orientations are
+eligible, but their frequency is not forced to be equal.
+
+To keep that lane usable for TSD construction, Expert also penalizes tall
+shoulders: each immediately adjacent column is compared with the rounded-up
+average height of the other columns in its own block. The first two rows of
+protrusion are allowed for a TSD roof; additional protrusion is squared and
+weighted by `attack_lane_shoulder_penalty` (default 220). This cost is 1.5x
+when T is held or visible within three Next entries. It is a soft stacking
+preference, not a ban on Tetris, a reward for creating holes, or a restriction
+on the verified opening book.
+
+Expert first tries a first-bag TSD opener with J-roof/SZ-roof arrangements and
+their horizontal mirrors. On a compatible second bag it follows with an LST
+TSD. The layouts are based on
+[Shiwehi's TSD opener guide](https://shiwehi.com/tetris/template/tsdopener.php).
+Orders unsupported by TKI also try the normal route of
+[Reliable TSD](https://w.atwiki.jp/sasasa123/pages/70.html), listed in the
+[requested beginner-template guide](https://w.atwiki.jp/sasasa123/pages/1051.html).
+This includes both second- and third-bag arrangements and their mirrors:
+**TSD -> B2B TSD -> B2B TSD**. Without garbage cancellation, the Reliable
+route sends 4 + 5 + 5 base garbage lines under the current engine's attack
+table (TKI/LST sends 4 + 5). TST and consecutive-perfect-clear routes are
+not included.
+
+Before using a layout, the book verifies all seven placements with the actual
+movement/SRS rules and Hold order. Preparation clears no lines, and the final
+T must really spin and clear two rows. The residual board must have no covered
+empty cells. Only one fresh bag is planned at a time; continuations are
+validated when their bag becomes visible, not promised from invisible pieces.
+
+The server's five Next entries are sufficient when Active (and possibly Hold)
+identify six distinct pieces of the fresh seven-bag: only the final missing
+type is deduced. Shorter or inconsistent previews are rejected. If T is held
+at the bag boundary, the next active piece may be swapped for it regardless of
+that unknown piece's identity; no future RNG is reproduced or predicted.
+
+Every request rechecks the expected board, visible piece order, Hold permission,
+spawn position, and pending garbage. A mismatch or incoming garbage cancels the
+book immediately and permanently for that agent's game. Unsupported orders or
+an exhausted planning budget also fall back to ordinary Expert search. The
+book is attempted only on a fresh agent's empty first board, finishes after at
+most three TSDs, and does not restart after a midgame perfect clear. Start a fresh
+agent process/object for a new game, as the backend already does.
+
+`findExpertOpeningPlan` exposes the full plan for deterministic diagnostics;
+`ExpertAgent::lastOpeningName()` identifies decisions actually made by the
+book. Easy/Hard, JSON input, and TS game rules are unchanged.
+
+#### Donation templates
+
+Expert also recognizes the basic donating families described in
+[Shiwehi's basic donating guide](https://shiwehi.com/tetris/template/basicdonating.php):
+O, stairs, Z, parapet, flat L, JZ-A/B, STMB Cave, SZ-B, JS-A/B, and OZ,
+including horizontal mirrors and translated positions. These are local donor
+footprints, not fixed whole-board openings or automatic moves.
+
+The `donation_template_reward` feature values a verified preparation with at
+most **two remaining setup placements (including a roof), followed by TSD**.
+It checks the actual remaining Next/Hold order, legal donor movement (including
+tucks), a reachable final T rotation, and the board after the two-row clear.
+A donor must not clear a line during preparation. The clear must reopen the
+lower shaft, leave no covered empty cells, and leave at most one Well no deeper
+than four cells. Extra holes or a covering third row invalidate the plan.
+Only one plan earns preparation credit; completing more of it increases that
+credit. Verified temporary holes do not receive the otherwise prohibitive
+unowned/unfillable-hole penalty, but ordinary height and hole costs remain.
+
+For speed and safety, this feature requires a stack no higher than 12, a nearby
+visible/held T, and a clean residual stack no higher than 10. It does not invent
+unknown Next pieces, arbitrary filler moves, or three-plus-piece preparations.
+A named silhouette whose donor route is blocked is rejected even if it would
+work with a different construction order. The ordinary beam search still makes
+the final move choice; recognition does not force every donation to be played.
+`findExpertDonationTemplate` exposes the same verifier for deterministic tests.
+The older `donation_unlock_reward` separately rewards line clears that expose
+a new TSD/TST; it is not the template detector.
 
 ### Expert weight tuning
 
