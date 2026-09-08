@@ -40,6 +40,15 @@ export const useKeyboardControls = ({
   const horizKeys = useRef<string[]>([]);
   const dasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const arrTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const softDropTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const softDropRef = useRef(softDrop);
+  useEffect(() => { softDropRef.current = softDrop; }, [softDrop]);
+  const clearSoftDrop = useCallback(() => {
+    if (softDropTimerRef.current !== null) {
+      clearInterval(softDropTimerRef.current);
+      softDropTimerRef.current = null;
+    }
+  }, []);
 
   const movePlayerRef = useRef(movePlayerHorizontal);
   useEffect(() => { movePlayerRef.current = movePlayerHorizontal; }, [movePlayerHorizontal]);
@@ -108,21 +117,23 @@ export const useKeyboardControls = ({
   useEffect(() => {
     if (gameOver || !dropTime) {
       clearDASARR();
+      clearSoftDrop();
       heldKeys.current.clear();
       horizKeys.current = [];
     }
-  }, [gameOver, dropTime, clearDASARR]);
+  }, [gameOver, dropTime, clearDASARR, clearSoftDrop]);
 
-  useEffect(() => () => clearDASARR(), [clearDASARR]);
+  useEffect(() => () => { clearDASARR(); clearSoftDrop(); }, [clearDASARR, clearSoftDrop]);
   useEffect(() => {
     const release = () => {
       clearDASARR();
+      clearSoftDrop();
       heldKeys.current.clear();
       horizKeys.current = [];
     };
     window.addEventListener('blur', release);
     return () => window.removeEventListener('blur', release);
-  }, [clearDASARR]);
+  }, [clearDASARR, clearSoftDrop]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -187,8 +198,18 @@ export const useKeyboardControls = ({
         case conf.softDrop:
           if (!heldKeys.current.has(conf.softDrop)) {
             heldKeys.current.add(conf.softDrop);
+            softDropRef.current();
+            // OS key-repeat may switch to the horizontal key while Down is
+            // still held. Repeat independently, including while grounded, so
+            // movement into an open shaft resumes dropping without a re-press.
+            clearSoftDrop();
+            softDropTimerRef.current = setInterval(() => {
+              if (!heldKeys.current.has(keyConfigRef.current.softDrop) ||
+                  (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') ||
+                  countdownRef.current === 'READY') return;
+              softDropRef.current();
+            }, 33);
           }
-          softDrop();
           break;
         case conf.hardDrop:
           if (!e.repeat) {
@@ -222,13 +243,14 @@ export const useKeyboardControls = ({
           break;
       }
     },
-    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, quitGame, countdownRef]
+    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, quitGame, countdownRef, clearSoftDrop]
   );
 
   const handleKeyUp = useCallback(
     (e: KeyboardEvent) => {
       const code = e.code;
       const conf = keyConfigRef.current;
+      if (code === conf.softDrop) clearSoftDrop();
 
       if (code === conf.left || code === conf.right) {
         heldKeys.current.delete(code);
@@ -247,7 +269,7 @@ export const useKeyboardControls = ({
         heldKeys.current.delete(code);
       }
     },
-    [clearDASARR, getActiveDir, startDASARR, keyConfigRef, stageRef]
+    [clearDASARR, getActiveDir, startDASARR, keyConfigRef, stageRef, clearSoftDrop]
   );
 
   useEffect(() => {

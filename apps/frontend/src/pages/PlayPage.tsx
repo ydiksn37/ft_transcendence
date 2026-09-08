@@ -701,7 +701,12 @@ const PlayPage = () => {
   const controls = serverMatch ? {
     movePlayerHorizontal: (dir: number, _stage: Cell[][], instant: boolean) =>
       sendInput(dir < 0 ? ClientEvent.MOVE_LEFT : ClientEvent.MOVE_RIGHT, instant ? 10 : 1),
-    softDrop: () => sendInput(ClientEvent.SOFT_DROP, tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf))),
+    softDrop: () => {
+      // Do not flood the server while grounded. The held-key timer uses the
+      // latest snapshot, so a successful sideways move re-enables dropping.
+      if (!serverState || serverState.activeMino.y >= serverState.ghostY) return;
+      sendInput(ClientEvent.SOFT_DROP, tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf)));
+    },
     hardDrop: () => sendInput(ClientEvent.HARD_DROP),
     playerRotate: (_stage: Cell[][], dir: number) => sendInput(dir === 2 ? ClientEvent.ROTATE_180 : dir < 0 ? ClientEvent.ROTATE_CCW : ClientEvent.ROTATE_CW),
     playerHold: () => sendInput(ClientEvent.HOLD),
