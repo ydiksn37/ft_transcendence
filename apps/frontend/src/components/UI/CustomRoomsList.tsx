@@ -130,8 +130,12 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   };
 
   const getPlayerName = (socketId: string) => {
+    // トーナメントの playerNames マップを最優先で参照（退出済みプレイヤーも解決できる）
+    if (tournament?.playerNames?.[socketId]) {
+      return tournament.playerNames[socketId];
+    }
     const idx = players.findIndex(p => p.socketId === socketId);
-    if (idx === -1) return socketId;
+    if (idx === -1) return `Player (left)`;
     const p = players[idx];
     return p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
   };

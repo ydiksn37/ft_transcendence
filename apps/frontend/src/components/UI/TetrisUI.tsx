@@ -80,9 +80,11 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       
       const expectedHeight = isMobile ? 750 : 800;
       const scaleY = (vh - 40) / expectedHeight;
+      // 観戦時: 各盤面はフルサイズ(560px)で並ぶ → 2人なら 560*2+gap≈1160, 1人なら 560
+      // 通常1v1: 自分+相手で 1100px, ソロ: 700px
       const expectedWidth = isMobile
-        ? (gameMode === 'ONLINE_1V1' ? 550 : 460)
-        : (gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
+        ? (gameMode === 'ONLINE_1V1' && appState !== 'SPECTATING' ? 550 : 460)
+        : (appState === 'SPECTATING' ? 1160 : gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
       const scaleX = (vw - 20) / expectedWidth;
       setScale(Math.min(1.5, scaleY, scaleX));
     };
@@ -143,13 +145,18 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     );
   };
 
-  const modeMeta = {
-    'MARATHON': { label: 'MARATHON', color: 'var(--color-neon-cyan)' },
-    '40_LINES': { label: '40 LINES', color: 'var(--color-neon-cyan)' },
-    '4_WIDE': { label: '4 WIDE', color: 'var(--color-neon-cyan)' },
-    'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
-    'AI_PREVIEW': { label: 'AI PREVIEW', color: 'var(--color-neon-cyan)' },
-  }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  const modeMeta = (() => {
+    if (appState === 'SPECTATING') {
+      return { label: 'SPECTATING MATCH', color: '#f1c40f' };
+    }
+    return ({
+      'MARATHON':   { label: 'MARATHON',     color: 'var(--color-neon-cyan)' },
+      '40_LINES':   { label: '40 LINES',     color: 'var(--color-neon-cyan)' },
+      '4_WIDE':     { label: '4 WIDE',       color: 'var(--color-neon-cyan)' },
+      'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
+      'AI_PREVIEW': { label: 'AI PREVIEW',   color: 'var(--color-neon-cyan)' },
+    } as const)[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  })();
 
   const modules = import.meta.glob<string>(
     "../../assets/images/tetrisbg_*.png",
@@ -393,8 +400,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
 
           <div style={{ display: 'flex', flexDirection: isMobileView ? 'column' : 'row', gap: isMobileView ? '20px' : '40px', justifyContent: 'center', alignItems: isMobileView ? 'center' : 'flex-start', width: '100%' }}>
-          <div className="tetris-ui-layout touch-flick-area">
           {appState !== 'SPECTATING' && (
+          <div className="tetris-ui-layout touch-flick-area">
+          {(
             <>
               {!isMobileView && (
                 <div className="tetris-side-panel">
@@ -503,6 +511,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           </>
           )}
         </div>
+          )}
 
         {bg?.campus && !isMobileView && (
           <div style={{
@@ -545,17 +554,15 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
          )}
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {appState === 'SPECTATING' && (
-              <h1 style={{ color: '#f1c40f', fontFamily: '"Press Start 2P", monospace', marginBottom: '20px', textShadow: '2px 2px 0px #000' }}>
-                SPECTATING MATCH
-              </h1>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: appState === 'SPECTATING' ? '0px' : '40px', maxWidth: appState === 'SPECTATING' ? 'none' : '600px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: appState === 'SPECTATING' ? '100%' : undefined }}>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: appState === 'SPECTATING' ? '100%' : undefined, maxWidth: appState === 'SPECTATING' ? 'none' : '600px' }}>
               {(() => {
               const numOpp = Math.max(1, Object.keys(opponents || {}).length);
-              // 人数が多いほど小さくする (1人: 1.0, 2人: 0.55, 3人: 0.45...)
-              const oppScale = numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45);
+              // 観戦時は通常対戦と同じフルサイズで表示する
+              // 通常対戦時のみ人数に応じて縮小する (1人: 1.0, 2人: 0.55, 3人: 0.45...)
+              const oppScale = appState === 'SPECTATING'
+                ? 1
+                : (numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45));
               const oppWidth = 560; // 本来の幅 (300 + 80 + 80 + gaps)
               const oppHeight = 700; // 本来の高さ
 
@@ -666,7 +673,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
         </div>
       )}
-              {countdown && (
+              {countdown && appState !== 'SPECTATING' && (
             <div style={{
               position: 'fixed',
               top: '50%',

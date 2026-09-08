@@ -455,7 +455,14 @@ export class GameGateway
     if (!room || room.ownerSocketId !== client.id || room.players.length < 4) return;
     
     const playerIds = room.players.map(p => p.socket.id);
-    room.tournament = generateTournamentBracket(playerIds);
+
+    // socketId → 表示名 のマップを開始時点で記録（退出後も名前を参照できるように）
+    const playerNames: Record<string, string> = {};
+    room.players.forEach((p, idx) => {
+      playerNames[p.socket.id] = p.username ?? p.userId ?? `Player ${idx + 1}`;
+    });
+
+    room.tournament = generateTournamentBracket(playerIds, playerNames);
     
     // Broadcast tournament state
     room.players.forEach(p => {

@@ -662,12 +662,20 @@ const PlayPage = () => {
   });
 
   const quitGame = useCallback(() => {
+    // ゲーム中にQUITした場合は game_over をサーバーに送信して相手に勝利判定を与える
+    // （ESCキーで disconnect するのと同じ挙動にする）
+    if (socketRef.current && !gameOver && appState === 'ONLINE_1V1') {
+      socketRef.current.emit('game_over');
+      socketRef.current.disconnect();
+      setSocket(null);
+    }
+
     if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
       setAppState('CUSTOM_ROOMS');
     } else {
       navigate(`/lobby/${mode}`);
     }
-  }, [mode, navigate, setAppState]);
+  }, [mode, navigate, setAppState, socketRef, setSocket, gameOver, appState]);
 
   initializeRouteRef.current = () => {
     if (!mode) return;

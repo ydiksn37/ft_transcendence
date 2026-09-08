@@ -169,6 +169,10 @@ export const useKeyboardControls = ({
         if (gameOver) return;
         if (!e.repeat) {
           if (socketRef.current) {
+            // オンライン対戦中にESCで抜けた場合は相手に勝利を与える
+            if (appStateRef.current === 'ONLINE_1V1') {
+              socketRef.current.emit('game_over');
+            }
             socketRef.current.disconnect();
             setSocket(null);
           }

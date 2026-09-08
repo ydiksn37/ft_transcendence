@@ -11,6 +11,8 @@ export interface Tournament {
   root: TournamentNode;
   matches: TournamentNode[]; // Flat list of MATCH nodes in bottom-up order for easy execution
   currentMatchIndex: number;
+  /** socketId → 表示名 のマップ。退出後も名前を参照できるように開始時点で記録する。 */
+  playerNames: Record<string, string>;
 }
 
 /**
@@ -68,7 +70,10 @@ function flattenMatches(node: TournamentNode, matches: TournamentNode[]) {
   matches.push(node);
 }
 
-export function generateTournamentBracket(playerIds: string[]): Tournament {
+export function generateTournamentBracket(
+  playerIds: string[],
+  playerNames: Record<string, string> = {},
+): Tournament {
   const N = playerIds.length;
   if (N < 2) throw new Error("At least 2 players are required for a tournament.");
 
@@ -110,6 +115,7 @@ export function generateTournamentBracket(playerIds: string[]): Tournament {
   return {
     root,
     matches,
-    currentMatchIndex: 0
+    currentMatchIndex: 0,
+    playerNames,
   };
 }
