@@ -140,6 +140,7 @@ export class GameInstance {
 
   /** プレイヤーを追加 */
   addPlayer(socketId: string, userId: string | null): void {
+    if (!this.playerBags.has(socketId)) this.playerBags.set(socketId, new BagGenerator(this.seed));
     const firstMino = this.bagFor(socketId).next();
     this.players.set(socketId, {
       socketId,
@@ -187,6 +188,12 @@ export class GameInstance {
   /** 観戦者を追加 */
   addSpectator(socketId: string): void {
     this.spectators.add(socketId);
+  }
+  removeSpectator(socketId: string): void {
+    this.spectators.delete(socketId);
+  }
+  broadcastSnapshot(): void {
+    this.players.forEach((player, id) => this.broadcastState(id, player));
   }
 
   /** ゲームスタート */
@@ -777,7 +784,10 @@ export class GameInstance {
     }
 
     // 自分の状態を送信
-    this.server.to(socketId).emit(ServerEvent.GAME_STATE, gameState);
+    this.server.to(socketId).emit(ServerEvent.GAME_STATE, {
+      ...gameState, roomId: this.roomId,
+      piecesPlaced: player.piecesPlaced, attacksSent: player.attacksSent,
+    });
 
     // 相手と観戦者に自分の盤面を送信
     const opponentState = {
@@ -794,7 +804,7 @@ export class GameInstance {
         this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
 
         // AIの盤面更新を、フロントエンドの40行ステージ形式に合わせて送信
-        if (this.isAiMatch && socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`) {
+        if (!this.isAiMatch || (socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`)) {
           const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
             if (cell === null) return [0, 'clear'];
             if (cell === 'GARBAGE') return ['X', 'merged'];
@@ -817,10 +827,11 @@ export class GameInstance {
             }
           }
           this.server.to(sid).emit('opponent_board_update', { 
+            roomId: this.roomId,
             playerId: socketId,
             stage: frontendStage, 
             score: player.score,
-            next: this.bag.peek(5),
+            next: this.bagFor(socketId).peek(5),
             hold: player.holdMino,
             isGameOver: player.isGameOver
           });
@@ -850,6 +861,9 @@ export class GameInstance {
         }
       }
       this.server.to(sid).emit('opponent_board_update', {
+        roomId: this.roomId,
+        next: this.bagFor(socketId).peek(5),
+        hold: player.holdMino,
         playerId: socketId,
         stage: frontendStage,
         score: player.score,
@@ -877,11 +891,13 @@ export class GameInstance {
     const winner = survivors.length === 1 ? survivors[0] : null;
 
     const gameOverPayload: {
+      roomId: string;
       loserId: string;
       winnerId: string | null;
       loserSide?: AiPreviewSide;
       winnerSide?: AiPreviewSide;
     } = {
+      roomId: this.roomId,
       loserId: socketId,
       winnerId: winner?.socketId ?? null,
     };

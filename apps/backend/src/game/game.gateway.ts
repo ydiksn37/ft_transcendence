@@ -131,6 +131,7 @@ export class GameGateway
     if (gameRoomId) {
       const room = this.rooms.get(gameRoomId);
       if (room) {
+        room.removeSpectator(client.id);
         room.handleGameOver(client.id);
       }
     } else if (roomId) {
@@ -439,6 +440,7 @@ export class GameGateway
           this.clientGameRoom.set(client.id, gameRoomId);
           client.join(gameRoomId);
           client.emit('spectating', { roomId: gameRoomId });
+          instance.broadcastSnapshot();
         }
       }
       client.emit('tournament_state', { tournament: room.tournament });
@@ -603,6 +605,7 @@ export class GameGateway
               this.clientGameRoom.set(p.socket.id, gameRoomId);
               p.socket.join(gameRoomId);
               p.socket.emit('spectating', { roomId: gameRoomId });
+              instance.broadcastSnapshot();
             }
           });
         }
@@ -892,6 +895,10 @@ export class GameGateway
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     const gameRoomId = this.clientGameRoom.get(client.id) ?? roomId;
+    const instance = this.rooms.get(gameRoomId);
+    // Human multiplayer is authoritative. Never accept a browser snapshot
+    // as a second source of truth or let a spectator publish a board.
+    if (!instance || !instance.isAiMatch || !instance.getPlayers().has(client.id)) return;
     client.to(gameRoomId).emit('opponent_board_update', { ...data, playerId: client.id });
     
     // AI戦の場合、AI側に人間の盤面状態を伝えるためにGameInstanceを更新する
@@ -916,6 +923,7 @@ export class GameGateway
       (roomId ? this.rooms.get(roomId) : null);
 
     if (gameRoom) {
+      if (!gameRoom.isAiMatch) return;
       gameRoom.receiveGarbageFromClient(client.id, data.lines, data.generated);
       return;
     }
@@ -939,8 +947,6 @@ export class GameGateway
     if (instance) {
       if (instance.isAiMatch) {
         instance.handleClientGameOver(client.id);
-      } else {
-        instance.handleGameOver(client.id);
       }
     }
   }
@@ -980,10 +986,21 @@ export class GameGateway
       return;
     }
     
+    const previousId = this.clientGameRoom.get(client.id);
+    const previous = previousId ? this.rooms.get(previousId) : undefined;
+    if (previous?.isActive() && previous.getPlayers().get(client.id)?.isGameOver === false) {
+      client.emit(ServerEvent.ERROR, { message: '対戦中は観戦へ切り替えられません' });
+      return;
+    }
+    if (previousId) {
+      previous?.removeSpectator(client.id);
+      client.leave(previousId);
+    }
     this.clientGameRoom.set(client.id, gameRoomId);
     client.join(gameRoomId);
     room.addSpectator(client.id);
     client.emit('spectating', { roomId: gameRoomId });
+    room.broadcastSnapshot();
   }
 
   // ── チャット ──────────────────────────────────────────────

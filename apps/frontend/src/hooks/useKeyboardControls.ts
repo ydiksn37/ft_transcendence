@@ -114,6 +114,15 @@ export const useKeyboardControls = ({
   }, [gameOver, dropTime, clearDASARR]);
 
   useEffect(() => () => clearDASARR(), [clearDASARR]);
+  useEffect(() => {
+    const release = () => {
+      clearDASARR();
+      heldKeys.current.clear();
+      horizKeys.current = [];
+    };
+    window.addEventListener('blur', release);
+    return () => window.removeEventListener('blur', release);
+  }, [clearDASARR]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {

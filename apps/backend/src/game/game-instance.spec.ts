@@ -31,6 +31,41 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('advances human boards equally without browser updates', () => {
+    const game = new GameInstance('human_room', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    jest.advanceTimersByTime(60000);
+    const a = game.getPlayers().get('a')!;
+    const b = game.getPlayers().get('b')!;
+    expect(a.piecesPlaced).toBeGreaterThan(0);
+    expect(a.board).toEqual(b.board);
+    expect(a.activeMino).toBe(b.activeMino);
+    expect(a.activeY).toBe(b.activeY);
+    expect(emissions.some(e => e.target === 'a' && e.event === 'opponent_board_update' && e.payload.roomId === 'human_room')).toBe(true);
+    game.stop();
+  });
+
+  it('snapshots both players for a spectator and stops sending after removal', () => {
+    const game = new GameInstance('watch_room', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.addSpectator('viewer');
+    game.broadcastSnapshot();
+    const snapshots = emissions.filter(e => e.target === 'viewer' && e.event === 'opponent_board_update');
+    expect(snapshots.map(e => e.payload.playerId)).toEqual(['a', 'b']);
+    snapshots.forEach(e => {
+      expect(e.payload.roomId).toBe('watch_room');
+      expect(e.payload.next).toHaveLength(5);
+      expect(e.payload.hold).toBeNull();
+    });
+    game.removeSpectator('viewer');
+    emissions.length = 0;
+    game.broadcastSnapshot();
+    expect(emissions.some(e => e.target === 'viewer')).toBe(false);
+  });
+
   it('starts versus preview players from identical independent seeded bags', () => {
     const game = new GameInstance('preview_seed_room', server, 12345);
     game.addCppPreviewPlayer('preview_left', 'left', 'expert');
@@ -156,6 +191,7 @@ describe('GameInstance AI matches', () => {
         emission.target === roomId && emission.event === ServerEvent.GAME_OVER,
     );
     expect(gameOver?.payload).toEqual({
+      roomId,
       loserId: `ai_${roomId}`,
       winnerId: 'human_socket',
     });

@@ -15,7 +15,7 @@ import type { Cell } from '../utils/gameHelpers';
 import { soundManager } from '../utils/soundManager';
 import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
-import { isAiDifficulty } from '@transcendence/shared';
+import { isAiDifficulty, ClientEvent, TETROMINO_SHAPES, type GameState } from '@transcendence/shared';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -35,6 +35,8 @@ const formatTime = (ms: number) => {
 const PlayPage = () => {
   const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'VS_AI' }>();
   const location = useLocation();
+  const serverMatch = mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS';
+  const [serverState, setServerState] = useState<(GameState & { piecesPlaced?: number; attacksSent?: number }) | null>(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
@@ -433,7 +435,7 @@ const PlayPage = () => {
 
   // Start or clear lock timer based on ground collision
   useEffect(() => {
-    if (gameOver || player.collided || !dropTime) {
+    if (serverMatch || gameOver || player.collided || !dropTime) {
       clearLockTimer();
       return;
     }
@@ -474,7 +476,7 @@ const PlayPage = () => {
     } else {
       clearLockTimer();
     }
-  }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
+  }, [serverMatch, player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
 
 
 
@@ -534,11 +536,11 @@ const PlayPage = () => {
 
   // Automatically apply soft drop if softDrop key is held and the piece moves/rotates/spawns
   useEffect(() => {
-    if (gameOver || !dropTime) return;
+    if (serverMatch || gameOver || !dropTime) return;
     if (heldKeys.current.has(keyConfig.softDrop)) {
       softDrop();
     }
-  }, [player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
+  }, [serverMatch, player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
 
   /** Hard drop: instantly land the piece at ghost position (+2 pts/row) */
   const hardDrop = useCallback(() => {
@@ -651,6 +653,7 @@ const PlayPage = () => {
   }, [appState, gameOver, countdown]);
 
   const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying } = useMultiplayer({
+    setServerState, setStartTime,
     appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
@@ -691,16 +694,28 @@ const PlayPage = () => {
 
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
+  const sendInput = (event: string, count = 1) => {
+    if (appStateRef.current !== 'ONLINE_1V1' || gameOverRef.current || !serverState || serverState.isGameOver) return;
+    for (let i = 0; i < count; ++i) socketRef.current?.emit(event);
+  };
+  const controls = serverMatch ? {
+    movePlayerHorizontal: (dir: number, _stage: Cell[][], instant: boolean) =>
+      sendInput(dir < 0 ? ClientEvent.MOVE_LEFT : ClientEvent.MOVE_RIGHT, instant ? 10 : 1),
+    softDrop: () => sendInput(ClientEvent.SOFT_DROP, tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf))),
+    hardDrop: () => sendInput(ClientEvent.HARD_DROP),
+    playerRotate: (_stage: Cell[][], dir: number) => sendInput(dir === 2 ? ClientEvent.ROTATE_180 : dir < 0 ? ClientEvent.ROTATE_CCW : ClientEvent.ROTATE_CW),
+    playerHold: () => sendInput(ClientEvent.HOLD),
+  } : { movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold };
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
-    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
+    ...controls, startGame,
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
   useTouchControls({
     stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
-    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
+    ...controls,
     startGame, quitGame: () => {
       if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
         setAppState('CUSTOM_ROOMS');
@@ -711,7 +726,7 @@ const PlayPage = () => {
   });
 
   // Auto-drop (gravity)
-  useInterval(drop, dropTime);
+  useInterval(drop, serverMatch ? null : dropTime);
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
 
@@ -724,17 +739,31 @@ const PlayPage = () => {
     return <div style={{ backgroundColor: '#111', width: '100vw', height: '100vh' }} />;
   }
 
+  const shownStage: Cell[][] = serverMatch
+    ? (serverState?.board.map(row => row.map(cell => [cell === 'GARBAGE' ? 'X' : cell ?? 0, cell === null ? 'clear' : 'merged'] as Cell)) ?? createStage(10))
+    : stage;
+  let shownPlayer = player;
+  if (serverMatch) {
+    const active = serverState?.activeMino;
+    const size = active?.type === 'I' ? 4 : active?.type === 'O' ? 2 : 3;
+    const matrix: (string | number)[][] = Array.from({ length: size }, () => Array(size).fill(0));
+    if (active && !serverState?.isGameOver)
+      for (const [r, c] of TETROMINO_SHAPES[active.type][active.rotation]) matrix[r][c] = active.type;
+    shownPlayer = { pos: { x: active?.x ?? 3, y: active?.y ?? 18 }, tetromino: matrix,
+      collided: false, rotationIndex: active?.rotation ?? 0, spawnCount: 0 };
+  }
   return (
     <TetrisUI
-      stage={stage}
-      player={player}
+      stage={shownStage}
+      player={shownPlayer}
+      ghostYOverride={serverMatch ? serverState?.ghostY : undefined}
       gameOver={gameOver}
       gameMode={gameMode}
-      score={score}
-      level={level}
-      lines={lines}
-      nextPieceKeys={nextPieceKeys}
-      holdInfo={holdInfo}
+      score={serverMatch ? serverState?.score ?? 0 : score}
+      level={serverMatch ? serverState?.level ?? 1 : level}
+      lines={serverMatch ? serverState?.lines ?? 0 : lines}
+      nextPieceKeys={serverMatch ? serverState?.nextMinos ?? [] : nextPieceKeys}
+      holdInfo={serverMatch ? { tetromino: serverState?.holdMino ?? null, hasHeld: !(serverState?.canHold ?? true) } : holdInfo}
       isWaiting={isWaiting}
       connectionError={connectionError}
       matchResult={matchResult}
@@ -743,13 +772,13 @@ const PlayPage = () => {
       opponentNextPieceKeys={opponentNextPieceKeys}
       opponentHoldMino={opponentHoldMino}
       opponents={opponents}
-      pendingGarbage={pendingGarbage}
+      pendingGarbage={serverMatch ? [serverState?.garbageQueue ?? 0] : pendingGarbage}
       actionText={actionText}
-      countdown={countdown}
+      countdown={serverMatch ? (!serverState && !isWaiting ? 'READY' : null) : countdown}
       finalTime={finalTime}
       elapsedTime={elapsedTime}
-      piecesPlaced={piecesPlaced}
-      attackLines={attackLines}
+      piecesPlaced={serverMatch ? serverState?.piecesPlaced ?? 0 : piecesPlaced}
+      attackLines={serverMatch ? serverState?.attacksSent ?? 0 : attackLines}
       socketRef={socketRef}
       setSocket={setSocket}
       setIsWaiting={setIsWaiting}
@@ -765,7 +794,7 @@ const PlayPage = () => {
       quitGame={quitGame}
       onQuit={quitGame}
       onSpectate={customRoomIsPlaying ? () => socketRef.current?.emit('room:spectate', {}) : undefined}
-      onHold={() => playerHold(stage[0].length, stage)}
+      onHold={() => controls.playerHold(stage[0].length, stage)}
     />
   );
 };

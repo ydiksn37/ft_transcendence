@@ -1,12 +1,14 @@
-import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
-import type { AiDifficulty } from '@transcendence/shared';
+import type { AiDifficulty, GameState } from '@transcendence/shared';
 import { setRandomSeed } from '../utils/tetrominos';
 import { createStage, type Cell } from '../utils/gameHelpers';
 
 type UseMultiplayerProps = {
+  setServerState: (state: GameState | null) => void;
+  setStartTime: (time: number | null) => void;
   appState: string;
   appStateRef: MutableRefObject<string>;
   gameOverRef: MutableRefObject<boolean>;
@@ -46,6 +48,7 @@ type UseMultiplayerProps = {
 };
 
 export const useMultiplayer = ({
+  setServerState, setStartTime,
   appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
   setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
   stage, score, nextPieceKeys, holdInfo,
@@ -64,6 +67,32 @@ export const useMultiplayer = ({
   );
 
   const [customRoomIsPlaying, setCustomRoomIsPlaying] = useState(false);
+  const activeRoom = useRef<string | null>(null);
+  const beginServerMatch = (data: { roomId: string }) => {
+    activeRoom.current = data.roomId;
+    setServerState(null);
+    setStartTime(Date.now());
+    setOpponents({});
+    setOpponentStage(null);
+    gameOverRef.current = false;
+    appStateRef.current = 'ONLINE_1V1';
+    setGameOver(false);
+    setMatchResult(null);
+    setIsWaiting(false);
+    setGameMode('ONLINE_1V1');
+    setAppState('ONLINE_1V1');
+    // Input enablement only; PlayPage disables local gravity in server matches.
+    setDropTime(1000);
+  };
+  const listenToServer = (connection: Socket) => {
+    connection.on('game:state', (state: GameState & { roomId: string }) => {
+      if (state.roomId !== activeRoom.current || appStateRef.current === 'SPECTATING') return;
+      setServerState(state);
+    });
+    connection.on('game:start', (data: { roomId: string }) => {
+      if (data.roomId === activeRoom.current) setStartTime(Date.now());
+    });
+  };
 
   const joinOnline = useCallback(() => {
     if (socket) {
@@ -105,16 +134,15 @@ export const useMultiplayer = ({
       setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
     });
 
-    newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
-      setRandomSeed(data.seed);
-      startGame('ONLINE_1V1');
-    });
+    listenToServer(newSocket);
+    newSocket.on('match:found', beginServerMatch);
 
     newSocket.on('waiting_for_match', () => {
       setIsWaiting(true);
     });
 
     newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      if ((data as { roomId?: string }).roomId !== activeRoom.current) return;
       // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
@@ -147,7 +175,8 @@ export const useMultiplayer = ({
       setDropTime(null);
     });
 
-    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+    newSocket.on('game:over', (data: { roomId: string; loserId: string; winnerId: string | null }) => {
+      if (data.roomId !== activeRoom.current) return;
       if (data.loserId === newSocket.id) {
         setMatchResult('LOSE');
         setGameOver(true);
@@ -210,15 +239,11 @@ export const useMultiplayer = ({
       setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
     });
 
-    newSocket.on('match:found', (data: { playerNum: number; seed: number }) => {
-      setRandomSeed(data.seed);
-      setOpponents({});
-      setAppState('ONLINE_1V1');
-      setIsWaiting(false);
-      startGame('ONLINE_1V1');
-    });
+    listenToServer(newSocket);
+    newSocket.on('match:found', beginServerMatch);
 
     newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
+      if ((data as { roomId?: string }).roomId !== activeRoom.current) return;
       // 従来の1対1用（後方互換）
       setOpponentStage(data.stage);
       setOpponentScore(data.score);
@@ -245,7 +270,9 @@ export const useMultiplayer = ({
       setPendingGarbage(pendingGarbageRef.current);
     });
 
-    newSocket.on('game:over', (data: { loserId: string; winnerId: string | null }) => {
+    newSocket.on('game:over', (data: { roomId: string; loserId: string; winnerId: string | null }) => {
+      if (data.roomId !== activeRoom.current) return;
+      if (appStateRef.current === 'SPECTATING') return;
       // 自分が負けた場合
       if (data.loserId === newSocket.id) {
         setMatchResult('LOSE');
@@ -264,9 +291,17 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('spectating', () => {
-      // ゲームがすでに終了している（WIN/LOSE表示中）は上書きしない（stale closure回避のためrefを使う）
-      if (gameOverRef.current) return;
+    newSocket.on('spectating', (data: { roomId: string }) => {
+      activeRoom.current = data.roomId;
+      setServerState(null);
+      setOpponents({});
+      setOpponentStage(null);
+      setMatchResult(null);
+      setGameOver(false);
+      gameOverRef.current = false;
+      appStateRef.current = 'SPECTATING';
+      setIsWaiting(false);
+      setDropTime(null);
       setAppState('SPECTATING');
       setGameMode('ONLINE_1V1');
     });
@@ -279,9 +314,8 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('game:start', () => {
-      startGame('ONLINE_1V1');
-    });
+    // match:found establishes the server match; game:start must not start a
+    // second, browser-owned simulation.
 
     newSocket.on('disconnect', (reason: string) => {
       if (reason === 'io client disconnect') return;
@@ -300,6 +334,8 @@ export const useMultiplayer = ({
     socketOptions, setSocket, socketRef, startGame, setDropTime, appStateRef, gameOverRef]);
 
   const startVsAi = useCallback((difficulty: AiDifficulty, actionDelayMs = 50) => {
+    activeRoom.current = null;
+    setServerState(null);
     if (socket) {
       socket.disconnect();
       setSocket(null);
@@ -402,13 +438,13 @@ export const useMultiplayer = ({
   }, [socketRef]);
 
   useEffect(() => {
-    if (socket && appState === 'ONLINE_1V1' && !isWaiting) {
+    if (socket && activeRoom.current === null && appState === 'ONLINE_1V1' && !isWaiting) {
       socket.emit('board_update', { stage, score, next: nextPieceKeys, hold: holdInfo.tetromino });
     }
   }, [stage, score, nextPieceKeys, holdInfo, socket, appState, isWaiting]);
 
   useEffect(() => {
-    if (socket && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {
+    if (socket && activeRoom.current === null && gameOver && appState === 'ONLINE_1V1' && matchResult === 'LOSE') {
       socket.emit('game_over');
     }
   }, [gameOver, socket, appState, matchResult]);
