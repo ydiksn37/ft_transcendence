@@ -196,11 +196,24 @@ export class GameInstance {
     this.players.forEach((player, id) => this.broadcastState(id, player));
   }
 
+  /** Publish the exact initial state before READY; start without drawing a
+   * new piece or consuming Next again. stop() also cancels this countdown. */
+  prepareHumanMatch(countdownMs = 3000): void {
+    if (this.isRunning || this.simulationStartTimer) return;
+    this.players.forEach(player => { player.activeX = this.spawnColumn(player); });
+    this.broadcastSnapshot();
+    this.simulationStartTimer = setTimeout(() => {
+      this.simulationStartTimer = null;
+      this.start();
+    }, countdownMs);
+  }
+
   /** ゲームスタート */
   start(
     aiDifficulty?: AiDifficulty,
     aiActionIntervalMs = DEFAULT_AI_ACTION_INTERVAL_MS,
   ): void {
+    if (this.isRunning) return;
     this.isRunning = true;
     this.aiDifficulty = aiDifficulty ?? null;
     this.aiActionIntervalMs = Math.max(
@@ -797,7 +810,7 @@ export class GameInstance {
 
     // 自分の状態を送信
     this.server.to(socketId).emit(ServerEvent.GAME_STATE, {
-      ...gameState, roomId: this.roomId,
+      ...gameState, roomId: this.roomId, started: this.isRunning,
       piecesPlaced: player.piecesPlaced, attacksSent: player.attacksSent,
     });
 
@@ -1423,6 +1436,6 @@ export class GameInstance {
   }
 
   isActive(): boolean {
-    return this.isRunning;
+    return this.isRunning || this.simulationStartTimer !== null;
   }
 }

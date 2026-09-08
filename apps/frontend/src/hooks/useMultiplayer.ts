@@ -81,13 +81,14 @@ export const useMultiplayer = ({
     setIsWaiting(false);
     setGameMode('ONLINE_1V1');
     setAppState('ONLINE_1V1');
-    // Input enablement only; PlayPage disables local gravity in server matches.
-    setDropTime(1000);
+    // READY can already have a board/Next; input waits for server start.
+    setDropTime(null);
   };
   const listenToServer = (connection: Socket) => {
-    connection.on('game:state', (state: GameState & { roomId: string }) => {
+    connection.on('game:state', (state: GameState & { roomId: string; started: boolean }) => {
       if (state.roomId !== activeRoom.current || appStateRef.current === 'SPECTATING') return;
       setServerState(state);
+      setDropTime(state.started && !state.isGameOver ? 1000 : null);
     });
     connection.on('game:start', (data: { roomId: string }) => {
       if (data.roomId === activeRoom.current) setStartTime(Date.now());
@@ -156,8 +157,8 @@ export const useMultiplayer = ({
           [data.playerId as string]: {
             stage: data.stage,
             score: data.score,
-            nextPieceKeys: data.next,
-            holdMino: data.hold,
+            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
+            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
             isGameOver: data.isGameOver
           }
         }));
@@ -257,8 +258,8 @@ export const useMultiplayer = ({
           [data.playerId as string]: {
             stage: data.stage,
             score: data.score,
-            nextPieceKeys: data.next,
-            holdMino: data.hold,
+            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
+            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
             isGameOver: data.isGameOver
           }
         }));
@@ -398,8 +399,8 @@ export const useMultiplayer = ({
           [data.playerId as string]: {
             stage: data.stage,
             score: data.score,
-            nextPieceKeys: data.next,
-            holdMino: data.hold,
+            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
+            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
             isGameOver: data.isGameOver
           }
         }));

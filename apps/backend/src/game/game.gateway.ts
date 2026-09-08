@@ -270,7 +270,7 @@ export class GameGateway
       });
 
       // ゲームスタート
-      setTimeout(() => instance.start(), 3000); // 3秒カウントダウン後
+      instance.prepareHumanMatch();
     } else {
       this.matchmakingQueue.push(client);
       client.emit('waiting_for_match');
@@ -592,7 +592,7 @@ export class GameGateway
         });
       });
 
-      instance.start();
+      instance.prepareHumanMatch();
     });
 
     if (startedCount > 0) {
@@ -681,7 +681,7 @@ export class GameGateway
       seed,
     });
 
-    setTimeout(() => instance.start(), 3000);
+    instance.prepareHumanMatch();
   }
 
   // ── AI 対戦開始 ───────────────────────────────────────────

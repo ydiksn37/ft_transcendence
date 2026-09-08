@@ -31,6 +31,50 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('publishes READY with all Next queues and starts without consuming another piece', () => {
+    const game = new GameInstance('ready_room', server, 42);
+    for (const id of ['a', 'b', 'c', 'd']) game.addPlayer(id, null);
+    game.addSpectator('viewer');
+    const next = jest.spyOn((game as any).playerBags.get('a'), 'next');
+    game.prepareHumanMatch();
+    expect(game.isActive()).toBe(true);
+    const initial = emissions.filter(e => e.event === ServerEvent.GAME_STATE);
+    expect(initial).toHaveLength(4);
+    for (const e of initial) {
+      expect(e.payload.started).toBe(false);
+      expect(e.payload.activeMino).toEqual(initial[0].payload.activeMino);
+      expect(e.payload.nextMinos).toEqual(initial[0].payload.nextMinos);
+      expect(e.payload.nextMinos).toHaveLength(5);
+    }
+    const others = emissions.filter(e => e.event === 'opponent_board_update');
+    expect(others).toHaveLength(16);
+    others.forEach(e => expect(e.payload.next).toHaveLength(5));
+    game.applyInput('a', ClientEvent.HOLD);
+    game.applyInput('a', ClientEvent.HARD_DROP);
+    jest.advanceTimersByTime(2999);
+    expect(game.getPlayers().get('a')!.piecesPlaced).toBe(0);
+    expect(next).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    const started = emissions.filter(e => e.event === ServerEvent.GAME_STATE && e.target === 'a').at(-1)!.payload;
+    expect(started.started).toBe(true);
+    expect(started.activeMino).toEqual(initial[0].payload.activeMino);
+    expect(started.nextMinos).toEqual(initial[0].payload.nextMinos);
+    expect(next).not.toHaveBeenCalled();
+    game.applyInput('a', ClientEvent.HARD_DROP);
+    expect(game.getPlayers().get('a')!.activeMino).toBe(started.nextMinos[0]);
+    game.stop();
+  });
+
+  it('cancels READY when a match is stopped', () => {
+    const game = new GameInstance('cancelled', server, 42);
+    game.addPlayer('a', null);
+    game.prepareHumanMatch();
+    game.stop();
+    jest.advanceTimersByTime(10000);
+    expect(game.isActive()).toBe(false);
+    expect(emissions.some(e => e.event === ServerEvent.GAME_START)).toBe(false);
+  });
+
   it.each(['I', 'O', 'T', 'S', 'Z', 'J', 'L'] as TetrominoType[])(
     'centers initial and held %s using the frontend spawn matrix width', type => {
       const game = new GameInstance('spawn_room', server, 42);
