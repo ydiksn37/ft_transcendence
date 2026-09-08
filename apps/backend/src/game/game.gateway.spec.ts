@@ -24,6 +24,19 @@ describe('GameGateway', () => {
     gateway = module.get<GameGateway>(GameGateway);
   });
 
+  it('requires a valid room and piece identity for human network input', () => {
+    const room = { isAiMatch: false, applyInput: jest.fn() };
+    (gateway as any).rooms.set('room', room);
+    (gateway as any).clientRoom.set('a', 'room');
+    const client: any = { id: 'a' };
+    gateway.handleHardDrop(client);
+    gateway.handleHardDrop(client, { roomId: 'old', pieceId: 7 });
+    gateway.handleHardDrop(client, { roomId: 'room', pieceId: NaN });
+    expect(room.applyInput).not.toHaveBeenCalled();
+    gateway.handleHardDrop(client, { roomId: 'room', pieceId: 7 });
+    expect(room.applyInput).toHaveBeenCalledWith('a', 'game:hard_drop', 7);
+  });
+
   it('should be defined', () => {
     expect(gateway).toBeDefined();
   });

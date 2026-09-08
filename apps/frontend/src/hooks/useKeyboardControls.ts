@@ -148,6 +148,16 @@ export const useKeyboardControls = ({
         return;
       }
 
+      // Spectators may leave even while paused or after their own game ended.
+      // Keep the room connection: leaving a view is not forfeiting a match.
+      if (appStateRef.current === 'SPECTATING') {
+        if (code === conf.quitToMenu) {
+          e.preventDefault();
+          if (!e.repeat) quitGame();
+        }
+        return;
+      }
+
       if (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') return;
 
       if (Object.values(conf).includes(code)) {

@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function mount() {
+function mount(overrides = {}) {
   const effects = [], cleanups = [], listeners = new Map(), timers = new Map();
   let nextId = 0, attempts = 0, drops = 0, grounded = true;
   const window = {
@@ -43,6 +43,7 @@ function mount() {
     softDrop: () => { ++attempts; if (!grounded) ++drops; },
     hardDrop() {}, playerRotate() {}, playerHold() {}, startGame() {},
     setKeyConfig() {}, setListeningAction() {}, setSocket() {}, setIsWaiting() {}, setDropTime() {}, quitGame() {},
+    ...overrides,
   };
   const hook = exports.useKeyboardControls(props);
   effects.forEach(effect => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); });
@@ -94,5 +95,44 @@ test('blur releases held soft drop and spectator mode sends no repeats', () => {
   h.blur();
   assert.equal(h.hook.heldKeys.current.size, 0);
   assert.equal(h.counts().timers, 0);
+  h.unmount();
+});
+
+test('spectator exit works without disconnecting or forfeiting, including after game over', () => {
+  for (const gameOver of [false, true]) {
+    let quits = 0;
+    const h = mount({
+      gameOver, dropTime: null,
+      keyConfigRef: { current: { quitToMenu: 'Escape', restart: 'KeyQ' } },
+      socketRef: { current: {
+        emit() { assert.fail('spectating must not forfeit'); },
+        disconnect() { assert.fail('keep the custom room connection'); },
+      } },
+      quitGame() { ++quits; },
+      startGame() { assert.fail('spectators must not restart'); },
+      hardDrop() { assert.fail('spectators must not play'); },
+    });
+    h.appStateRef.current = 'SPECTATING';
+    h.key('keydown', 'KeyQ');
+    h.key('keydown', 'ArrowDown');
+    h.key('keydown', 'Escape');
+    h.key('keydown', 'Escape', true);
+    assert.equal(quits, 1);
+    assert.equal(h.counts().attempts, 0);
+    h.unmount();
+  }
+});
+
+test('spectator exit respects a customized quit key', () => {
+  let quits = 0;
+  const h = mount({
+    keyConfigRef: { current: { quitToMenu: 'KeyX' } },
+    quitGame() { ++quits; },
+  });
+  h.appStateRef.current = 'SPECTATING';
+  h.key('keydown', 'Escape');
+  assert.equal(quits, 0);
+  h.key('keydown', 'KeyX');
+  assert.equal(quits, 1);
   h.unmount();
 });

@@ -36,7 +36,7 @@ const PlayPage = () => {
   const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'VS_AI' }>();
   const location = useLocation();
   const serverMatch = mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS';
-  const [serverState, setServerState] = useState<(GameState & { started?: boolean; piecesPlaced?: number; attacksSent?: number }) | null>(null);
+  const [serverState, setServerState] = useState<(GameState & { roomId?: string; started?: boolean; piecesPlaced?: number; attacksSent?: number }) | null>(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
@@ -704,7 +704,9 @@ const PlayPage = () => {
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const sendInput = (event: string, count = 1) => {
     if (appStateRef.current !== 'ONLINE_1V1' || gameOverRef.current || !serverState?.started || serverState.isGameOver) return;
-    for (let i = 0; i < count; ++i) socketRef.current?.emit(event);
+    if (serverState.pieceId === undefined || !serverState.roomId) return;
+    const target = { roomId: serverState.roomId, pieceId: serverState.pieceId };
+    for (let i = 0; i < count; ++i) socketRef.current?.emit(event, target);
   };
   const controls = serverMatch ? {
     movePlayerHorizontal: (dir: number, _stage: Cell[][], instant: boolean) =>

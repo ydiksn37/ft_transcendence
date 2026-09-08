@@ -65,6 +65,53 @@ describe('GameInstance AI matches', () => {
     game.stop();
   });
 
+  it('ignores a hard drop targeting the piece that already auto-locked', () => {
+    const game = new GameInstance('late_input', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    expect(player.activeMino).toBe('O');
+    for (const y of [38, 39]) {
+      player.board[y] = Array.from({ length: 10 }, (_, x) => x === 4 || x === 5 ? null : 'GARBAGE');
+    }
+    const oldId = player.pieceId;
+    for (let i = 0; i < 40; i++) game.applyInput('a', ClientEvent.SOFT_DROP, oldId);
+    jest.advanceTimersByTime(500);
+    expect(player.piecesPlaced).toBe(1);
+    expect(player.lines).toBe(2);
+    expect(player.pieceId).not.toBe(oldId);
+    const nextY = player.activeY;
+    game.applyInput('a', ClientEvent.HARD_DROP, oldId);
+    game.applyInput('a', ClientEvent.SOFT_DROP, oldId);
+    expect(player.piecesPlaced).toBe(1);
+    expect(player.activeY).toBe(nextY);
+    const nextId = player.pieceId;
+    game.applyInput('a', ClientEvent.HARD_DROP, nextId);
+    game.applyInput('a', ClientEvent.HARD_DROP, nextId);
+    expect(player.piecesPlaced).toBe(2);
+    game.stop();
+  });
+
+  it('changes the input identity on Hold and across rematches', () => {
+    const game = new GameInstance('same_room', server, 42);
+    game.addPlayer('a', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    const oldId = player.pieceId;
+    game.applyInput('a', ClientEvent.HOLD, oldId);
+    expect(player.pieceId).not.toBe(oldId);
+    game.applyInput('a', ClientEvent.HARD_DROP, oldId);
+    expect(player.piecesPlaced).toBe(0);
+    const snapshot = emissions.filter(e => e.event === ServerEvent.GAME_STATE).at(-1)!.payload;
+    expect(snapshot.pieceId).toBe(player.pieceId);
+    game.stop();
+    const rematch = new GameInstance('same_room', server, 42);
+    rematch.addPlayer('a', null);
+    expect(rematch.getPlayers().get('a')!.pieceId).not.toBe(player.pieceId);
+    rematch.stop();
+  });
+
   it('cancels READY when a match is stopped', () => {
     const game = new GameInstance('cancelled', server, 42);
     game.addPlayer('a', null);

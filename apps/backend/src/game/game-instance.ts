@@ -55,6 +55,7 @@ export interface CppAiPreviewOptions {
 }
 
 export interface PlayerState {
+  pieceId: number;
   socketId: string;
   userId: string | null; // AI の場合は null
   board: any[][];
@@ -82,6 +83,8 @@ export interface PlayerState {
 }
 
 export class GameInstance {
+  // Process-wide to avoid reusing IDs when a custom room starts a rematch.
+  private static nextPieceId = 0;
   private readonly logger = new Logger(GameInstance.name);
   readonly roomId: string;
   private server: Server;
@@ -143,6 +146,7 @@ export class GameInstance {
     if (!this.playerBags.has(socketId)) this.playerBags.set(socketId, new BagGenerator(this.seed));
     const firstMino = this.bagFor(socketId).next();
     this.players.set(socketId, {
+      pieceId: GameInstance.nextPieceId++,
       socketId,
       userId,
       board: createEmptyBoard(),
@@ -367,9 +371,10 @@ export class GameInstance {
   }
 
   /** プレイヤー入力を処理 */
-  applyInput(socketId: string, event: string): void {
+  applyInput(socketId: string, event: string, pieceId?: number): void {
     const player = this.players.get(socketId);
     if (!player || player.isGameOver || !this.isRunning) return;
+    if (pieceId !== undefined && pieceId !== player.pieceId) return;
 
     let moved = false;
 
@@ -648,6 +653,7 @@ export class GameInstance {
 
   /** ミノをスポーンさせる (TETR.IO仕様: 1マス上にスポーン後、即時落下可能なら落下) */
   private spawnPiece(socketId: string, player: PlayerState): void {
+    player.pieceId = GameInstance.nextPieceId++;
     player.activeX = this.spawnColumn(player);
     player.activeY = 17; // 1マス上にスポーン
     player.activeRotation = 0;
@@ -770,6 +776,7 @@ export class GameInstance {
     const pps = elapsed > 0 ? (player.piecesPlaced / elapsed) * 60 : 0;
 
     const gameState: GameState = {
+      pieceId: player.pieceId,
       board: player.board,
       activeMino: {
         type: player.activeMino,

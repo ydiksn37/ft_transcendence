@@ -1,3 +1,4 @@
+import type { GameInput } from '@transcendence/shared';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -834,53 +835,60 @@ export class GameGateway
 
   // ── ゲーム入力 ────────────────────────────────────────────
   @SubscribeMessage(ClientEvent.MOVE_LEFT)
-  handleMoveLeft(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.MOVE_LEFT);
+  handleMoveLeft(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.MOVE_LEFT, input);
   }
 
   @SubscribeMessage(ClientEvent.MOVE_RIGHT)
-  handleMoveRight(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.MOVE_RIGHT);
+  handleMoveRight(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.MOVE_RIGHT, input);
   }
 
   @SubscribeMessage(ClientEvent.ROTATE_CW)
-  handleRotateCw(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.ROTATE_CW);
+  handleRotateCw(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.ROTATE_CW, input);
   }
 
   @SubscribeMessage(ClientEvent.ROTATE_CCW)
-  handleRotateCcw(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.ROTATE_CCW);
+  handleRotateCcw(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.ROTATE_CCW, input);
   }
 
   @SubscribeMessage(ClientEvent.ROTATE_180)
-  handleRotate180(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.ROTATE_180);
+  handleRotate180(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.ROTATE_180, input);
   }
 
   @SubscribeMessage(ClientEvent.SOFT_DROP)
-  handleSoftDrop(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.SOFT_DROP);
+  handleSoftDrop(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.SOFT_DROP, input);
   }
 
   @SubscribeMessage(ClientEvent.HARD_DROP)
-  handleHardDrop(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.HARD_DROP);
+  handleHardDrop(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.HARD_DROP, input);
   }
 
   @SubscribeMessage(ClientEvent.HOLD)
-  handleHold(@ConnectedSocket() client: Socket) {
-    this.routeInput(client.id, ClientEvent.HOLD);
+  handleHold(@ConnectedSocket() client: Socket, @MessageBody() input?: GameInput) {
+    this.routeInput(client.id, ClientEvent.HOLD, input);
   }
 
-  private routeInput(socketId: string, event: string): void {
+  private routeInput(socketId: string, event: string, input?: GameInput): void {
     // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
     const gameRoomId = this.clientGameRoom.get(socketId);
     const roomId = this.clientRoom.get(socketId);
     const room =
       (gameRoomId ? this.rooms.get(gameRoomId) : null) ??
       (roomId ? this.rooms.get(roomId) : null);
-    room?.applyInput(socketId, event);
+    if (!room) return;
+    if (room.isAiMatch) {
+      room.applyInput(socketId, event);
+      return;
+    }
+    if (!input || input.roomId !== (gameRoomId && this.rooms.has(gameRoomId) ? gameRoomId : roomId) ||
+        !Number.isSafeInteger(input.pieceId) || input.pieceId < 0) return;
+    room.applyInput(socketId, event, input.pieceId);
   }
 
   private clampInteger(
