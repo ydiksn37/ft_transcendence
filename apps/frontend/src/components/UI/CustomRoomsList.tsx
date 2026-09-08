@@ -218,25 +218,20 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
           {isOwner && players.length >= 2 && !tournament && (
             <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
-              {players.length <= 3 && (
-                <button 
-                  onClick={() => { if (!isPlaying) socket?.emit('game:start_custom_room') }}
-                  disabled={isPlaying}
-                  style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-                >
-                  {isPlaying ? 'GAME IN PROGRESS...' : 'START NORMAL GAME'}
-                </button>
-              )}
-              
-              {players.length >= 4 && (
-                <button 
-                  onClick={() => { if (!isPlaying) socket?.emit('game:create_tournament') }}
-                  disabled={isPlaying}
-                  style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#f39c12', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-                >
-                  START TOURNAMENT
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (isPlaying) return;
+                  if (players.length >= 4) {
+                    socket?.emit('game:create_tournament');
+                  } else {
+                    socket?.emit('game:start_custom_room');
+                  }
+                }}
+                disabled={isPlaying}
+                style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+              >
+                {isPlaying ? 'GAME IN PROGRESS...' : 'START'}
+              </button>
             </div>
           )}
 
