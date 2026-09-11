@@ -700,6 +700,21 @@ const PlayPage = () => {
     };
   }, [mode, location.search, socketRef]);
 
+  // タブが再アクティブになった時の状態リフレッシュ
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) return; // 非アクティブ時は何もしない
+      
+      // カスタムルームの場合、サーバーから最新の状態を再取得
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        socketRef.current.emit('game:request_custom_room_state');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [mode, socketRef]);
+
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
   const sendInput = (event: string, count = 1) => {

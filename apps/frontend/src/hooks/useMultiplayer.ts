@@ -309,8 +309,10 @@ export const useMultiplayer = ({
 
     newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
       setCustomRoomIsPlaying(data.isPlaying);
-      // Automatic return from spectating when the match ends
-      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
+      // Automatic return from spectating or playing when the match ends
+      if ((appStateRef.current === 'SPECTATING' || appStateRef.current === 'ONLINE_1V1') && !data.isPlaying) {
+        setGameOver(false);
+        setMatchResult(null);
         setAppState('CUSTOM_ROOMS');
       }
     });

@@ -420,7 +420,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               )}
             <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
               <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
+                <Stage 
+                  width={stage.length > 0 ? stage[0].length * 30 : 300} 
+                  height={1200} 
+                  options={{ backgroundAlpha: 0 }}
+                  onMount={(app) => {
+                    const canvas = app.view as HTMLCanvasElement;
+                    canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+                    canvas.addEventListener('webglcontextrestored', () => app.renderer.reset());
+                  }}
+                >
                   <GameBoard 
                     stage={stage} 
                     player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
@@ -589,7 +598,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                       </h3>
                       <div style={{ position: 'relative', width: 300, height: 660 }}>
                         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                          <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                          <Stage 
+                            width={300} 
+                            height={1200} 
+                            options={{ backgroundAlpha: 0 }}
+                            onMount={(app) => {
+                              const canvas = app.view as HTMLCanvasElement;
+                              canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+                              canvas.addEventListener('webglcontextrestored', () => app.renderer.reset());
+                            }}
+                          >
                             <GameBoard 
                               stage={opp.stage || createStage(10)} 
                               player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
