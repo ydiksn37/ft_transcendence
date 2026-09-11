@@ -221,7 +221,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
           )}
 
           {isOwner && players.length >= 2 && !tournament && (
-            <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+            <div style={{ display: 'flex', gap: '20px', marginTop: '20px', justifyContent: 'center' }}>
               <button
                 onClick={() => {
                   if (isPlaying) return;
@@ -238,6 +238,15 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
               </button>
             </div>
           )}
+
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={() => socket?.emit('game:leave_custom_room')}
+              style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#95a5a6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+            >
+              Leave Room
+            </button>
+          </div>
 
           {tournament && !isPlaying && !tournament.root.winnerId && (
              <div style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', backgroundColor: '#34495e', color: '#f1c40f', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', animation: 'pulse 1.5s infinite' }}>
@@ -283,18 +292,20 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         </div>
       )}
 
-      <button
-        onClick={() => {
-          if (onBack) {
-            onBack();
-          } else {
-            setAppState('MENU');
-          }
-        }}
-        style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
-      >
-        Back to Menu
-      </button>
+      {!inRoom && (
+        <button
+          onClick={() => {
+            if (onBack) {
+              onBack();
+            } else {
+              setAppState('MENU');
+            }
+          }}
+          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
+        >
+          Back to Menu
+        </button>
+      )}
     </div>
   );
 };

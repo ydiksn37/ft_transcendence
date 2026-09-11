@@ -440,6 +440,53 @@ export class GameGateway
     }
   }
 
+  @SubscribeMessage('game:leave_custom_room')
+  handleLeaveCustomRoom(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+
+    const gameRoomId = this.clientGameRoom.get(client.id);
+    if (gameRoomId) {
+      const gRoom = this.rooms.get(gameRoomId);
+      if (gRoom) {
+        gRoom.removeSpectator(client.id);
+        gRoom.handleGameOver(client.id);
+      }
+    }
+
+    const room = this.customRooms.get(roomId);
+    if (room) {
+      room.players = room.players.filter((p) => p.socket.id !== client.id);
+      if (room.players.length === 0) {
+        this.customRooms.delete(roomId);
+      } else {
+        if (room.ownerSocketId === client.id) {
+          room.ownerSocketId = room.players[0].socket.id;
+        }
+        room.players.forEach((p) => {
+          p.socket.emit('custom_room_state', {
+            inRoom: true,
+            roomId: room.roomId,
+            name: room.name,
+            isOwner: room.ownerSocketId === p.socket.id,
+            players: room.players.map((pl) => ({
+              socketId: pl.socket.id,
+              userId: pl.userId,
+              username: pl.username,
+              wins: pl.wins,
+            })),
+            isPlaying: room.isPlaying,
+            tournament: room.tournament,
+          });
+        });
+      }
+      this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+    }
+    this.clientRoom.delete(client.id);
+    client.leave(roomId);
+    client.emit('custom_room_state', { inRoom: false });
+  }
+
   @SubscribeMessage('game:join_custom_room')
   handleJoinCustomRoom(
     @ConnectedSocket() client: Socket,
