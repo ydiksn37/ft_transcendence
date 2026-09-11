@@ -309,11 +309,9 @@ export const useMultiplayer = ({
 
     newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
       setCustomRoomIsPlaying(data.isPlaying);
-      // Automatic return from spectating or playing when the match ends
+      // Automatically show game over screen when match ends, but do not return to room
       if ((appStateRef.current === 'SPECTATING' || appStateRef.current === 'ONLINE_1V1') && !data.isPlaying) {
-        setGameOver(false);
-        setMatchResult(null);
-        setAppState('CUSTOM_ROOMS');
+        setGameOver(true);
       }
     });
 

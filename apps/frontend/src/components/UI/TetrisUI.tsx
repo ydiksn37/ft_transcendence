@@ -426,8 +426,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   options={{ backgroundAlpha: 0 }}
                   onMount={(app) => {
                     const canvas = app.view as HTMLCanvasElement;
-                    canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
-                    canvas.addEventListener('webglcontextrestored', () => app.renderer.reset());
+                    const onLost = (e: Event) => e.preventDefault();
+                    const onRestored = () => app.renderer.reset();
+                    canvas.addEventListener('webglcontextlost', onLost);
+                    canvas.addEventListener('webglcontextrestored', onRestored);
+                    (app as any)._onLost = onLost;
+                    (app as any)._onRestored = onRestored;
+                  }}
+                  onUnmount={(app) => {
+                    const canvas = app.view as HTMLCanvasElement;
+                    if ((app as any)._onLost) {
+                      canvas.removeEventListener('webglcontextlost', (app as any)._onLost);
+                      canvas.removeEventListener('webglcontextrestored', (app as any)._onRestored);
+                    }
                   }}
                 >
                   <GameBoard 
@@ -604,8 +615,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                             options={{ backgroundAlpha: 0 }}
                             onMount={(app) => {
                               const canvas = app.view as HTMLCanvasElement;
-                              canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
-                              canvas.addEventListener('webglcontextrestored', () => app.renderer.reset());
+                              const onLost = (e: Event) => e.preventDefault();
+                              const onRestored = () => app.renderer.reset();
+                              canvas.addEventListener('webglcontextlost', onLost);
+                              canvas.addEventListener('webglcontextrestored', onRestored);
+                              (app as any)._onLost = onLost;
+                              (app as any)._onRestored = onRestored;
+                            }}
+                            onUnmount={(app) => {
+                              const canvas = app.view as HTMLCanvasElement;
+                              if ((app as any)._onLost) {
+                                canvas.removeEventListener('webglcontextlost', (app as any)._onLost);
+                                canvas.removeEventListener('webglcontextrestored', (app as any)._onRestored);
+                              }
                             }}
                           >
                             <GameBoard 
