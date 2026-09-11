@@ -619,7 +619,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     {/* 相手の 中央パネル (GameBoard) */}
                     <div className="tetris-board-container">
                       <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>
-                        OPPONENT {isFallback ? '' : index + 1}
+                        {opp.displayName ? opp.displayName : (opp.username ? opp.username : (isFallback ? 'OPPONENT' : `Player ${opp.playerIndex !== undefined ? opp.playerIndex + 1 : index + 2}`))}
                       </h3>
                       <div style={{ position: 'relative', width: 300, height: 660 }}>
                         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>

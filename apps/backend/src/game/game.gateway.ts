@@ -285,11 +285,23 @@ export class GameGateway
       this.clientRoom.set(opponent.id, roomId);
       this.rooms.set(roomId, instance);
 
+      const p1Username = (opponent.data?.username as string) ?? null;
+      const p2Username = (client.data?.username as string) ?? null;
+
       this.server.to(roomId).emit(ServerEvent.MATCH_FOUND, {
         roomId,
         seed,
         player1: opponent.id,
         player2: client.id,
+        players: [opponent.id, client.id],
+        displayNames: {
+          [opponent.id]: p1Username || (opponent.data?.userId as string) || 'Player 1',
+          [client.id]: p2Username || (client.data?.userId as string) || 'Player 2',
+        },
+        users: {
+          [opponent.id]: { username: p1Username },
+          [client.id]: { username: p2Username },
+        }
       });
 
       // ゲームスタート
@@ -446,8 +458,10 @@ export class GameGateway
     if (!roomId) return;
 
     const gameRoomId = this.clientGameRoom.get(client.id);
-    if (gameRoomId) {
-      const gRoom = this.rooms.get(gameRoomId);
+    const targetRoomId = gameRoomId ?? roomId;
+
+    if (targetRoomId) {
+      const gRoom = this.rooms.get(targetRoomId);
       if (gRoom) {
         gRoom.removeSpectator(client.id);
         gRoom.handleGameOver(client.id);
@@ -533,7 +547,15 @@ export class GameGateway
           instance.addSpectator(client.id);
           this.clientGameRoom.set(client.id, gameRoomId);
           client.join(gameRoomId);
-          client.emit('spectating', { roomId: gameRoomId });
+          const displayNames: Record<string, string> = {};
+          room.players.forEach((p, idx) => {
+            displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+          });
+          client.emit('spectating', {
+            roomId: gameRoomId,
+            displayNames,
+            players: activeMatch.playerIds
+          });
           instance.broadcastSnapshot();
         }
       }
@@ -714,6 +736,22 @@ export class GameGateway
 
       this.rooms.set(gameRoomId, instance);
 
+      const users: Record<string, { username: string | null }> = {};
+      const displayNames: Record<string, string> = {};
+      
+      const customRoom = this.customRooms.get(roomId);
+      if (customRoom) {
+        customRoom.players.forEach((p, idx) => {
+          displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+        });
+      }
+
+      activePlayerSockets.forEach((p) => {
+        if (p?.socket) {
+          users[p.socket.id] = { username: p.username };
+        }
+      });
+
       activePlayerSockets.forEach((p) => {
         if (!p || !p.socket) return;
         instance.addPlayer(p.socket.id, p.userId);
@@ -725,6 +763,8 @@ export class GameGateway
           players: activePlayerSockets
             .map((pl) => pl?.socket?.id)
             .filter((id) => !!id),
+          displayNames,
+          users,
           isSpectator: false,
         });
       });
@@ -757,7 +797,16 @@ export class GameGateway
               instance.addSpectator(p.socket.id);
               this.clientGameRoom.set(p.socket.id, gameRoomId);
               p.socket.join(gameRoomId);
-              p.socket.emit('spectating', { roomId: gameRoomId });
+              const displayNames: Record<string, string> = {};
+              room.players.forEach((rp, idx) => {
+                displayNames[rp.socket.id] = rp.username ? rp.username : (rp.userId ? rp.userId : `Player ${idx + 1}`);
+              });
+
+              p.socket.emit('spectating', {
+                roomId: gameRoomId,
+                displayNames,
+                players: firstStartedMatch.playerIds
+              });
               instance.broadcastSnapshot();
             }
           });
@@ -836,8 +885,14 @@ export class GameGateway
       onGameOver,
       this.aiAgentService,
     );
-    room.players.forEach((p) => {
+    const users: Record<string, { username: string | null }> = {};
+    const displayNames: Record<string, string> = {};
+    const playersArray: string[] = [];
+    room.players.forEach((p, idx) => {
       instance.addPlayer(p.socket.id, p.userId);
+      users[p.socket.id] = { username: p.username };
+      displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+      playersArray.push(p.socket.id);
     });
 
     this.rooms.set(roomId, instance);
@@ -845,6 +900,9 @@ export class GameGateway
     this.server.to(roomId).emit(ServerEvent.MATCH_FOUND, {
       roomId,
       seed,
+      players: playersArray,
+      displayNames,
+      users,
     });
 
     instance.prepareHumanMatch();
@@ -1170,7 +1228,56 @@ export class GameGateway
     }
   }
 
-  // ── 観戦 ─────────────────────────────────────────────────
+  /**
+   * CUSTOM_ROOMS プレイヤーがゲーム中に ESC などで退出した際に呼ばれる。
+   * 通常の game_over とは異なり、カスタムルーム自体には残留させる。
+   * - ゲームインスタンスに対してゲームオーバーを通知し相手に勝利判定を与える
+   * - clientGameRoom マッピングを削除しゲームルームから離脱する
+   * - カスタムルームの最新状態をクライアントに返す
+   */
+  @SubscribeMessage('game:quit_game_room')
+  async handleQuitGameRoom(@ConnectedSocket() client: Socket) {
+    const gameRoomId = this.clientGameRoom.get(client.id);
+    const roomId = this.clientRoom.get(client.id);
+
+    const targetRoomId = gameRoomId ?? roomId;
+
+    if (targetRoomId) {
+      const instance = this.rooms.get(targetRoomId);
+      if (instance) {
+        instance.removeSpectator(client.id);
+        await instance.handleGameOver(client.id);
+      }
+    }
+
+    if (gameRoomId) {
+      this.clientGameRoom.delete(client.id);
+      client.leave(gameRoomId);
+    }
+
+    // カスタムルームの最新状態をクライアントに送り返す（isPlaying が正しく反映される）
+    if (roomId) {
+      const customRoom = this.customRooms.get(roomId);
+      if (customRoom) {
+        client.emit('custom_room_state', {
+          inRoom: true,
+          roomId: customRoom.roomId,
+          name: customRoom.name,
+          isOwner: customRoom.ownerSocketId === client.id,
+          players: customRoom.players.map((pl) => ({
+            socketId: pl.socket.id,
+            userId: pl.userId,
+            username: pl.username,
+            wins: pl.wins,
+          })),
+          isPlaying: customRoom.isPlaying,
+          tournament: customRoom.tournament,
+        });
+      }
+    }
+  }
+
+
   @SubscribeMessage(ClientEvent.SPECTATE)
   handleSpectate(
     @ConnectedSocket() client: Socket,
@@ -1225,7 +1332,29 @@ export class GameGateway
     this.clientGameRoom.set(client.id, gameRoomId);
     client.join(gameRoomId);
     room.addSpectator(client.id);
-    client.emit('spectating', { roomId: gameRoomId });
+    const customRoom = this.customRooms.get(targetRoomId);
+    let displayNames: Record<string, string> | undefined = undefined;
+    let playersArr: string[] | undefined = undefined;
+    if (customRoom) {
+      displayNames = {};
+      customRoom.players.forEach((p, idx) => {
+        displayNames![p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+      });
+      if (customRoom.tournament) {
+        const activeMatch = customRoom.tournament.matches.find(m => m.isPlaying);
+        if (activeMatch) {
+          playersArr = activeMatch.playerIds;
+        }
+      } else {
+        playersArr = customRoom.players.map(p => p.socket.id);
+      }
+    }
+
+    client.emit('spectating', {
+      roomId: gameRoomId,
+      displayNames,
+      players: playersArr
+    });
     room.broadcastSnapshot();
   }
 
