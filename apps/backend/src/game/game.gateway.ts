@@ -576,6 +576,11 @@ export class GameGateway
     const room = this.customRooms.get(roomId);
     if (room && room.ownerSocketId === client.id) {
       room.tournament = undefined;
+      // トーナメント終了時に全プレイヤーの clientGameRoom マッピングをクリアする。
+      // これにより次回のトーナメント開始時に古いゲームルームへの参照が残らなくなる。
+      room.players.forEach((p) => {
+        this.clientGameRoom.delete(p.socket.id);
+      });
       room.players.forEach((p) => {
         p.socket.emit('tournament_state', { tournament: undefined });
         p.socket.emit('custom_room_state', {
@@ -742,6 +747,13 @@ export class GameGateway
               (m) => m.isPlaying && m.playerIds.includes(p.socket.id),
             );
             if (!isPlayingInAny) {
+              // 以前のゲームルームがあれば、そこから離脱してからスペクテーターとして登録する
+              const prevGameRoomId = this.clientGameRoom.get(p.socket.id);
+              if (prevGameRoomId && prevGameRoomId !== gameRoomId) {
+                const prevInstance = this.rooms.get(prevGameRoomId);
+                if (prevInstance) prevInstance.removeSpectator(p.socket.id);
+                p.socket.leave(prevGameRoomId);
+              }
               instance.addSpectator(p.socket.id);
               this.clientGameRoom.set(p.socket.id, gameRoomId);
               p.socket.join(gameRoomId);

@@ -69,6 +69,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
   const navigate = useNavigate();
 
+  // 非アクティブタブから戻ってきた際に WebGL コンテキストが失われている場合があるため
+  // Stage を強制再マウントするためのキー。visibilitychange でインクリメントする。
+  const [stageKey, setStageKey] = useState(0);
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setStageKey(prev => prev + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   useEffect(() => {
     const handleResize = () => {
       // 1200px is approximately the required vertical height.
@@ -421,6 +434,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
               <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
                 <Stage 
+                  key={stageKey}
                   width={stage.length > 0 ? stage[0].length * 30 : 300} 
                   height={1200} 
                   options={{ backgroundAlpha: 0 }}
@@ -610,6 +624,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                       <div style={{ position: 'relative', width: 300, height: 660 }}>
                         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
                           <Stage 
+                            key={stageKey}
                             width={300} 
                             height={1200} 
                             options={{ backgroundAlpha: 0 }}

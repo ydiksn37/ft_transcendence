@@ -309,8 +309,11 @@ export const useMultiplayer = ({
 
     newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
       setCustomRoomIsPlaying(data.isPlaying);
-      // Automatically show game over screen when match ends, but do not return to room
-      if ((appStateRef.current === 'SPECTATING' || appStateRef.current === 'ONLINE_1V1') && !data.isPlaying) {
+      // 観戦中（SPECTATING）に試合が終了した場合のみゲームオーバー画面を表示する。
+      // ONLINE_1V1 中は game:over イベントで管理するため、ここでは SPECTATING のみを対象にする。
+      // こうしないと次のトーナメントラウンド開始時に isPlaying=false が届いた際に
+      // 不正に setGameOver(true) が呼ばれてホワイトアウトが起きる。
+      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
         setGameOver(true);
       }
     });
