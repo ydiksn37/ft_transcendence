@@ -1,4 +1,9 @@
-import { ClientEvent, ServerEvent, TETROMINO_SHAPES, type TetrominoType } from '@transcendence/shared';
+import {
+  ClientEvent,
+  ServerEvent,
+  TETROMINO_SHAPES,
+  type TetrominoType,
+} from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { AiAgentService } from './engine/ai-agent.service';
 import { calcGhostY, createEmptyBoard } from './engine/board';
@@ -38,7 +43,7 @@ describe('GameInstance AI matches', () => {
     const next = jest.spyOn((game as any).playerBags.get('a'), 'next');
     game.prepareHumanMatch();
     expect(game.isActive()).toBe(true);
-    const initial = emissions.filter(e => e.event === ServerEvent.GAME_STATE);
+    const initial = emissions.filter((e) => e.event === ServerEvent.GAME_STATE);
     expect(initial).toHaveLength(4);
     for (const e of initial) {
       expect(e.payload.started).toBe(false);
@@ -46,16 +51,18 @@ describe('GameInstance AI matches', () => {
       expect(e.payload.nextMinos).toEqual(initial[0].payload.nextMinos);
       expect(e.payload.nextMinos).toHaveLength(5);
     }
-    const others = emissions.filter(e => e.event === 'opponent_board_update');
+    const others = emissions.filter((e) => e.event === 'opponent_board_update');
     expect(others).toHaveLength(16);
-    others.forEach(e => expect(e.payload.next).toHaveLength(5));
+    others.forEach((e) => expect(e.payload.next).toHaveLength(5));
     game.applyInput('a', ClientEvent.HOLD);
     game.applyInput('a', ClientEvent.HARD_DROP);
     jest.advanceTimersByTime(2999);
     expect(game.getPlayers().get('a')!.piecesPlaced).toBe(0);
     expect(next).not.toHaveBeenCalled();
     jest.advanceTimersByTime(1);
-    const started = emissions.filter(e => e.event === ServerEvent.GAME_STATE && e.target === 'a').at(-1)!.payload;
+    const started = emissions
+      .filter((e) => e.event === ServerEvent.GAME_STATE && e.target === 'a')
+      .at(-1)!.payload;
     expect(started.started).toBe(true);
     expect(started.activeMino).toEqual(initial[0].payload.activeMino);
     expect(started.nextMinos).toEqual(initial[0].payload.nextMinos);
@@ -73,10 +80,13 @@ describe('GameInstance AI matches', () => {
     const player = game.getPlayers().get('a')!;
     expect(player.activeMino).toBe('O');
     for (const y of [38, 39]) {
-      player.board[y] = Array.from({ length: 10 }, (_, x) => x === 4 || x === 5 ? null : 'GARBAGE');
+      player.board[y] = Array.from({ length: 10 }, (_, x) =>
+        x === 4 || x === 5 ? null : 'GARBAGE',
+      );
     }
     const oldId = player.pieceId;
-    for (let i = 0; i < 40; i++) game.applyInput('a', ClientEvent.SOFT_DROP, oldId);
+    for (let i = 0; i < 40; i++)
+      game.applyInput('a', ClientEvent.SOFT_DROP, oldId);
     jest.advanceTimersByTime(500);
     expect(player.piecesPlaced).toBe(1);
     expect(player.lines).toBe(2);
@@ -103,7 +113,9 @@ describe('GameInstance AI matches', () => {
     expect(player.pieceId).not.toBe(oldId);
     game.applyInput('a', ClientEvent.HARD_DROP, oldId);
     expect(player.piecesPlaced).toBe(0);
-    const snapshot = emissions.filter(e => e.event === ServerEvent.GAME_STATE).at(-1)!.payload;
+    const snapshot = emissions
+      .filter((e) => e.event === ServerEvent.GAME_STATE)
+      .at(-1)!.payload;
     expect(snapshot.pieceId).toBe(player.pieceId);
     game.stop();
     const rematch = new GameInstance('same_room', server, 42);
@@ -119,11 +131,14 @@ describe('GameInstance AI matches', () => {
     game.stop();
     jest.advanceTimersByTime(10000);
     expect(game.isActive()).toBe(false);
-    expect(emissions.some(e => e.event === ServerEvent.GAME_START)).toBe(false);
+    expect(emissions.some((e) => e.event === ServerEvent.GAME_START)).toBe(
+      false,
+    );
   });
 
   it.each(['I', 'O', 'T', 'S', 'Z', 'J', 'L'] as TetrominoType[])(
-    'centers initial and held %s using the frontend spawn matrix width', type => {
+    'centers initial and held %s using the frontend spawn matrix width',
+    (type) => {
       const game = new GameInstance('spawn_room', server, 42);
       game.addPlayer('a', null);
       game.addPlayer('b', null);
@@ -150,12 +165,21 @@ describe('GameInstance AI matches', () => {
     const player = game.getPlayers().get('a')!;
     player.activeMino = 'O';
     game.start();
-    const own = emissions.find(e => e.target === 'a' && e.event === ServerEvent.GAME_STATE)!.payload;
+    const own = emissions.find(
+      (e) => e.target === 'a' && e.event === ServerEvent.GAME_STATE,
+    )!.payload;
     expect(own.activeMino.x).toBe(4);
     for (const target of ['b', 'viewer']) {
-      const other = emissions.find(e => e.target === target && e.event === 'opponent_board_update' && e.payload.playerId === 'a')!.payload;
+      const other = emissions.find(
+        (e) =>
+          e.target === target &&
+          e.event === 'opponent_board_update' &&
+          e.payload.playerId === 'a',
+      )!.payload;
       for (const [r, c] of TETROMINO_SHAPES.O[0])
-        expect(other.stage[own.activeMino.y + r][own.activeMino.x + c][0]).toBe('O');
+        expect(other.stage[own.activeMino.y + r][own.activeMino.x + c][0]).toBe(
+          'O',
+        );
     }
     game.applyInput('a', ClientEvent.HARD_DROP);
     for (const row of [38, 39]) {
@@ -188,7 +212,14 @@ describe('GameInstance AI matches', () => {
     expect(a.board).toEqual(b.board);
     expect(a.activeMino).toBe(b.activeMino);
     expect(a.activeY).toBe(b.activeY);
-    expect(emissions.some(e => e.target === 'a' && e.event === 'opponent_board_update' && e.payload.roomId === 'human_room')).toBe(true);
+    expect(
+      emissions.some(
+        (e) =>
+          e.target === 'a' &&
+          e.event === 'opponent_board_update' &&
+          e.payload.roomId === 'human_room',
+      ),
+    ).toBe(true);
     game.stop();
   });
 
@@ -198,9 +229,11 @@ describe('GameInstance AI matches', () => {
     game.addPlayer('b', null);
     game.addSpectator('viewer');
     game.broadcastSnapshot();
-    const snapshots = emissions.filter(e => e.target === 'viewer' && e.event === 'opponent_board_update');
-    expect(snapshots.map(e => e.payload.playerId)).toEqual(['a', 'b']);
-    snapshots.forEach(e => {
+    const snapshots = emissions.filter(
+      (e) => e.target === 'viewer' && e.event === 'opponent_board_update',
+    );
+    expect(snapshots.map((e) => e.payload.playerId)).toEqual(['a', 'b']);
+    snapshots.forEach((e) => {
       expect(e.payload.roomId).toBe('watch_room');
       expect(e.payload.next).toHaveLength(5);
       expect(e.payload.hold).toBeNull();
@@ -208,7 +241,7 @@ describe('GameInstance AI matches', () => {
     game.removeSpectator('viewer');
     emissions.length = 0;
     game.broadcastSnapshot();
-    expect(emissions.some(e => e.target === 'viewer')).toBe(false);
+    expect(emissions.some((e) => e.target === 'viewer')).toBe(false);
   });
 
   it('starts versus preview players from identical independent seeded bags', () => {
@@ -223,10 +256,7 @@ describe('GameInstance AI matches', () => {
 
     right!.garbageQueue = 3;
     right!.attacksSent = 7;
-    const request = (game as any).makeCppDecisionRequest(
-      'preview_left',
-      left,
-    );
+    const request = (game as any).makeCppDecisionRequest('preview_left', left);
     expect(request.next).toHaveLength(5);
     expect(request.opponent).toMatchObject({
       garbageQueue: 3,

@@ -18,7 +18,11 @@ export interface Tournament {
 /**
  * 分割アルゴリズム: N人のプレイヤーを、深さdの有効な2-3木を形成できるように分割する。
  */
-function getBalancedPartition(N: number, min_val: number, max_val: number): number[] {
+function getBalancedPartition(
+  N: number,
+  min_val: number,
+  max_val: number,
+): number[] {
   for (const k of [2, 3]) {
     const base = Math.floor(N / k);
     const rem = N % k;
@@ -28,19 +32,26 @@ function getBalancedPartition(N: number, min_val: number, max_val: number): numb
       return parts;
     }
   }
-  throw new Error(`Cannot partition ${N} into parts between ${min_val} and ${max_val}`);
+  throw new Error(
+    `Cannot partition ${N} into parts between ${min_val} and ${max_val}`,
+  );
 }
 
 /**
  * 再帰的にトーナメントツリーを構築
  */
-function buildTree(N: number, depth: number, maxDepth: number, idCounter: { count: number }): TournamentNode {
+function buildTree(
+  N: number,
+  depth: number,
+  maxDepth: number,
+  idCounter: { count: number },
+): TournamentNode {
   if (depth === maxDepth) {
     return {
       id: `leaf_${idCounter.count++}`,
       type: 'LEAF',
       playerIds: [],
-      children: []
+      children: [],
     };
   }
 
@@ -49,13 +60,15 @@ function buildTree(N: number, depth: number, maxDepth: number, idCounter: { coun
   const max_val = Math.pow(3, d);
 
   const parts = getBalancedPartition(N, min_val, max_val);
-  const children = parts.map(partSize => buildTree(partSize, depth + 1, maxDepth, idCounter));
+  const children = parts.map((partSize) =>
+    buildTree(partSize, depth + 1, maxDepth, idCounter),
+  );
 
   return {
     id: `match_${idCounter.count++}`,
     type: 'MATCH',
     playerIds: [],
-    children
+    children,
   };
 }
 
@@ -75,7 +88,8 @@ export function generateTournamentBracket(
   playerNames: Record<string, string> = {},
 ): Tournament {
   const N = playerIds.length;
-  if (N < 2) throw new Error("At least 2 players are required for a tournament.");
+  if (N < 2)
+    throw new Error('At least 2 players are required for a tournament.');
 
   // find required depth h such that 2^h <= N <= 3^h
   let h = 1;
@@ -91,7 +105,7 @@ export function generateTournamentBracket(
 
   // シャッフルしたプレイヤーを葉ノードに割り当てる
   const shuffledPlayers = [...playerIds].sort(() => Math.random() - 0.5);
-  
+
   // 葉ノードを見つけて割り当て
   let leafIndex = 0;
   function assignLeaves(node: TournamentNode) {
@@ -105,10 +119,10 @@ export function generateTournamentBracket(
 
   // 最下層の試合（子供がすべてLEAF）について、初期playerIdsを設定
   // これは試合開始をスムーズにするため。
-  matches.forEach(match => {
-    const isBottomLevel = match.children.every(c => c.type === 'LEAF');
+  matches.forEach((match) => {
+    const isBottomLevel = match.children.every((c) => c.type === 'LEAF');
     if (isBottomLevel) {
-      match.playerIds = match.children.flatMap(c => c.playerIds);
+      match.playerIds = match.children.flatMap((c) => c.playerIds);
     }
   });
 

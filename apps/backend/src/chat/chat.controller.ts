@@ -9,7 +9,10 @@ export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Post('rooms/direct')
-  async createDirectRoom(@CurrentUser() user: any, @Body() body: { targetUserId: string }) {
+  async createDirectRoom(
+    @CurrentUser() user: any,
+    @Body() body: { targetUserId: string },
+  ) {
     return this.chatService.getOrCreateDirectRoom(user.id, body.targetUserId);
   }
 

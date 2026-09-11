@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as readline from 'readline';
 import {
@@ -32,31 +37,32 @@ const REQUEST_TIMEOUT_MS = 10_000;
 @Injectable()
 export class AiAgentService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiAgentService.name);
-  private agents: Record<AiDifficulty, ChildProcessWithoutNullStreams> | null = null;
+  private agents: Record<AiDifficulty, ChildProcessWithoutNullStreams> | null =
+    null;
   private pendingRequests = new Map<string, PendingRequest>();
 
   onModuleInit() {
     this.agents = Object.fromEntries(
       AI_DIFFICULTIES.map((difficulty) => {
         const config = AI_BOT_CONFIGS[difficulty];
-        return [
-          difficulty,
-          this.spawnAgent(difficulty, config.model, 50),
-        ];
+        return [difficulty, this.spawnAgent(difficulty, config.model, 50)];
       }),
     ) as Record<AiDifficulty, ChildProcessWithoutNullStreams>;
   }
 
   onModuleDestroy() {
     if (this.agents) {
-      Object.values(this.agents).forEach(agent => {
+      Object.values(this.agents).forEach((agent) => {
         if (agent.stdin.writable) {
           agent.stdin.write(JSON.stringify({ type: 'shutdown' }) + '\n');
         }
         agent.kill();
       });
     }
-    this.rejectPendingRequests(() => true, new Error('AI service is shutting down'));
+    this.rejectPendingRequests(
+      () => true,
+      new Error('AI service is shutting down'),
+    );
   }
 
   private resolveAgentExecutable(): string {
@@ -80,18 +86,28 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
     thinkMs: number,
   ) {
     const executable = this.resolveAgentExecutable();
-    const agent = spawn(executable, ['--model', model, '--think-ms', thinkMs.toString()]);
+    const agent = spawn(executable, [
+      '--model',
+      model,
+      '--think-ms',
+      thinkMs.toString(),
+    ]);
 
     const rl = readline.createInterface({ input: agent.stdout });
     rl.on('line', (line) => {
       try {
         const response = JSON.parse(line);
-        if (response.requestId && this.pendingRequests.has(response.requestId)) {
+        if (
+          response.requestId &&
+          this.pendingRequests.has(response.requestId)
+        ) {
           const pending = this.pendingRequests.get(response.requestId)!;
           this.pendingRequests.delete(response.requestId);
           clearTimeout(pending.timeout);
           if (response.type === 'error') {
-            pending.reject(new Error(response.message || 'AI agent returned an error'));
+            pending.reject(
+              new Error(response.message || 'AI agent returned an error'),
+            );
           } else {
             pending.resolve(response);
           }
@@ -101,18 +117,22 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
-    agent.stderr.on('data', (data) => this.logger.debug(`AI [${model}]: ${data}`));
+    agent.stderr.on('data', (data) =>
+      this.logger.debug(`AI [${model}]: ${data}`),
+    );
     agent.on('error', (error) => {
-      this.logger.error(`AI Agent [${model}] の起動に失敗しました: ${error.message}`);
+      this.logger.error(
+        `AI Agent [${model}] の起動に失敗しました: ${error.message}`,
+      );
       this.rejectPendingRequests(
-        pending => pending.difficulty === difficulty,
+        (pending) => pending.difficulty === difficulty,
         new Error(`AI Agent [${model}] is unavailable: ${error.message}`),
       );
     });
     agent.on('exit', (code) => {
       this.logger.warn(`AI Agent [${model}] がコード ${code} で終了しました`);
       this.rejectPendingRequests(
-        pending => pending.difficulty === difficulty,
+        (pending) => pending.difficulty === difficulty,
         new Error(`AI Agent [${model}] exited with code ${code}`),
       );
     });
@@ -137,7 +157,8 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
     request: AiDecisionRequest,
   ): Promise<AgentDecisionResponse> {
     return new Promise((resolve, reject) => {
-      if (!this.agents) return reject(new Error('AI Agents が初期化されていません'));
+      if (!this.agents)
+        return reject(new Error('AI Agents が初期化されていません'));
 
       const agent = this.agents[difficulty];
       if (!agent || !agent.stdin.writable) {
@@ -151,7 +172,12 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
         this.pendingRequests.delete(requestId);
         pending.reject(new Error(`AI Agent [${difficulty}] timed out`));
       }, REQUEST_TIMEOUT_MS);
-      this.pendingRequests.set(requestId, { difficulty, resolve, reject, timeout });
+      this.pendingRequests.set(requestId, {
+        difficulty,
+        resolve,
+        reject,
+        timeout,
+      });
 
       const payload = {
         version: 1,
@@ -160,7 +186,7 @@ export class AiAgentService implements OnModuleInit, OnModuleDestroy {
         ...request,
       };
 
-      agent.stdin.write(JSON.stringify(payload) + '\n', error => {
+      agent.stdin.write(JSON.stringify(payload) + '\n', (error) => {
         if (!error) return;
         const pending = this.pendingRequests.get(requestId);
         if (!pending) return;

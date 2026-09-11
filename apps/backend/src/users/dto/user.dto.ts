@@ -35,12 +35,18 @@ export class SearchUsersDto {
   @IsOptional()
   limit?: number;
 
-  @ApiPropertyOptional({ example: 'ONLINE', enum: ['ALL', 'ONLINE', 'OFFLINE'] })
+  @ApiPropertyOptional({
+    example: 'ONLINE',
+    enum: ['ALL', 'ONLINE', 'OFFLINE'],
+  })
   @IsOptional()
   @IsString()
   status?: 'ALL' | 'ONLINE' | 'OFFLINE';
 
-  @ApiPropertyOptional({ example: 'WIN_RATE_DESC', enum: ['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'] })
+  @ApiPropertyOptional({
+    example: 'WIN_RATE_DESC',
+    enum: ['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'],
+  })
   @IsOptional()
   @IsString()
   sortBy?: 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC';

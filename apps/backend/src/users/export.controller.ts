@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ExportService } from './export.service';
 import {
   ApiTags,
@@ -30,4 +37,3 @@ export class ExportController {
     return this.exportService.importUserSettings(req.user.id, body.settings);
   }
 }
-

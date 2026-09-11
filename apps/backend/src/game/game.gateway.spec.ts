@@ -42,18 +42,29 @@ describe('GameGateway', () => {
   });
 
   it('switches spectator streams before sending the new snapshot', () => {
-    const old = { isActive: () => true, getPlayers: () => new Map(), removeSpectator: jest.fn() };
+    const old = {
+      isActive: () => true,
+      getPlayers: () => new Map(),
+      removeSpectator: jest.fn(),
+    };
     const next = { addSpectator: jest.fn(), broadcastSnapshot: jest.fn() };
     (gateway as any).rooms.set('old', old);
     (gateway as any).rooms.set('next', next);
     (gateway as any).clientGameRoom.set('viewer', 'old');
-    const client: any = { id: 'viewer', leave: jest.fn(), join: jest.fn(), emit: jest.fn() };
+    const client: any = {
+      id: 'viewer',
+      leave: jest.fn(),
+      join: jest.fn(),
+      emit: jest.fn(),
+    };
     gateway.handleSpectate(client, { roomId: 'next' });
     expect(old.removeSpectator).toHaveBeenCalledWith('viewer');
     expect(client.leave).toHaveBeenCalledWith('old');
     expect(client.emit).toHaveBeenCalledWith('spectating', { roomId: 'next' });
     expect(next.broadcastSnapshot).toHaveBeenCalled();
-    expect(client.emit.mock.invocationCallOrder[0]).toBeLessThan(next.broadcastSnapshot.mock.invocationCallOrder[0]);
+    expect(client.emit.mock.invocationCallOrder[0]).toBeLessThan(
+      next.broadcastSnapshot.mock.invocationCallOrder[0],
+    );
   });
 
   it('rejects browser-authored boards for human matches', () => {

@@ -20,16 +20,18 @@ export class ChatService implements OnModuleInit {
   }
 
   async getOrCreateDirectRoom(userId1: string, userId2: string) {
-    if (userId1 === userId2) throw new Error('Cannot create direct chat with yourself');
+    if (userId1 === userId2)
+      throw new Error('Cannot create direct chat with yourself');
 
     const existingRooms = await this.prisma.chatRoom.findMany({
       where: { type: 'DIRECT' },
       include: { memberships: true },
     });
 
-    const room = existingRooms.find((r: any) => 
-      r.memberships.some((m: any) => m.userId === userId1) && 
-      r.memberships.some((m: any) => m.userId === userId2)
+    const room = existingRooms.find(
+      (r: any) =>
+        r.memberships.some((m: any) => m.userId === userId1) &&
+        r.memberships.some((m: any) => m.userId === userId2),
     );
 
     if (room) return room;
@@ -38,13 +40,10 @@ export class ChatService implements OnModuleInit {
       data: {
         type: 'DIRECT',
         memberships: {
-          create: [
-            { userId: userId1 },
-            { userId: userId2 }
-          ]
-        }
+          create: [{ userId: userId1 }, { userId: userId2 }],
+        },
       },
-      include: { memberships: true }
+      include: { memberships: true },
     });
   }
 
@@ -55,16 +54,23 @@ export class ChatService implements OnModuleInit {
 
     const memberships = await this.prisma.chatRoomMembership.findMany({
       where: { userId },
-      include: { 
+      include: {
         room: {
           include: {
             memberships: {
               include: {
-                user: { select: { id: true, username: true, displayName: true, avatarUrl: true } }
-              }
-            }
-          }
-        } 
+                user: {
+                  select: {
+                    id: true,
+                    username: true,
+                    displayName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
     const rooms = memberships.map((m: any) => m.room);

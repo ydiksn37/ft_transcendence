@@ -74,6 +74,8 @@ export interface PlayerState {
   isGameOver: boolean;
   lastMoveWasRotation: boolean;
   lastRotationKickIndex: number;
+  lowestY: number;
+  lockResetCount: number;
   // APM/PPS 計算
   startTime: number;
   attacksSent: number;
@@ -143,7 +145,8 @@ export class GameInstance {
 
   /** プレイヤーを追加 */
   addPlayer(socketId: string, userId: string | null): void {
-    if (!this.playerBags.has(socketId)) this.playerBags.set(socketId, new BagGenerator(this.seed));
+    if (!this.playerBags.has(socketId))
+      this.playerBags.set(socketId, new BagGenerator(this.seed));
     const firstMino = this.bagFor(socketId).next();
     this.players.set(socketId, {
       pieceId: GameInstance.nextPieceId++,
@@ -165,6 +168,8 @@ export class GameInstance {
       isGameOver: false,
       lastMoveWasRotation: false,
       lastRotationKickIndex: 0,
+      lowestY: 18,
+      lockResetCount: 0,
       startTime: Date.now(),
       attacksSent: 0,
       piecesPlaced: 0,
@@ -204,7 +209,9 @@ export class GameInstance {
    * new piece or consuming Next again. stop() also cancels this countdown. */
   prepareHumanMatch(countdownMs = 3000): void {
     if (this.isRunning || this.simulationStartTimer) return;
-    this.players.forEach(player => { player.activeX = this.spawnColumn(player); });
+    this.players.forEach((player) => {
+      player.activeX = this.spawnColumn(player);
+    });
     this.broadcastSnapshot();
     this.simulationStartTimer = setTimeout(() => {
       this.simulationStartTimer = null;
@@ -359,12 +366,12 @@ export class GameInstance {
     this.gravityTimer = setInterval(() => {
       this.players.forEach((player, socketId) => {
         if (player.isGameOver) return;
-        
+
         // VS_AIモードでは:
         // - AIは自前のロジックで操作を送信するため重力不要
         // - 人間はフロントエンドでシミュレーションするためサーバー側重力による自滅を防ぐ
         if (this.aiDifficulty) return;
-        
+
         this.applyGravity(socketId);
       });
     }, GRAVITY_INTERVAL_MS);
@@ -467,6 +474,11 @@ export class GameInstance {
 
     if (moved) {
       // ロックタイマーリセット
+      if (player.activeY > player.lowestY) {
+        player.lowestY = player.activeY;
+        player.lockResetCount = 0;
+      }
+
       const isOnGround = !isValidPosition(
         player.board,
         player.activeMino,
@@ -474,7 +486,7 @@ export class GameInstance {
         player.activeY + 1,
         player.activeRotation,
       );
-      if (isOnGround) this.scheduleLock(socketId);
+      if (isOnGround) this.scheduleLock(socketId, true);
       else this.clearLockTimer(socketId);
 
       this.broadcastState(socketId, player);
@@ -497,6 +509,10 @@ export class GameInstance {
     ) {
       player.activeY += 1;
       player.lastMoveWasRotation = false;
+      if (player.activeY > player.lowestY) {
+        player.lowestY = player.activeY;
+        player.lockResetCount = 0;
+      }
       this.broadcastState(socketId, player);
     } else {
       this.scheduleLock(socketId);
@@ -647,7 +663,8 @@ export class GameInstance {
     // C++/AI routes retain their existing x=3 Hold/spawn protocol; they are
     // separate from authoritative human multiplayer and are not rebased here.
     if (this.isAiMatch || this.cppPreviewSides.has(player.socketId)) return 3;
-    const width = player.activeMino === 'O' ? 2 : player.activeMino === 'I' ? 4 : 3;
+    const width =
+      player.activeMino === 'O' ? 2 : player.activeMino === 'I' ? 4 : 3;
     return Math.floor(BOARD_COLS / 2) - Math.ceil(width / 2);
   }
 
@@ -658,6 +675,8 @@ export class GameInstance {
     player.activeY = 17; // 1マス上にスポーン
     player.activeRotation = 0;
     player.lastMoveWasRotation = false;
+    player.lowestY = 17;
+    player.lockResetCount = 0;
     player.lastRotationKickIndex = 0;
 
     // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
@@ -689,11 +708,39 @@ export class GameInstance {
   }
 
   /** ロック遅延タイマー */
-  private scheduleLock(socketId: string): void {
-    if (this.lockTimer.has(socketId)) return;
+  private scheduleLock(
+    socketId: string,
+    isMoveOnGround: boolean = false,
+  ): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+
+    if (isMoveOnGround) {
+      if (player.lockResetCount < 15) {
+        player.lockResetCount++;
+        this.clearLockTimer(socketId);
+      } else {
+        // Just touched the floor or already running, but reached limit
+        if (!this.lockTimer.has(socketId)) {
+          this.lockPiece(socketId, player);
+        }
+        return;
+      }
+    } else {
+      if (this.lockTimer.has(socketId)) {
+        return; // Already running and not a move, keep running
+      } else {
+        // Just touched the floor via gravity
+        if (player.lockResetCount >= 15) {
+          this.lockPiece(socketId, player);
+          return;
+        }
+      }
+    }
+
     const timer = setTimeout(() => {
-      const player = this.players.get(socketId);
-      if (player && !player.isGameOver) this.lockPiece(socketId, player);
+      const p = this.players.get(socketId);
+      if (p && !p.isGameOver) this.lockPiece(socketId, p);
       this.lockTimer.delete(socketId);
     }, LOCK_DELAY_MS);
     this.lockTimer.set(socketId, timer);
@@ -703,18 +750,26 @@ export class GameInstance {
     return this.aiDifficulty !== null;
   }
 
-  public receiveGarbageFromClient(senderSocketId: string, lines: number, generated?: number): void {
+  public receiveGarbageFromClient(
+    senderSocketId: string,
+    lines: number,
+    generated?: number,
+  ): void {
     const player = this.players.get(senderSocketId);
     if (player) {
-      player.attacksSent += (generated ?? lines);
+      player.attacksSent += generated ?? lines;
     }
     this.sendGarbageToOpponent(senderSocketId, lines);
   }
 
-  public updatePlayerBoard(socketId: string, frontendStage: any[][], score: number): void {
+  public updatePlayerBoard(
+    socketId: string,
+    frontendStage: any[][],
+    score: number,
+  ): void {
     const player = this.players.get(socketId);
     if (!player || player.isGameOver) return;
-    
+
     // frontendStage: [string | 0, string][]
     const backendBoard = createEmptyBoard();
     for (let r = 0; r < BOARD_ROWS; r++) {
@@ -724,12 +779,13 @@ export class GameInstance {
           const status = frontendStage[r][c][1];
           // Ghost は無視し、実際に置かれたブロックと固定中のブロックを反映
           if (status === 'merged' && val !== 0) {
-            backendBoard[r][c] = val === 'X' ? 'GARBAGE' : val as TetrominoType;
+            backendBoard[r][c] =
+              val === 'X' ? 'GARBAGE' : (val as TetrominoType);
           }
         }
       }
     }
-    
+
     player.board = backendBoard;
     player.score = score;
   }
@@ -749,14 +805,15 @@ export class GameInstance {
   /** おじゃまを相手に送信 */
   private sendGarbageToOpponent(senderSocketId: string, lines: number): void {
     const targets = [...this.players.entries()].filter(
-      ([id, p]) => id !== senderSocketId && !p.isGameOver
+      ([id, p]) => id !== senderSocketId && !p.isGameOver,
     );
 
     if (targets.length === 0) return;
 
     // 生存している相手におじゃまを分配する（割り切れない場合は切り捨て等、今回は単純に Math.floor(lines / targets.length) ただし最低1は送る？）
     // ユーザーの要件「半分ずつ送る」に従い、等分する。
-    const sentLines = targets.length > 1 ? Math.floor(lines / targets.length) : lines;
+    const sentLines =
+      targets.length > 1 ? Math.floor(lines / targets.length) : lines;
     if (sentLines === 0) return;
 
     targets.forEach(([socketId, player]) => {
@@ -817,8 +874,11 @@ export class GameInstance {
 
     // 自分の状態を送信
     this.server.to(socketId).emit(ServerEvent.GAME_STATE, {
-      ...gameState, roomId: this.roomId, started: this.isRunning,
-      piecesPlaced: player.piecesPlaced, attacksSent: player.attacksSent,
+      ...gameState,
+      roomId: this.roomId,
+      started: this.isRunning,
+      piecesPlaced: player.piecesPlaced,
+      attacksSent: player.attacksSent,
     });
 
     // 相手と観戦者に自分の盤面を送信
@@ -836,12 +896,18 @@ export class GameInstance {
         this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
 
         // AIの盤面更新を、フロントエンドの40行ステージ形式に合わせて送信
-        if (!this.isAiMatch || (socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`)) {
-          const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
-            if (cell === null) return [0, 'clear'];
-            if (cell === 'GARBAGE') return ['X', 'merged'];
-            return [cell, 'merged'];
-          }));
+        if (
+          !this.isAiMatch ||
+          (socketId === `ai_${this.roomId}` && sid !== `ai_${this.roomId}`)
+        ) {
+          const frontendStage: [string | 0, 'clear' | 'merged'][][] =
+            player.board.map((row) =>
+              row.map((cell) => {
+                if (cell === null) return [0, 'clear'];
+                if (cell === 'GARBAGE') return ['X', 'merged'];
+                return [cell, 'merged'];
+              }),
+            );
 
           // 固定盤面には含まれない操作中ミノも重ねて、現在のAI状態を表示する。
           if (!player.isGameOver) {
@@ -851,21 +917,26 @@ export class GameInstance {
               player.activeY,
               player.activeRotation,
             )) {
-              if (row >= 0 && row < BOARD_ROWS && col >= 0 && col < BOARD_COLS) {
+              if (
+                row >= 0 &&
+                row < BOARD_ROWS &&
+                col >= 0 &&
+                col < BOARD_COLS
+              ) {
                 // GameBoard hides top-buffer stage cells with the "clear"
                 // status, so use the solid visual status for this snapshot.
                 frontendStage[row][col] = [player.activeMino, 'merged'];
               }
             }
           }
-          this.server.to(sid).emit('opponent_board_update', { 
+          this.server.to(sid).emit('opponent_board_update', {
             roomId: this.roomId,
             playerId: socketId,
-            stage: frontendStage, 
+            stage: frontendStage,
             score: player.score,
             next: this.bagFor(socketId).peek(5),
             hold: player.holdMino,
-            isGameOver: player.isGameOver
+            isGameOver: player.isGameOver,
           });
         }
       }
@@ -874,11 +945,14 @@ export class GameInstance {
       this.server.to(sid).emit(ServerEvent.OPPONENT_STATE, opponentState);
 
       // フロントエンド互換の盤面データをスペクテイターにも送信
-      const frontendStage: [string | 0, 'clear' | 'merged'][][] = player.board.map(row => row.map(cell => {
-        if (cell === null) return [0, 'clear'];
-        if (cell === 'GARBAGE') return ['X', 'merged'];
-        return [cell, 'merged'];
-      }));
+      const frontendStage: [string | 0, 'clear' | 'merged'][][] =
+        player.board.map((row) =>
+          row.map((cell) => {
+            if (cell === null) return [0, 'clear'];
+            if (cell === 'GARBAGE') return ['X', 'merged'];
+            return [cell, 'merged'];
+          }),
+        );
       // 操作中ミノも重ねる
       if (!player.isGameOver) {
         for (const [row, col] of getMinoCells(
@@ -899,7 +973,7 @@ export class GameInstance {
         playerId: socketId,
         stage: frontendStage,
         score: player.score,
-        isGameOver: player.isGameOver
+        isGameOver: player.isGameOver,
       });
     });
   }
@@ -908,15 +982,15 @@ export class GameInstance {
   public async handleGameOver(socketId: string): Promise<void> {
     const player = this.players.get(socketId);
     if (!player || player.isGameOver) return;
-    
+
     player.isGameOver = true;
-    
+
     // ゲームオーバーになった最新の盤面（お邪魔のせり上がり等）を必ずフロントエンドに送る
     this.broadcastState(socketId, player);
 
     // AIマッチでAIがゲームオーバーになった場合、クライアントにせり上がり演出等を見せるための猶予を設ける
     if (this.isAiMatch && socketId === `ai_${this.roomId}`) {
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1500));
     }
 
     const survivors = [...this.players.values()].filter((p) => !p.isGameOver);
@@ -1005,16 +1079,19 @@ export class GameInstance {
       if (!this.isRunning || aiPlayer.isGameOver) break;
 
       const delay = AI_BOT_CONFIGS[this.aiDifficulty].thinkDelayMs;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
 
       if (decision.gameOver) {
         // AIがおじゃまブロックによって死んだことを見せるため、
         // キューに残っているお邪魔ブロックを強制的に適用してからゲームオーバーを宣言する
         if (aiPlayer.garbageQueue > 0) {
-          aiPlayer.board = addGarbageLines(aiPlayer.board, aiPlayer.garbageQueue);
+          aiPlayer.board = addGarbageLines(
+            aiPlayer.board,
+            aiPlayer.garbageQueue,
+          );
           aiPlayer.garbageQueue = 0;
         }
-        
+
         this.handleGameOver(aiSocketId);
         break;
       }
