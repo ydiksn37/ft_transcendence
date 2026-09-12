@@ -42,6 +42,7 @@ interface CustomRoom {
     wins: number;
   }[];
   isPlaying: boolean;
+  isTournamentActive?: boolean;
   tournament?: Tournament;
 }
 
@@ -158,9 +159,11 @@ export class GameGateway
     if (roomId) {
       const activeRoom = this.customRooms.get(roomId);
       if (activeRoom) {
-        activeRoom.players = activeRoom.players.filter(
-          (p) => p.socket.id !== client.id,
-        );
+        if (!activeRoom.isTournamentActive) {
+          activeRoom.players = activeRoom.players.filter(
+            (p) => p.socket.id !== client.id,
+          );
+        }
         if (activeRoom.players.length === 0) {
           this.customRooms.delete(roomId);
         } else {
@@ -470,11 +473,14 @@ export class GameGateway
 
     const room = this.customRooms.get(roomId);
     if (room) {
-      room.players = room.players.filter((p) => p.socket.id !== client.id);
+      if (!room.isTournamentActive) {
+        room.players = room.players.filter((p) => p.socket.id !== client.id);
+      }
+      
       if (room.players.length === 0) {
         this.customRooms.delete(roomId);
       } else {
-        if (room.ownerSocketId === client.id) {
+        if (!room.players.find(p => p.socket.id === room.ownerSocketId)) {
           room.ownerSocketId = room.players[0].socket.id;
         }
         room.players.forEach((p) => {
@@ -511,17 +517,80 @@ export class GameGateway
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-    if (room.players.find((p) => p.socket.id === client.id)) {
-      client.emit('error', { message: 'すでにルームに参加しています' });
+    const existingSameSocketIndex = room.players.findIndex((p) => p.socket.id === client.id);
+    if (existingSameSocketIndex !== -1) {
+      // Already in room.players (e.g., they clicked leave but were kept because tournament was active).
+      // Seamlessly rejoin them to the socket.io room and update state.
+      this.clientRoom.set(client.id, room.roomId);
+      client.join(room.roomId);
+      
+      const payload = {
+        inRoom: true,
+        roomId: room.roomId,
+        name: room.name,
+        isOwner: room.ownerSocketId === client.id,
+        players: room.players.map((pl) => ({
+          socketId: pl.socket.id,
+          userId: pl.userId,
+          username: pl.username,
+          wins: pl.wins,
+        })),
+        isPlaying: room.isPlaying,
+        tournament: room.tournament,
+      };
+      client.emit('custom_room_state', payload);
+      
+      // Update others
+      room.players.forEach(p => {
+        if (p.socket.id !== client.id) p.socket.emit('custom_room_players_updated', { players: payload.players });
+      });
       return;
     }
 
-    room.players.push({
-      socket: client,
-      userId: (client.data?.userId as string) ?? null,
-      username: (client.data?.username as string) ?? null,
-      wins: 0,
-    });
+    let isReconnecting = false;
+    console.log(`[handleJoinCustomRoom] Client ${client.id} joining ${data.roomId}. isTournamentActive: ${room.isTournamentActive}`);
+    if (room.isTournamentActive) {
+      const userId = (client.data?.userId as string) ?? null;
+      
+      // Find a player with the same userId.
+      // If anonymous (null), require them to be disconnected to prevent hijacking other anonymous players.
+      // If authenticated, allow hijacking their own slot to avoid race conditions on page reload.
+      const existingPlayerIndex = room.players.findIndex(p => {
+        if (userId === null) return p.userId === null && p.socket.disconnected;
+        return p.userId === userId;
+      });
+      
+      if (existingPlayerIndex === -1) {
+        client.emit('error', { message: 'トーナメント進行中は新規参加できません' });
+        return;
+      }
+      
+      isReconnecting = true;
+      const oldSocketId = room.players[existingPlayerIndex].socket.id;
+      room.players[existingPlayerIndex].socket = client;
+      
+      if (room.tournament) {
+        const updateSocketId = (matches: any[]) => {
+          matches.forEach(m => {
+            m.playerIds = m.playerIds.map((id: string) => id === oldSocketId ? client.id : id);
+            if (m.winnerId === oldSocketId) m.winnerId = client.id;
+            if (m.children) updateSocketId(m.children);
+          });
+        };
+        updateSocketId(room.tournament.matches);
+      }
+      
+      if (room.ownerSocketId === oldSocketId) {
+        room.ownerSocketId = client.id;
+      }
+    } else {
+      room.players.push({
+        socket: client,
+        userId: (client.data?.userId as string) ?? null,
+        username: (client.data?.username as string) ?? null,
+        wins: 0,
+      });
+    }
 
     client.join(room.roomId);
     this.clientRoom.set(client.id, room.roomId);
@@ -554,7 +623,8 @@ export class GameGateway
           client.emit('spectating', {
             roomId: gameRoomId,
             displayNames,
-            players: activeMatch.playerIds
+            players: activeMatch.playerIds,
+            isStarted: instance.isStarted
           });
           instance.broadcastSnapshot();
         }
@@ -571,6 +641,7 @@ export class GameGateway
     if (!room || room.ownerSocketId !== client.id || room.players.length < 4)
       return;
 
+    room.isTournamentActive = true;
     const playerIds = room.players.map((p) => p.socket.id);
 
     // socketId → 表示名 のマップを開始時点で記録（退出後も名前を参照できるように）
@@ -701,6 +772,8 @@ export class GameGateway
           if (parentMatch) {
             parentMatch.playerIds.push(currentMatch.winnerId);
           } else if (currentMatch.id === tournament.root.id) {
+            room.isTournamentActive = false;
+            console.log(`[Tournament End] Tournament finished for room ${roomId}. isTournamentActive set to false.`);
             this.server.to(gameRoomId).emit('tournament_win', { winnerId: currentMatch.winnerId });
           }
 
