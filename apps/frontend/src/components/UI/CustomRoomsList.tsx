@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Socket } from 'socket.io-client';
 import { TournamentBracket } from './TournamentBracket';
 import type { Tournament } from '../../types/tournament';
+import '../../pages/LobbyPage.css';
 
 type Room = {
   roomId: string;
@@ -108,6 +109,22 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     };
   }, [socket]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !inRoom) {
+        if (onBack) {
+          onBack();
+        } else {
+          setAppState('MENU');
+        }
+      } else if (e.key === 'Enter' && inRoom && tournament && !isPlaying && !tournament.root.winnerId && isOwner) {
+        socket?.emit('game:start_tournament_match');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inRoom, onBack, setAppState, tournament, isPlaying, isOwner, socket]);
+
   const handleCreateRoom = () => {
     if (socket) {
       socket.emit('game:create_custom_room', { name: newRoomName });
@@ -141,88 +158,158 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
-      <h1 style={{ marginBottom: '20px', color: '#3498db' }}>Custom Rooms</h1>
+    <div className="lobby-container" style={{ alignItems: 'center', backgroundColor: 'transparent' }}>
+      {!tournament && (
+        <h1 className="mode-title" style={{ color: '#d35400', fontSize: '32px', marginBottom: '30px' }}>
+          CUSTOM ROOMS
+        </h1>
+      )}
       
       {!inRoom ? (
         <>
-          <div style={{ marginBottom: '40px', display: 'flex', gap: '10px' }}>
-
+          <div style={{ marginBottom: '40px', display: 'flex', gap: '15px', alignItems: 'center' }}>
             <input 
               type="text" 
-              placeholder="Room Name (Optional)" 
+              placeholder="ROOM NAME" 
               value={newRoomName} 
               onChange={(e) => setNewRoomName(e.target.value)}
-              style={{ width: '200px', padding: '10px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCreateRoom();
+                }
+              }}
+              style={{ 
+                width: '250px', 
+                padding: '12px', 
+                fontSize: '14px', 
+                borderRadius: '0', 
+                border: '4px solid #555', 
+                backgroundColor: '#000', 
+                color: '#fff', 
+                fontFamily: "'Press Start 2P', monospace",
+                outline: 'none'
+              }}
             />
             <button 
+              className="nav-btn"
               onClick={handleCreateRoom}
-              style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px' }}
+              style={{ padding: '0 20px', height: '48px', fontSize: '14px', borderColor: '#4caf50', color: '#4caf50' }}
             >
-              Create Room
+              CREATE ROOM
             </button>
           </div>
 
-          <div style={{ width: '400px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div className="panel" style={{ width: '100%', maxWidth: '600px', flexDirection: 'column', gap: '15px', padding: '20px', minHeight: '300px', justifyContent: 'flex-start' }}>
             {rooms.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#aaa' }}>No rooms available.</p>
+              <p style={{ textAlign: 'center', color: '#aaa', fontSize: '12px', lineHeight: '2' }}>NO ROOMS AVAILABLE.</p>
             ) : (
               rooms.map((room) => (
-                <div key={room.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '18px' }}>{room.name || `Room ${room.roomId}`}</span>
-                    <span style={{ fontSize: '12px', color: '#aaa', marginTop: '4px' }}>ID: {room.roomId}</span>
+                <div key={room.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#111', border: '4px solid #333' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <span style={{ fontSize: '14px', color: '#fff' }}>{room.name || `ROOM ${room.roomId}`}</span>
+                    <span style={{ fontSize: '10px', color: '#aaa' }}>ID: {room.roomId}</span>
                   </div>
                   <button 
+                    className="nav-btn"
                     onClick={() => handleJoinRoom(room.roomId)}
-                    style={{ padding: '8px 15px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '4px' }}
+                    style={{ borderColor: '#e74c3c', color: '#e74c3c', height: '40px', padding: '0 15px' }}
                   >
-                    Join
+                    JOIN
                   </button>
                 </div>
               ))
             )}
           </div>
         </>
+      ) : tournament ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', flex: 1 }}>
+          <h1 style={{ color: '#f1c40f', fontSize: '32px', marginBottom: '60px', textShadow: '4px 4px 0 #000' }}>
+            TOURNAMENT BRACKET
+          </h1>
+          
+          <div style={{ transform: 'scale(1.5)', transformOrigin: 'center top', marginBottom: '120px' }}>
+            <TournamentBracket 
+              node={tournament.root} 
+              getPlayerName={getPlayerName} 
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', marginTop: 'auto', paddingBottom: '40px' }}>
+            {!isPlaying && !tournament.root.winnerId && (
+              isOwner ? (
+                <button
+                  className="start-game-btn"
+                  onClick={() => socket?.emit('game:start_tournament_match')}
+                  style={{ borderColor: '#2ecc71', color: '#2ecc71', boxShadow: '0 0 20px #2ecc71' }}
+                >
+                  START NEXT MATCH
+                </button>
+              ) : (
+                <div style={{ padding: '20px 40px', fontSize: '16px', backgroundColor: '#111', color: '#f1c40f', border: '4px solid #f1c40f', fontWeight: 'bold', textAlign: 'center', animation: 'neon-pulse 1.5s infinite' }}>
+                  WAITING FOR OWNER TO START MATCH...
+                </div>
+              )
+            )}
+            
+            {isPlaying && (
+              <button 
+                className="start-game-btn"
+                onClick={() => { socket?.emit('room:spectate', { roomId: inRoom }) }}
+                style={{ borderColor: '#3498db', color: '#3498db', boxShadow: '0 0 20px #3498db' }}
+              >
+                SPECTATE MATCH
+              </button>
+            )}
+
+            {isOwner && tournament.root.winnerId && (
+              <button 
+                className="start-game-btn"
+                onClick={() => socket?.emit('game:clear_tournament')}
+                style={{ borderColor: '#e74c3c', color: '#e74c3c', boxShadow: '0 0 20px #e74c3c' }}
+              >
+                FINISH TOURNAMENT
+              </button>
+            )}
+
+            <button
+              className="nav-btn"
+              onClick={() => socket?.emit('game:leave_custom_room')}
+              style={{ borderColor: '#95a5a6', color: '#95a5a6', marginTop: '20px' }}
+            >
+              LEAVE ROOM
+            </button>
+          </div>
+        </div>
       ) : (
-        <div style={{ marginTop: '50px', textAlign: 'center' }}>
-          <h2>
+        <div style={{ width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h2 style={{ fontSize: '18px', color: '#fff', textAlign: 'center', lineHeight: '1.5' }}>
             {isPlaying
-              ? "Game in progress..."
+              ? "GAME IN PROGRESS..."
               : players.length < 2 
-                ? "Waiting for players..." 
-                : (isOwner ? "Ready to start!" : "Waiting for owner to start...")}
+                ? "WAITING FOR PLAYERS..." 
+                : (isOwner ? "READY TO START!" : "WAITING FOR OWNER...")}
           </h2>
-          <div style={{ marginTop: '20px', fontSize: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+          <div className="panel" style={{ marginTop: '20px', width: '100%', flexDirection: 'column', gap: '15px', alignItems: 'center', minHeight: 'auto' }}>
             {players.map((p, idx) => {
               const isMe = p.socketId === socket?.id;
               const displayName = getPlayerName(p.socketId);
               const roles = [];
-              if (idx === 0) roles.push('Owner');
-              if (isMe) roles.push('You');
+              if (idx === 0) roles.push('OWNER');
+              if (isMe) roles.push('YOU');
               const roleText = roles.length > 0 ? ` (${roles.join(', ')})` : '';
 
               return (
-                <div key={p.socketId} style={{ color: idx === 0 ? '#f1c40f' : '#ccc', fontWeight: isMe ? 'bold' : 'normal' }}>
-                  {displayName}{roleText} - Wins: {p.wins}
+                <div key={p.socketId} style={{ fontSize: '12px', color: idx === 0 ? '#f1c40f' : '#ccc', textShadow: isMe ? '2px 2px 0 #000' : 'none', fontWeight: isMe ? 'bold' : 'normal' }}>
+                  {displayName.toUpperCase()}{roleText} - WINS: {p.wins}
                 </div>
               );
             })}
           </div>
-          
-          {tournament && (
-            <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#111', borderRadius: '8px', overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
-              <TournamentBracket 
-                node={tournament.root} 
-
-                getPlayerName={getPlayerName} 
-              />
-            </div>
-          )}
 
           {isOwner && players.length >= 2 && !tournament && (
-            <div style={{ display: 'flex', gap: '20px', marginTop: '20px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '20px', marginTop: '30px', justifyContent: 'center' }}>
               <button
+                className="start-game-btn"
                 onClick={() => {
                   if (isPlaying) return;
                   if (players.length >= 4) {
@@ -232,60 +319,54 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
                   }
                 }}
                 disabled={isPlaying}
-                style={{ padding: '15px 30px', fontSize: '20px', cursor: isPlaying ? 'not-allowed' : 'pointer', backgroundColor: isPlaying ? '#7f8c8d' : '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+                style={{ 
+                  borderColor: isPlaying ? '#7f8c8d' : '#e74c3c', 
+                  color: isPlaying ? '#7f8c8d' : '#e74c3c', 
+                  boxShadow: isPlaying ? 'none' : '0 0 20px #e74c3c',
+                  cursor: isPlaying ? 'not-allowed' : 'pointer'
+                }}
               >
-                {isPlaying ? 'GAME IN PROGRESS...' : 'START'}
+                {isPlaying ? 'IN PROGRESS...' : 'START'}
               </button>
             </div>
           )}
 
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'center' }}>
             <button
+              className="nav-btn"
               onClick={() => socket?.emit('game:leave_custom_room')}
-              style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#95a5a6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+              style={{ borderColor: '#95a5a6', color: '#95a5a6' }}
             >
-              Leave Room
+              LEAVE ROOM
             </button>
           </div>
 
-          {tournament && !isPlaying && !tournament.root.winnerId && (
-             <div style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', backgroundColor: '#34495e', color: '#f1c40f', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', animation: 'pulse 1.5s infinite' }}>
-               NEXT MATCH STARTING SOON...
-             </div>
-          )}
-
-          {tournament && isPlaying && (
-             <button 
-               onClick={() => { socket?.emit('room:spectate', { roomId: inRoom }) }}
-               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-             >
-               SPECTATE MATCH
-             </button>
-          )}
-
-          {isOwner && tournament && tournament.root.winnerId && (
-             <button 
-               onClick={() => socket?.emit('game:clear_tournament')}
-               style={{ marginTop: '20px', padding: '15px 30px', fontSize: '20px', cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-             >
-               FINISH TOURNAMENT
-             </button>
-          )}
-
           {isOwner && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
-              <span>Room ID:</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginTop: '30px' }}>
+              <span style={{ fontSize: '12px' }}>ROOM ID:</span>
               <input
                 type="text"
                 value={customRoomId}
                 onChange={(e) => setCustomRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase())}
-                style={{ width: '80px', padding: '5px', fontSize: '18px', textAlign: 'center', borderRadius: '4px', border: '1px solid #ccc', color: '#000' }}
+                style={{ 
+                  width: '100px', 
+                  padding: '8px', 
+                  fontSize: '14px', 
+                  textAlign: 'center', 
+                  borderRadius: '0', 
+                  border: '4px solid #555', 
+                  backgroundColor: '#000',
+                  color: '#fff',
+                  fontFamily: "'Press Start 2P', monospace",
+                  outline: 'none'
+                }}
               />
               <button
+                className="nav-btn"
                 onClick={handleUpdateRoomId}
-                style={{ padding: '6px 12px', fontSize: '14px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}
+                style={{ borderColor: '#3498db', color: '#3498db' }}
               >
-                Update ID
+                UPDATE ID
               </button>
             </div>
           )}
@@ -294,6 +375,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
       {!inRoom && (
         <button
+          className="back-btn"
           onClick={() => {
             if (onBack) {
               onBack();
@@ -301,9 +383,9 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
               setAppState('MENU');
             }
           }}
-          style={{ marginTop: '40px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#555', color: '#fff', border: 'none', borderRadius: '8px' }}
+          style={{ marginTop: '40px' }}
         >
-          Back to Menu
+          ◀ BACK TO MENU
         </button>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CustomRoomsList } from '../components/UI/CustomRoomsList';
+import { VsScreen } from '../components/UI/VsScreen';
 import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
 import { useGameState } from '../hooks/useGameState';
@@ -58,6 +59,7 @@ const PlayPage = () => {
     opponentNextPieceKeys, setOpponentNextPieceKeys,
     opponentHoldMino, setOpponentHoldMino,
     opponents, setOpponents,
+    myDisplayName, setMyDisplayName,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -74,7 +76,7 @@ const PlayPage = () => {
     attackLines, setAttackLines
   } = useGameState();
 
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
@@ -657,8 +659,9 @@ const PlayPage = () => {
     appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
-    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
-    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents, setMyDisplayName,
+    matchResult, setMatchResult,
+    setPendingGarbage, pendingGarbageRef, token
   });
 
   const quitGame = useCallback((leaveRoomEntirely: boolean = false) => {
@@ -766,6 +769,11 @@ const PlayPage = () => {
 
   if (appState === 'CUSTOM_ROOMS') {
     return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
+  }
+
+  if (appState === 'VS_SCREEN') {
+    const myId = socketRef.current?.id || null;
+    return <VsScreen opponents={opponents as any} mySocketId={myId} myUsername={myDisplayName || user?.username || null} />;
   }
 
   // Prevent flashing the wrong mode's board on first render before useEffect triggers

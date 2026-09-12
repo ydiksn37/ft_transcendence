@@ -12,7 +12,7 @@ type UseMultiplayerProps = {
   appState: string;
   appStateRef: MutableRefObject<string>;
   gameOverRef: MutableRefObject<boolean>;
-  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING') => void;
+  setAppState: (s: 'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING' | 'VS_SCREEN') => void;
   setGameMode: (m: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => void;
   setStage: Dispatch<SetStateAction<Cell[][]>>;
   stageRef: MutableRefObject<Cell[][]>;
@@ -37,9 +37,10 @@ type UseMultiplayerProps = {
   setConnectionError: Dispatch<SetStateAction<string | null>>;
   setOpponentStage: Dispatch<SetStateAction<Cell[][] | null>>;
   setOpponentScore: Dispatch<SetStateAction<number>>;
-  setOpponentNextPieceKeys: React.Dispatch<React.SetStateAction<string[]>>;
-  setOpponentHoldMino: React.Dispatch<React.SetStateAction<string | null>>;
-  setOpponents: React.Dispatch<React.SetStateAction<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean; username?: string | null; playerIndex?: number; displayName?: string; }>>>;
+  setOpponentNextPieceKeys: Dispatch<SetStateAction<string[]>>;
+  setOpponentHoldMino: Dispatch<SetStateAction<string | null>>;
+  setOpponents: Dispatch<SetStateAction<Record<string, any>>>;
+  setMyDisplayName: Dispatch<SetStateAction<string | null>>;
   matchResult: 'WIN' | 'LOSE' | null;
   setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
@@ -54,7 +55,7 @@ export const useMultiplayer = ({
   stage, score, nextPieceKeys, holdInfo,
   socket, setSocket, socketRef,
   isWaiting, setIsWaiting, setConnectionError,
-  setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
+  setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents, setMyDisplayName,
   matchResult, setMatchResult,
   setPendingGarbage, pendingGarbageRef, token
 }: UseMultiplayerProps) => {
@@ -68,14 +69,19 @@ export const useMultiplayer = ({
 
   const [customRoomIsPlaying, setCustomRoomIsPlaying] = useState(false);
   const activeRoom = useRef<string | null>(null);
+  const isSpectatingRef = useRef(false);
   const beginServerMatch = (data: { roomId: string; users?: Record<string, { username: string | null }>; players?: string[]; displayNames?: Record<string, string> }) => {
     activeRoom.current = data.roomId;
+    isSpectatingRef.current = false;
     setServerState(null);
     setStartTime(Date.now());
     const initialOpponents: Record<string, any> = {};
     if (data.displayNames && socketRef.current) {
+      if (data.displayNames[socketRef.current.id]) {
+        setMyDisplayName(data.displayNames[socketRef.current.id]);
+      }
       for (const [sid, dName] of Object.entries(data.displayNames)) {
-        if (sid !== socketRef.current.id) {
+        if (sid !== socketRef.current.id && (!data.players || data.players.includes(sid))) {
           initialOpponents[sid] = {
             stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
             score: 0,
@@ -87,7 +93,7 @@ export const useMultiplayer = ({
     } else if (data.users && socketRef.current) {
       // Fallback for older formats
       for (const [sid, user] of Object.entries(data.users)) {
-        if (sid !== socketRef.current.id) {
+        if (sid !== socketRef.current.id && (!data.players || data.players.includes(sid))) {
           initialOpponents[sid] = {
             stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
             score: 0,
@@ -100,12 +106,12 @@ export const useMultiplayer = ({
     setOpponents(initialOpponents);
     setOpponentStage(null);
     gameOverRef.current = false;
-    appStateRef.current = 'ONLINE_1V1';
+    appStateRef.current = 'VS_SCREEN';
     setGameOver(false);
     setMatchResult(null);
     setIsWaiting(false);
     setGameMode('ONLINE_1V1');
-    setAppState('ONLINE_1V1');
+    setAppState('VS_SCREEN');
     // READY can already have a board/Next; input waits for server start.
     setDropTime(null);
   };
@@ -116,7 +122,14 @@ export const useMultiplayer = ({
       setDropTime(state.started && !state.isGameOver ? 1000 : null);
     });
     connection.on('game:start', (data: { roomId: string }) => {
-      if (data.roomId === activeRoom.current) setStartTime(Date.now());
+      if (data.roomId === activeRoom.current) {
+        setStartTime(Date.now());
+        if (appStateRef.current === 'VS_SCREEN') {
+          const nextState = isSpectatingRef.current ? 'SPECTATING' : 'ONLINE_1V1';
+          appStateRef.current = nextState;
+          setAppState(nextState);
+        }
+      }
     });
   };
 
@@ -325,12 +338,16 @@ export const useMultiplayer = ({
 
     newSocket.on('spectating', (data: { roomId: string; displayNames?: Record<string, string>; players?: string[] }) => {
       activeRoom.current = data.roomId;
+      isSpectatingRef.current = true;
       setServerState(null);
       
       const initialOpponents: Record<string, any> = {};
       if (data.displayNames && socketRef.current) {
+        if (data.displayNames[socketRef.current.id]) {
+          setMyDisplayName(data.displayNames[socketRef.current.id]);
+        }
         for (const [sid, dName] of Object.entries(data.displayNames)) {
-          if (sid !== socketRef.current.id) {
+          if (sid !== socketRef.current.id && (!data.players || data.players.includes(sid))) {
             initialOpponents[sid] = {
               stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
               score: 0,
@@ -346,10 +363,10 @@ export const useMultiplayer = ({
       setMatchResult(null);
       setGameOver(false);
       gameOverRef.current = false;
-      appStateRef.current = 'SPECTATING';
+      appStateRef.current = 'VS_SCREEN';
       setIsWaiting(false);
       setDropTime(null);
-      setAppState('SPECTATING');
+      setAppState('VS_SCREEN');
       setGameMode('ONLINE_1V1');
     });
 

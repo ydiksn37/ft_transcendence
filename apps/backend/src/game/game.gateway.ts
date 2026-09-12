@@ -586,9 +586,19 @@ export class GameGateway
       p.socket.emit('tournament_state', { tournament: room.tournament });
     });
 
-    setTimeout(() => {
+  }
+
+  @SubscribeMessage('game:start_tournament_match')
+  handleStartTournamentMatch(@ConnectedSocket() client: Socket) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId) return;
+    const room = this.customRooms.get(roomId);
+    if (!room || room.ownerSocketId !== client.id || !room.tournament) return;
+    
+    // Only start if not already playing and not finished
+    if (!room.isPlaying && !room.tournament.root.winnerId) {
       this.startNextTournamentRound(roomId);
-    }, 5000);
+    }
   }
 
   @SubscribeMessage('game:clear_tournament')
@@ -706,11 +716,6 @@ export class GameGateway
 
           if (!anyPlaying) {
             this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
-            if (!tournament.root.winnerId) {
-              setTimeout(() => {
-                this.startNextTournamentRound(roomId);
-              }, 5000);
-            }
           }
 
           room.players.forEach((p) => {
