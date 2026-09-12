@@ -67,7 +67,17 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
+  const [isShaking, setIsShaking] = useState(false);
   const navigate = useNavigate();
+
+  // Animation Triggers
+  useEffect(() => {
+    if (actionText) {
+      setIsShaking(true);
+      const timer = setTimeout(() => setIsShaking(false), 150);
+      return () => clearTimeout(timer);
+    }
+  }, [actionText]);
 
   // 非アクティブタブから戻ってきた際に WebGL コンテキストが失われている場合があるため
   // Stage を強制再マウントするためのキー。visibilitychange でインクリメントする。
@@ -425,13 +435,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   {renderTimeBlock()}
                 </div>
               )}
-          <div className="tetris-board-container">
+          <div className={`tetris-board-container ${isShaking ? 'board-shake' : ''}`}>
               {gameMode === 'ONLINE_1V1' ? (
                 <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
               ) : (
                 <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
               )}
-            <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+            <div 
+              className={pendingGarbage.reduce((a,b)=>a+b,0) >= 4 ? 'danger-border' : ''}
+              style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}
+            >
               <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
                 <Stage 
                   key={stageKey}
@@ -489,7 +502,16 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           </div>
 
           {actionText && (
-            <div style={{
+            <div 
+              key={actionText} // forces re-render/re-animation when text changes
+              className={
+                actionText.includes('Perfect Clear') ? 'action-text-pc' :
+                actionText.includes('Tetris') ? 'action-text-tetris' :
+                actionText.includes('T-Spin') ? 'action-text-tspin' :
+                actionText.includes('Combo') ? 'action-text-combo' :
+                'action-text-default'
+              }
+              style={{
               position: 'absolute',
               left: '50%',
               top: '30%',
@@ -501,7 +523,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               fontWeight: 'bold',
               textAlign: 'center',
               whiteSpace: 'pre-line',
-              animation: 'pop 0.3s ease-out',
               zIndex: 10
             }}>
               {actionText}
