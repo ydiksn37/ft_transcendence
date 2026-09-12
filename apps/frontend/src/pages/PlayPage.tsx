@@ -717,20 +717,25 @@ const PlayPage = () => {
 
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
-  const sendInput = (event: string, count = 1) => {
+  const sendInput = (event: string, count = 1, pieceId = serverState?.pieceId) => {
     if (appStateRef.current !== 'ONLINE_1V1' || gameOverRef.current || !serverState?.started || serverState.isGameOver) return;
-    if (serverState.pieceId === undefined || !serverState.roomId) return;
-    const target = { roomId: serverState.roomId, pieceId: serverState.pieceId };
+    if (pieceId === undefined || !serverState.roomId) return;
+    const target = { roomId: serverState.roomId, pieceId };
     for (let i = 0; i < count; ++i) socketRef.current?.emit(event, target);
   };
   const controls = serverMatch ? {
     movePlayerHorizontal: (dir: number, _stage: Cell[][], instant: boolean) =>
       sendInput(dir < 0 ? ClientEvent.MOVE_LEFT : ClientEvent.MOVE_RIGHT, instant ? 10 : 1),
-    softDrop: () => {
+    softDrop: (pieceId?: number) => {
       // Do not flood the server while grounded. The held-key timer uses the
-      // latest snapshot, so a successful sideways move re-enables dropping.
+      // latest authoritative piece identity after each server-side spawn.
       if (!serverState || serverState.activeMino.y >= serverState.ghostY) return;
-      sendInput(ClientEvent.SOFT_DROP, tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf)));
+      if (pieceId !== undefined && pieceId !== serverState.pieceId) return;
+      sendInput(
+        ClientEvent.SOFT_DROP,
+        tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf)),
+        pieceId,
+      );
     },
     hardDrop: () => sendInput(ClientEvent.HARD_DROP),
     playerRotate: (_stage: Cell[][], dir: number) => sendInput(dir === 2 ? ClientEvent.ROTATE_180 : dir < 0 ? ClientEvent.ROTATE_CCW : ClientEvent.ROTATE_CW),
@@ -739,7 +744,9 @@ const PlayPage = () => {
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
-    ...controls, startGame,
+    ...controls,
+    getActivePieceId: serverMatch ? () => serverState?.pieceId : undefined,
+    startGame,
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 

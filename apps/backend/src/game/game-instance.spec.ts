@@ -112,6 +112,107 @@ describe('GameInstance AI matches', () => {
     rematch.stop();
   });
 
+  it('does not let a pre-Hold soft-drop timer lock the held piece', () => {
+    const game = new GameInstance('hold_timer', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    const firstPieceId = player.pieceId;
+
+    for (let i = 0; i < 40; i++) {
+      game.applyInput('a', ClientEvent.SOFT_DROP, firstPieceId);
+    }
+    game.applyInput('a', ClientEvent.HOLD, firstPieceId);
+    const heldPieceId = player.pieceId;
+    const heldMino = player.activeMino;
+    const heldY = player.activeY;
+
+    jest.advanceTimersByTime(500);
+
+    expect(player.pieceId).toBe(heldPieceId);
+    expect(player.activeMino).toBe(heldMino);
+    expect(player.activeY).toBe(heldY);
+    expect(player.piecesPlaced).toBe(0);
+    game.stop();
+  });
+
+  it('restarts the lock delay after a grounded move', () => {
+    const game = new GameInstance('lock_reset', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    const pieceId = player.pieceId;
+
+    for (let i = 0; i < 40; i++) {
+      game.applyInput('a', ClientEvent.SOFT_DROP, pieceId);
+    }
+    jest.advanceTimersByTime(400);
+    game.applyInput('a', ClientEvent.MOVE_LEFT, pieceId);
+
+    jest.advanceTimersByTime(100);
+    expect(player.piecesPlaced).toBe(0);
+    jest.advanceTimersByTime(399);
+    expect(player.piecesPlaced).toBe(0);
+    jest.advanceTimersByTime(1);
+    expect(player.piecesPlaced).toBe(1);
+    game.stop();
+  });
+
+  it('rotates a grounded O piece and restarts its lock delay', () => {
+    const game = new GameInstance('o_rotation_lock_reset', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    const pieceId = player.pieceId;
+    expect(player.activeMino).toBe('O');
+
+    for (let i = 0; i < 40; i++) {
+      game.applyInput('a', ClientEvent.SOFT_DROP, pieceId);
+    }
+    jest.advanceTimersByTime(400);
+    game.applyInput('a', ClientEvent.ROTATE_CW, pieceId);
+
+    expect(player.activeRotation).toBe(1);
+    jest.advanceTimersByTime(100);
+    expect(player.piecesPlaced).toBe(0);
+    jest.advanceTimersByTime(400);
+    expect(player.piecesPlaced).toBe(1);
+    game.stop();
+  });
+
+  it('limits grounded lock-delay resets to 15', () => {
+    const game = new GameInstance('lock_reset_limit', server, 42);
+    game.addPlayer('a', null);
+    game.addPlayer('b', null);
+    game.start();
+    const player = game.getPlayers().get('a')!;
+    const pieceId = player.pieceId;
+
+    for (let i = 0; i < 40; i++) {
+      game.applyInput('a', ClientEvent.SOFT_DROP, pieceId);
+    }
+    for (let i = 0; i < 15; i++) {
+      jest.advanceTimersByTime(400);
+      game.applyInput(
+        'a',
+        i % 2 === 0 ? ClientEvent.MOVE_LEFT : ClientEvent.MOVE_RIGHT,
+        pieceId,
+      );
+      expect(player.piecesPlaced).toBe(0);
+    }
+
+    jest.advanceTimersByTime(400);
+    game.applyInput('a', ClientEvent.MOVE_RIGHT, pieceId);
+    jest.advanceTimersByTime(99);
+    expect(player.piecesPlaced).toBe(0);
+    jest.advanceTimersByTime(1);
+    expect(player.piecesPlaced).toBe(1);
+    game.stop();
+  });
+
   it('cancels READY when a match is stopped', () => {
     const game = new GameInstance('cancelled', server, 42);
     game.addPlayer('a', null);

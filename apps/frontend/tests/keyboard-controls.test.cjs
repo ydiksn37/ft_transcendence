@@ -86,6 +86,23 @@ test('native key-repeat does not add extra soft-drop bursts', () => {
   assert.equal(h.counts().timers, 0);
 });
 
+test('held soft drop follows the next server-confirmed piece', () => {
+  let pieceId = 41;
+  const receivedPieceIds = [];
+  const h = mount({
+    getActivePieceId: () => pieceId,
+    softDrop: activePieceId => receivedPieceIds.push(activePieceId),
+  });
+
+  h.key('keydown', 'ArrowDown');
+  pieceId = 42;
+  h.tick();
+
+  assert.deepEqual(receivedPieceIds, [41, 42]);
+  h.key('keyup', 'ArrowDown');
+  h.unmount();
+});
+
 test('blur releases held soft drop and spectator mode sends no repeats', () => {
   const h = mount();
   h.key('keydown', 'ArrowDown');

@@ -22,7 +22,7 @@ export interface ActiveMino {
 // ───────────────────────────────────────────────
 export interface GameState {
   /** Server-owned active-piece identity; changes on spawn and Hold. */
-  pieceId?: number;
+  pieceId: number;
   board: Board;
   activeMino: ActiveMino;
   ghostY: number;            // ゴーストピースのY位置

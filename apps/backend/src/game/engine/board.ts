@@ -153,13 +153,21 @@ export function tryRotate(
   currentRotation: 0 | 1 | 2 | 3,
   direction: 'CW' | 'CCW' | '180',
 ): { x: number; y: number; rotation: 0 | 1 | 2 | 3; kickIndex: number } | null {
-  if (type === 'O') return null;
   let newRotation: 0 | 1 | 2 | 3;
   if (direction === 'CW')
     newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
   else if (direction === 'CCW')
     newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
   else newRotation = ((currentRotation + 2) % 4) as 0 | 1 | 2 | 3;
+
+  // O uses the same occupied cells in every orientation. Still accept the
+  // rotation so multiplayer updates its orientation and grants lock delay in
+  // exactly the same way as the other pieces.
+  if (type === 'O') {
+    return isValidPosition(board, type, x, y, newRotation)
+      ? { x, y, rotation: newRotation, kickIndex: 0 }
+      : null;
+  }
 
   const kickTable = type === 'I' ? WALL_KICKS_I : WALL_KICKS_NORMAL;
   const kickKey = `${currentRotation}->${newRotation}`;

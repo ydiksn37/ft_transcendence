@@ -74,6 +74,10 @@ export interface PlayerState {
   isGameOver: boolean;
   lastMoveWasRotation: boolean;
   lastRotationKickIndex: number;
+  /** Lowest row reached by the current piece (step-reset tracking). */
+  lowestY: number;
+  /** Number of grounded move/rotation lock-delay resets at this height. */
+  lockResetCount: number;
   // APM/PPS 計算
   startTime: number;
   attacksSent: number;
@@ -165,6 +169,8 @@ export class GameInstance {
       isGameOver: false,
       lastMoveWasRotation: false,
       lastRotationKickIndex: 0,
+      lowestY: 18,
+      lockResetCount: 0,
       startTime: Date.now(),
       attacksSent: 0,
       piecesPlaced: 0,
@@ -466,7 +472,15 @@ export class GameInstance {
     }
 
     if (moved) {
-      // ロックタイマーリセット
+      const reachedNewLowestY = player.activeY > player.lowestY;
+      if (reachedNewLowestY) {
+        player.lowestY = player.activeY;
+        player.lockResetCount = 0;
+        // Reaching a new lowest row grants a fresh lock delay without
+        // consuming one of the grounded movement resets.
+        this.clearLockTimer(socketId);
+      }
+
       const isOnGround = !isValidPosition(
         player.board,
         player.activeMino,
@@ -474,7 +488,7 @@ export class GameInstance {
         player.activeY + 1,
         player.activeRotation,
       );
-      if (isOnGround) this.scheduleLock(socketId);
+      if (isOnGround) this.scheduleLock(socketId, !reachedNewLowestY);
       else this.clearLockTimer(socketId);
 
       this.broadcastState(socketId, player);
@@ -497,6 +511,20 @@ export class GameInstance {
     ) {
       player.activeY += 1;
       player.lastMoveWasRotation = false;
+      if (player.activeY > player.lowestY) {
+        player.lowestY = player.activeY;
+        player.lockResetCount = 0;
+      }
+
+      const isOnGround = !isValidPosition(
+        player.board,
+        player.activeMino,
+        player.activeX,
+        player.activeY + 1,
+        player.activeRotation,
+      );
+      if (isOnGround) this.scheduleLock(socketId);
+      else this.clearLockTimer(socketId);
       this.broadcastState(socketId, player);
     } else {
       this.scheduleLock(socketId);
@@ -530,6 +558,10 @@ export class GameInstance {
   /** ホールド */
   private holdMino(socketId: string, player: PlayerState): void {
     if (!player.canHold) return;
+
+    // A lock timer was scheduled for the pre-Hold piece. It must never lock
+    // the newly spawned Hold piece.
+    this.clearLockTimer(socketId);
 
     const prev = player.holdMino;
     player.holdMino = player.activeMino;
@@ -659,6 +691,8 @@ export class GameInstance {
     player.activeRotation = 0;
     player.lastMoveWasRotation = false;
     player.lastRotationKickIndex = 0;
+    player.lowestY = player.activeY;
+    player.lockResetCount = 0;
 
     // ゲームオーバー判定 (y=17 でブロックされていたら Block Out)
     if (
@@ -685,15 +719,39 @@ export class GameInstance {
       )
     ) {
       player.activeY += 1;
+      player.lowestY = player.activeY;
     }
   }
 
   /** ロック遅延タイマー */
-  private scheduleLock(socketId: string): void {
+  private scheduleLock(socketId: string, resetForGroundedMove = false): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+
+    let grantedGroundedReset = false;
+    if (resetForGroundedMove && this.lockTimer.has(socketId)) {
+      if (player.lockResetCount >= 15) return;
+      player.lockResetCount += 1;
+      this.clearLockTimer(socketId);
+      grantedGroundedReset = true;
+    }
+
     if (this.lockTimer.has(socketId)) return;
+    if (player.lockResetCount >= 15 && !grantedGroundedReset) {
+      this.lockPiece(socketId, player);
+      return;
+    }
+
+    const scheduledPieceId = player.pieceId;
     const timer = setTimeout(() => {
-      const player = this.players.get(socketId);
-      if (player && !player.isGameOver) this.lockPiece(socketId, player);
+      const currentPlayer = this.players.get(socketId);
+      if (
+        currentPlayer &&
+        !currentPlayer.isGameOver &&
+        currentPlayer.pieceId === scheduledPieceId
+      ) {
+        this.lockPiece(socketId, currentPlayer);
+      }
       this.lockTimer.delete(socketId);
     }, LOCK_DELAY_MS);
     this.lockTimer.set(socketId, timer);

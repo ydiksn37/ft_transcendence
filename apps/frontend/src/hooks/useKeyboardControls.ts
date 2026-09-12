@@ -18,7 +18,8 @@ type UseKeyboardControlsProps = {
   setKeyConfig: Dispatch<SetStateAction<Record<string, string>>>;
   setListeningAction: (action: string | null) => void;
   movePlayerHorizontal: (dir: number, stage: Cell[][], isArrZero: boolean) => void;
-  softDrop: () => void;
+  softDrop: (pieceId?: number) => void;
+  getActivePieceId?: () => number | undefined;
   hardDrop: () => void;
   playerRotate: (stage: Cell[][], dir: number) => void;
   playerHold: (width: number, stage?: Cell[][]) => void;
@@ -33,7 +34,7 @@ type UseKeyboardControlsProps = {
 export const useKeyboardControls = ({
   player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
   countdownRef, listeningActionRef, setKeyConfig, setListeningAction,
-  movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
+  movePlayerHorizontal, softDrop, getActivePieceId, hardDrop, playerRotate, playerHold, startGame,
   socketRef, setSocket, setIsWaiting, setDropTime, quitGame
 }: UseKeyboardControlsProps) => {
   const heldKeys = useRef<Set<string>>(new Set());
@@ -41,13 +42,19 @@ export const useKeyboardControls = ({
   const dasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const arrTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const softDropTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Every repeat targets an explicit server-owned piece. The target advances
+  // only after the latest server snapshot confirms that a new piece spawned.
+  const softDropPieceIdRef = useRef<number | undefined>(undefined);
   const softDropRef = useRef(softDrop);
   useEffect(() => { softDropRef.current = softDrop; }, [softDrop]);
+  const getActivePieceIdRef = useRef(getActivePieceId);
+  useEffect(() => { getActivePieceIdRef.current = getActivePieceId; }, [getActivePieceId]);
   const clearSoftDrop = useCallback(() => {
     if (softDropTimerRef.current !== null) {
       clearInterval(softDropTimerRef.current);
       softDropTimerRef.current = null;
     }
+    softDropPieceIdRef.current = undefined;
   }, []);
 
   const movePlayerRef = useRef(movePlayerHorizontal);
@@ -212,16 +219,21 @@ export const useKeyboardControls = ({
         case conf.softDrop:
           if (!heldKeys.current.has(conf.softDrop)) {
             heldKeys.current.add(conf.softDrop);
-            softDropRef.current();
+            clearSoftDrop();
+            softDropPieceIdRef.current = getActivePieceIdRef.current?.();
+            softDropRef.current(softDropPieceIdRef.current);
             // OS key-repeat may switch to the horizontal key while Down is
             // still held. Repeat independently, including while grounded, so
             // movement into an open shaft resumes dropping without a re-press.
-            clearSoftDrop();
             softDropTimerRef.current = setInterval(() => {
               if (!heldKeys.current.has(keyConfigRef.current.softDrop) ||
                   (appStateRef.current !== 'PLAYING' && appStateRef.current !== 'ONLINE_1V1' && appStateRef.current !== 'MENU') ||
                   countdownRef.current === 'READY') return;
-              softDropRef.current();
+              const latestPieceId = getActivePieceIdRef.current?.();
+              if (latestPieceId !== undefined) {
+                softDropPieceIdRef.current = latestPieceId;
+              }
+              softDropRef.current(softDropPieceIdRef.current);
             }, 33);
           }
           break;
