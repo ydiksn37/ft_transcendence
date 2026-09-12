@@ -19,7 +19,7 @@ export const useGameState = () => {
   const [opponentHoldMino, setOpponentHoldMino] = useState<string | null>(null);
   const [opponents, setOpponents] = useState<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean; username?: string | null; displayName?: string; playerIndex?: number }>>({});
   const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
-  const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
+  const [matchResult, setMatchResult] = useState<'WIN' | 'TOURNAMENT_WIN' | 'LOSE' | null>(null);
   const [pendingGarbage, setPendingGarbage] = useState<number[]>([]);
   const pendingGarbageRef = useRef<number[]>([]);
 

@@ -41,8 +41,8 @@ type UseMultiplayerProps = {
   setOpponentHoldMino: Dispatch<SetStateAction<string | null>>;
   setOpponents: Dispatch<SetStateAction<Record<string, any>>>;
   setMyDisplayName: Dispatch<SetStateAction<string | null>>;
-  matchResult: 'WIN' | 'LOSE' | null;
-  setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
+  matchResult: 'WIN' | 'TOURNAMENT_WIN' | 'LOSE' | null;
+  setMatchResult: Dispatch<SetStateAction<'WIN' | 'TOURNAMENT_WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
   pendingGarbageRef: MutableRefObject<number[]>;
   token: string | null;
@@ -235,6 +235,12 @@ export const useMultiplayer = ({
       }
     });
 
+    newSocket.on('tournament_win', (data: { winnerId: string }) => {
+      if (data.winnerId === newSocket.id) {
+        setMatchResult('TOURNAMENT_WIN');
+      }
+    });
+
     newSocket.on('disconnect', (reason: string) => {
       if (reason === 'io client disconnect') return;
       if (!gameOverRef.current) {
@@ -336,7 +342,14 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('spectating', (data: { roomId: string; displayNames?: Record<string, string>; players?: string[] }) => {
+    newSocket.on('tournament_win', (data: { winnerId: string }) => {
+      if (appStateRef.current === 'SPECTATING') return;
+      if (data.winnerId === newSocket.id) {
+        setMatchResult('TOURNAMENT_WIN');
+      }
+    });
+
+    newSocket.on('spectating', (data: { roomId: string; displayNames?: Record<string, string>; players?: string[]; isStarted?: boolean }) => {
       activeRoom.current = data.roomId;
       isSpectatingRef.current = true;
       setServerState(null);
@@ -363,10 +376,17 @@ export const useMultiplayer = ({
       setMatchResult(null);
       setGameOver(false);
       gameOverRef.current = false;
-      appStateRef.current = 'VS_SCREEN';
+      
+      if (data.isStarted) {
+        appStateRef.current = 'SPECTATING';
+        setAppState('SPECTATING');
+      } else {
+        appStateRef.current = 'VS_SCREEN';
+        setAppState('VS_SCREEN');
+      }
+      
       setIsWaiting(false);
       setDropTime(null);
-      setAppState('VS_SCREEN');
       setGameMode('ONLINE_1V1');
     });
 

@@ -25,7 +25,7 @@ type TetrisUIProps = {
   holdInfo: { tetromino: string | null; hasHeld: boolean };
   isWaiting: boolean;
   connectionError: string | null;
-  matchResult: 'WIN' | 'LOSE' | null;
+  matchResult: 'WIN' | 'TOURNAMENT_WIN' | 'LOSE' | null;
   opponentStage: Cell[][] | null;
   opponentScore: number;
   opponentNextPieceKeys?: string[];
@@ -756,11 +756,13 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               border: '6px solid #fff',
               zIndex: 50,
               minWidth: '400px',
-              boxShadow: '15px 15px 0px rgba(0,0,0,0.8)'
+              boxShadow: '15px 15px 0px rgba(0,0,0,0.8)',
+              animation: matchResult === 'TOURNAMENT_WIN' ? 'fadeInDelay 3s forwards' : 'none',
+              opacity: matchResult === 'TOURNAMENT_WIN' ? 0 : 1
             }}>
-              <h2 style={{ color: matchResult === 'WIN' ? 'gold' : 'red', margin: '0 0 25px 0', fontSize: '32px', fontFamily: '"Press Start 2P", monospace', textShadow: '4px 4px 0px rgba(0,0,0,0.5)', lineHeight: '1.4' }}>
+              <h2 style={{ color: (matchResult === 'WIN' || matchResult === 'TOURNAMENT_WIN') ? 'gold' : 'red', margin: '0 0 25px 0', fontSize: '32px', fontFamily: '"Press Start 2P", monospace', textShadow: '4px 4px 0px rgba(0,0,0,0.5)', lineHeight: '1.4' }}>
                 {gameMode === 'ONLINE_1V1' && matchResult
-                  ? matchResult === 'WIN' ? 'YOU WIN!' : 'YOU LOSE'
+                  ? (matchResult === 'WIN' || matchResult === 'TOURNAMENT_WIN') ? 'YOU WIN!' : 'YOU LOSE'
                   : (lines >= 40 && gameMode === '40_LINES' ? 'FINISHED!' : 'GAME OVER')
                 }
               </h2>
@@ -885,7 +887,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               </div>
             </div>
           )}
-</div>
+          {gameOver && matchResult === 'TOURNAMENT_WIN' && (
+            <div className="epic-win-overlay">
+              <div className="epic-win-text">VICTORY!</div>
+            </div>
+          )}
+        </div>
     </div>
   );
 };

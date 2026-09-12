@@ -700,6 +700,8 @@ export class GameGateway
           );
           if (parentMatch) {
             parentMatch.playerIds.push(currentMatch.winnerId);
+          } else if (currentMatch.id === tournament.root.id) {
+            this.server.to(gameRoomId).emit('tournament_win', { winnerId: currentMatch.winnerId });
           }
 
           for (const [sid, rId] of this.clientGameRoom.entries()) {
@@ -810,7 +812,8 @@ export class GameGateway
               p.socket.emit('spectating', {
                 roomId: gameRoomId,
                 displayNames,
-                players: firstStartedMatch.playerIds
+                players: firstStartedMatch.playerIds,
+                isStarted: instance.isStarted
               });
               instance.broadcastSnapshot();
             }
@@ -1358,7 +1361,8 @@ export class GameGateway
     client.emit('spectating', {
       roomId: gameRoomId,
       displayNames,
-      players: playersArr
+      players: playersArr,
+      isStarted: room.isStarted
     });
     room.broadcastSnapshot();
   }

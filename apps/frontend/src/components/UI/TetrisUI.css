@@ -106,3 +106,83 @@
     align-items: center;
   }
 }
+
+@keyframes fadeInDelay {
+  0%, 80% { opacity: 0; pointer-events: none; }
+  100% { opacity: 1; pointer-events: auto; }
+}
+
+@keyframes epicWinScale {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  10% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+  15% { transform: translate(-50%, -50%) scale(0.9); }
+  20% { transform: translate(-50%, -50%) scale(1.1); }
+  25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -300px) scale(0.5); opacity: 1; }
+}
+
+@keyframes epicWinFlash {
+  0%, 100% { color: #ffd700; text-shadow: 0 0 20px #ffd700, 0 0 40px #ff8c00, 4px 4px 0 #000; }
+  50% { color: #fff; text-shadow: 0 0 40px #fff, 0 0 80px #ffd700, 4px 4px 0 #000; }
+}
+
+@keyframes epicWinBg {
+  0% { background-color: rgba(255, 215, 0, 0); }
+  15% { background-color: rgba(255, 215, 0, 0.4); }
+  50% { background-color: rgba(0, 0, 0, 0.85); }
+  100% { background-color: rgba(0, 0, 0, 0.6); }
+}
+
+@keyframes epicWinParticles {
+  0% { box-shadow: 0 0 0 transparent; }
+  50% { box-shadow: 0 -50px 20px #ffd700, -50px 0 20px #ff8c00, 50px 0 20px #ffd700, 0 50px 20px #ff8c00; }
+  100% { box-shadow: 0 0 0 transparent; }
+}
+
+.epic-win-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: epicWinBg 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  pointer-events: none;
+}
+
+.epic-win-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 80px;
+  font-weight: bold;
+  text-align: center;
+  white-space: nowrap;
+  animation: 
+    epicWinScale 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards,
+    epicWinFlash 0.5s infinite alternate;
+}
+
+@media (max-width: 768px) {
+  @keyframes epicWinScaleMobile {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    10% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+    15% { transform: translate(-50%, -50%) scale(0.9); }
+    20% { transform: translate(-50%, -50%) scale(1.1); }
+    25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -250px) scale(0.6); opacity: 1; }
+  }
+  .epic-win-text {
+    font-size: 40px;
+    animation: 
+      epicWinScaleMobile 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards,
+      epicWinFlash 0.5s infinite alternate;
+  }
+}
+

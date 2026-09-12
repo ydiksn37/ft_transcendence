@@ -1555,4 +1555,8 @@ export class GameInstance {
   isActive(): boolean {
     return this.isRunning || this.simulationStartTimer !== null;
   }
+
+  get isStarted(): boolean {
+    return this.isRunning;
+  }
 }

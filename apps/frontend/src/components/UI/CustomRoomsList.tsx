@@ -119,11 +119,17 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         }
       } else if (e.key === 'Enter' && inRoom && tournament && !isPlaying && !tournament.root.winnerId && isOwner) {
         socket?.emit('game:start_tournament_match');
+      } else if (e.key === 'Enter' && inRoom && !tournament && !isPlaying && isOwner && players.length >= 2) {
+        if (players.length >= 4) {
+          socket?.emit('game:create_tournament');
+        } else {
+          socket?.emit('game:start_custom_room');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [inRoom, onBack, setAppState, tournament, isPlaying, isOwner, socket]);
+  }, [inRoom, onBack, setAppState, tournament, isPlaying, isOwner, socket, players.length]);
 
   const handleCreateRoom = () => {
     if (socket) {
