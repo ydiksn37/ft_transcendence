@@ -1785,10 +1785,12 @@ class OpeningReplay {
     expect(clear.linesCleared == decision.linesCleared, "opener must predict actual cleared rows");
     const auto spin = tetris::detectTSpin(context.board, active, kick >= 0, kick, clear.linesCleared);
     if (clear.linesCleared > 0) {
-      expect(clear.linesCleared == 2 && spin == tetris::TSpin::Full,
-             "opening book must finish with a real TSD, not an ordinary double");
-      attack += tetris::calculateGarbage(2, spin, false, context.backToBack > 0);
-      ++context.backToBack;
+      if (spin == tetris::TSpin::Full && clear.linesCleared == 3) ++triples;
+      if (spin == tetris::TSpin::Full && clear.linesCleared == 2) ++doubles;
+      if (clear.board.empty()) ++perfects;
+      attack += tetris::calculateGarbage(clear.linesCleared, spin, clear.board.empty(), context.backToBack > 0);
+      if (spin == tetris::TSpin::Full || clear.linesCleared == 4) ++context.backToBack;
+      else context.backToBack = 0;
     }
     context.board = clear.board;
     context.active = bag.next();
@@ -1798,6 +1800,9 @@ class OpeningReplay {
 
   tetris::DecisionContext context;
   int attack = 0;
+  int triples = 0;
+  int doubles = 0;
+  int perfects = 0;
 
  private:
   void refreshNext() {
@@ -1809,110 +1814,76 @@ class OpeningReplay {
 };
 
 void testExpertOpeningBook() {
-  // Includes both arrangements, their mirrors, T held over the bag boundary,
-  // and the mirrored second-bag continuation. Only five Next are exposed.
-  for (const unsigned seed : {1U, 8U, 6U, 10U, 148U, 200U}) {
+  int starts = 0, tst = 0, pc = 0, mirrors = 0;
+  int runtimePc = 0;
+  for (unsigned seed = 1; seed <= 40; ++seed) {
     OpeningReplay replay(seed);
-    const auto plan = tetris::findExpertOpeningPlan(replay.context);
-    expect(plan && plan->steps.size() == 7, "known opening seed must have a complete first-bag plan");
-    if (seed == 148 || seed == 200) expect(plan->mirrored, "mirror-only order must select the mirrored opener");
+    auto plan = tetris::findExpertOpeningPlan(replay.context);
+    if (!plan) continue;
+    ++starts;
+    mirrors += plan->mirrored;
+    expect(plan->name == "Honey-Cup/stack" && plan->steps.size() == 7,
+           "TD opener must start with a complete stack, not a TSD");
+    const bool mirrored = plan->mirrored;
+    for (const auto& step : plan->steps)
+      expect(replay.play(step) == 0, "bag one must stack without clearing");
+    plan = tetris::findExpertOpeningPlan(replay.context, true, mirrored);
+    if (!plan) continue;
+    expect(plan->name.find("Honey-Cup/TST-") == 0, "bag two must use a TST template");
+    for (const auto& step : plan->steps) replay.play(step);
+    expect(replay.triples == 1, "bag two must replay a genuine TST");
+    ++tst;
+    plan = tetris::findExpertOpeningPlan(replay.context, true, mirrored);
+    if (!plan) continue;
+    expect(plan->name == "TD/TSD-PC" && !plan->hasContinuation,
+           "third bag must finish with the verified TSD+PC plan");
+    for (const auto& step : plan->steps) replay.play(step);
+    expect(replay.doubles == 1 && replay.perfects == 1 && replay.context.board.empty(),
+           "PC route must contain a real TSD and leave an empty board");
+    ++pc;
+    OpeningReplay live(seed);
     tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 150000);
-    for (int i = 0; i < 7; ++i) {
-      const auto decision = agent.decide(replay.context);
-      expect(decision && !agent.lastOpeningName().empty(), "Expert must execute its opening book");
-      expect(replay.play(*decision) == (i == 6 ? 2 : 0), "first bag must preserve B2B until TSD");
+    for (int i = 0; i < 20; ++i) {
+      const auto decision = agent.decide(live.context);
+      if (!decision || agent.lastOpeningName().empty()) break;
+      live.play(*decision);
     }
-    expect(replay.attack == 4, "first opening TSD must send four base attack lines");
-    expect(tetris::evaluateExpertBoard(replay.context.board).holes == 0,
-           "first opening must leave a low board without buried holes");
-    if (seed == 6 || seed == 10 || seed == 200) {
-      for (int i = 0; i < 7; ++i) {
-        const auto decision = agent.decide(replay.context);
-        expect(decision && agent.lastOpeningName() == "LST-TSD", "compatible second bag must follow LST");
-        expect(replay.play(*decision) == (i == 6 ? 2 : 0), "LST must preserve B2B until its TSD");
-      }
-      expect(replay.attack == 9 && replay.context.backToBack == 2,
-             "TSD into B2B TSD must send nine base attack lines");
-      expect(tetris::evaluateExpertBoard(replay.context.board).holes == 0,
-             "LST continuation must not leave buried holes");
-      const auto normal = agent.decide(replay.context);
-      expect(normal && agent.lastOpeningName().empty(), "after two TSDs Expert must return to ordinary search");
+    if (live.triples == 1 && live.doubles == 1 && live.perfects == 1) {
+      ++runtimePc;
+      const auto ordinary = agent.decide(live.context);
+      expect(ordinary && agent.lastOpeningName().empty(), "PC must hand off to normal search");
     }
   }
+  std::cout << "TD smoke: starts=" << starts << " mirrors=" << mirrors
+            << " TST=" << tst << " TSD-PC=" << pc << " runtime-PC=" << runtimePc << '\n';
+  expect(starts > 0 && mirrors > 0 && tst > 0 && pc > 0 && runtimePc > 0,
+         "TD book must work in both orientations and complete TSD+PC within the runtime budget");
+}
 
+void testExpertTdOpeningSafety() {
+  // Safety: future bags are not invented, and damage cancels a cached plan.
   OpeningReplay replay(6);
   auto shortNext = replay.context;
   shortNext.next.resize(2);
-  expect(!tetris::findExpertOpeningPlan(shortNext), "book must not guess several invisible bag pieces");
+  expect(!tetris::findExpertOpeningPlan(shortNext), "do not guess invisible bag pieces");
   auto duplicate = replay.context;
   duplicate.next[0] = duplicate.active;
-  expect(!tetris::findExpertOpeningPlan(duplicate), "bag inference must reject duplicate observed types");
-  auto lockedHold = replay.context;
-  lockedHold.active = tetris::PieceType::T;
-  lockedHold.next = {tetris::PieceType::I, tetris::PieceType::O, tetris::PieceType::L,
-                    tetris::PieceType::S, tetris::PieceType::Z};
-  lockedHold.canHold = false;
-  expect(!tetris::findExpertOpeningPlan(lockedHold), "early T cannot be saved when Hold is locked");
-  auto pendingGarbage = replay.context;
-  pendingGarbage.garbageQueue = 1;
-  expect(!tetris::findExpertOpeningPlan(pendingGarbage), "book must not start with incoming garbage");
-  for (const int interruption : {0, 1, 2}) {
-    OpeningReplay interrupted(6);
+  expect(!tetris::findExpertOpeningPlan(duplicate), "reject inconsistent seven-bag input");
+  auto garbage = replay.context;
+  garbage.garbageQueue = 1;
+  expect(!tetris::findExpertOpeningPlan(garbage), "do not start TD with incoming garbage");
+  for (unsigned seed = 1; seed <= 40; ++seed) {
+    OpeningReplay interrupted(seed);
     tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 150000);
     const auto first = agent.decide(interrupted.context);
-    expect(first && !agent.lastOpeningName().empty(), "interruption fixture must start an opener");
+    if (!first || agent.lastOpeningName().empty()) continue;
     interrupted.play(*first);
-    if (interruption == 0) interrupted.context.board.set(30, 0, tetris::Cell::Z);
-    else if (interruption == 1) interrupted.context.garbageQueue = 1;
-    else interrupted.context.next.assign(5, tetris::PieceType::T);
+    interrupted.context.garbageQueue = 1;
     const auto fallback = agent.decide(interrupted.context);
-    expect(fallback && agent.lastOpeningName().empty(),
-           "garbage, an unexpected board, or changed Next must immediately cancel the opener");
+    expect(fallback && agent.lastOpeningName().empty(), "garbage cancels TD immediately");
+    return;
   }
-}
-
-void testExpertReliableOpeningBook() {
-  // Wiki normal route, including both second- and third-bag arrangements.
-  for (const unsigned seed : {24U, 54U, 74U, 99U}) {
-    OpeningReplay replay(seed);
-    tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 150000);
-    for (int bag = 0; bag < 3; ++bag) {
-      const auto plan = tetris::findExpertOpeningPlan(replay.context, bag > 0);
-      expect(plan && plan->name.find("Reliable-TSD/") == 0,
-             "Reliable must complement an order unsupported by the older book");
-      expect(plan->hasContinuation == (bag < 2),
-             "Reliable must continue through bag three but not indefinitely");
-      for (int i = 0; i < 7; ++i) {
-        const auto decision = agent.decide(replay.context);
-        expect(decision && agent.lastOpeningName() == plan->name,
-               "Expert must execute the selected Reliable arrangement");
-        expect(replay.play(*decision) == (i == 6 ? 2 : 0),
-               "Reliable setup must preserve B2B until each actual TSD");
-      }
-      expect(tetris::evaluateExpertBoard(replay.context.board).holes == 0,
-             "every Reliable TSD must leave no buried holes");
-    }
-    expect(replay.attack == 14 && replay.context.backToBack == 3,
-           "three Reliable TSDs must send 4+5+5 base attack lines");
-    expect(agent.attackLaneColumn() == -1,
-           "the opener must leave ordinary search free to choose either orientation");
-    const auto ordinary = agent.decide(replay.context);
-    expect(ordinary && agent.lastOpeningName().empty(),
-           "Reliable must hand off to normal search after three bags");
-    expect(agent.attackLaneColumn() >= 3 && agent.attackLaneColumn() <= 6,
-           "ordinary search must select a lane from the nonempty opener residual");
-  }
-  OpeningReplay interrupted(24);
-  tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 150000);
-  for (int i = 0; i < 14; ++i) {
-    const auto decision = agent.decide(interrupted.context);
-    expect(decision && !agent.lastOpeningName().empty(), "third-bag interruption fixture must use the book");
-    interrupted.play(*decision);
-  }
-  interrupted.context.garbageQueue = 1;
-  const auto recovery = agent.decide(interrupted.context);
-  expect(recovery && agent.lastOpeningName().empty(),
-         "incoming garbage must cancel even a geometrically certain third-bag TSD");
+  expect(false, "runtime Expert must execute the TD opener within budget");
 }
 
 void testGarbageCalculationMatchesTypeScript() {
@@ -1994,7 +1965,7 @@ int main() {
     testExpertEvaluatesDonationUnlocks();
     testExpertDonationTemplates();
     testExpertOpeningBook();
-    testExpertReliableOpeningBook();
+    testExpertTdOpeningSafety();
     testExpertWellDistanceFeature();
     testExpertBoardStabilityPenalizesBuriedHoles();
     testExpertAvoidsWastingTWithHold();

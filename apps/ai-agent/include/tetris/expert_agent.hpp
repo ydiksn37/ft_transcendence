@@ -223,8 +223,8 @@ struct ExpertOpeningPlan {
   bool hasContinuation = false;
 };
 
-// Plans an entire bag of TKI/LST or Reliable TSD. Every
-// placement and the final spin are replayable. Never guesses a future bag.
+// Honey Cup stack -> TST (including mirrors) -> bounded TSD+PC search.
+// Every placement and spin is replayable. Never guesses a future bag.
 [[nodiscard]] std::optional<ExpertOpeningPlan> findExpertOpeningPlan(
     const DecisionContext& context, bool continuation = false,
     bool mirrored = false);

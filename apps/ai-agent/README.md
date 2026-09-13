@@ -205,28 +205,29 @@ when T is held or visible within three Next entries. It is a soft stacking
 preference, not a ban on Tetris, a reward for creating holes, or a restriction
 on the verified opening book.
 
-Expert first tries a first-bag TSD opener with J-roof/SZ-roof arrangements and
-their horizontal mirrors. On a compatible second bag it follows with an LST
-TSD. The layouts are based on
-[Shiwehi's TSD opener guide](https://shiwehi.com/tetris/template/tsdopener.php).
-Orders unsupported by TKI also try the normal route of
-[Reliable TSD](https://w.atwiki.jp/sasasa123/pages/70.html), listed in the
-[requested beginner-template guide](https://w.atwiki.jp/sasasa123/pages/1051.html).
-This includes both second- and third-bag arrangements and their mirrors:
-**TSD -> B2B TSD -> B2B TSD**. Without garbage cancellation, the Reliable
-route sends 4 + 5 + 5 base garbage lines under the current engine's attack
-table (TKI/LST sends 4 + 5). TST and consecutive-perfect-clear routes are
-not included.
+Expert uses [Honey Cup (はちみつ砲)](https://tetristemplate.info/post-835/)
+instead of the former TKI/LST/Reliable TSD book. It supports first-bag stacking,
+three A arrangements and the B arrangement for the second-bag TST, and their
+horizontal mirrors. The intended sequence is **stack -> TST -> TSD + perfect
+clear**. Gamushiro is not included; its held-piece/bag-boundary variations
+require separate layouts and verification.
 
 Before using a layout, the book verifies all seven placements with the actual
-movement/SRS rules and Hold order. Preparation clears no lines, and the final
-T must really spin and clear two rows. The residual board must have no covered
-empty cells. Only one fresh bag is planned at a time; continuations are
-validated when their bag becomes visible, not promised from invisible pieces.
+movement/SRS rules and Hold order. Bag one clears nothing; bag two must end
+with a real three-line T-spin. Covered cells are allowed in these verified
+templates (the ordinary midgame evaluator is unchanged).
+
+After TST, an exact, bounded six-piece search tries to clear the five remaining
+rows, including a real TSD. Complete solutions are movement-checked before
+execution. A TSD and perfect clear can occur in the same placement. This is
+not a guarantee of the published theoretical PC rate: unseen supply, search
+budget, and the project's own rotation rules can prevent a solution. The book
+uses at most half the decision budget, capped at 25 ms, leaving time for normal
+search when setup or PC search fails. It does not loop openers after PC.
 
 The server's five Next entries are sufficient when Active (and possibly Hold)
 identify six distinct pieces of the fresh seven-bag: only the final missing
-type is deduced. Shorter or inconsistent previews are rejected. If T is held
+type is deduced. Shorter or inconsistent previews are rejected. If a piece is held
 at the bag boundary, the next active piece may be swapped for it regardless of
 that unknown piece's identity; no future RNG is reproduced or predicted.
 
@@ -234,8 +235,8 @@ Every request rechecks the expected board, visible piece order, Hold permission,
 spawn position, and pending garbage. A mismatch or incoming garbage cancels the
 book immediately and permanently for that agent's game. Unsupported orders or
 an exhausted planning budget also fall back to ordinary Expert search. The
-book is attempted only on a fresh agent's empty first board, finishes after at
-most three TSDs, and does not restart after a midgame perfect clear. Start a fresh
+book is attempted only on a fresh agent's empty first board, runs for at most
+20 placements, and does not restart after a midgame perfect clear. Start a fresh
 agent process/object for a new game, as the backend already does.
 
 `findExpertOpeningPlan` exposes the full plan for deterministic diagnostics;

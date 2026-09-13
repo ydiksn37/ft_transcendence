@@ -1817,16 +1817,18 @@ struct OpeningPattern {
   Board base;
   std::array<ActivePiece, 7> targets{};
   bool hasContinuation = false;
+  int spinLines = 2;
 };
 
 OpeningPattern makeOpeningPattern(std::string_view name,
                                   const std::vector<std::string_view>& rows,
                                   ActivePiece t, bool continuation,
-                                  bool anotherBag = false) {
+                                  bool anotherBag = false, int spinLines = 2) {
   OpeningPattern pattern;
   pattern.name = name;
   pattern.continuation = continuation;
   pattern.hasContinuation = !continuation || anotherBag;
+  pattern.spinLines = spinLines;
   const int firstRow = kBoardRows - static_cast<int>(rows.size());
   for (int row = 0; row < static_cast<int>(rows.size()); ++row) {
     if (rows[row].size() != kBoardCols) throw std::logic_error("invalid opener row");
@@ -1835,7 +1837,7 @@ OpeningPattern makeOpeningPattern(std::string_view name,
   }
   for (int i = 0; i < 7; ++i) {
     const auto type = static_cast<PieceType>(i);
-    if (type == PieceType::T) { pattern.targets[i] = t; continue; }
+    if (type == PieceType::T && spinLines > 0) { pattern.targets[i] = t; continue; }
     int markerCount = 0;
     for (const auto row : rows)
       markerCount += static_cast<int>(std::count(row.begin(), row.end(), toString(type)[0]));
@@ -1863,43 +1865,28 @@ OpeningPattern makeOpeningPattern(std::string_view name,
 }
 
 const std::vector<OpeningPattern>& openingPatterns() {
-  // TKI with optional LST follow-up, or the three-bag Reliable TSD route.
-  // Geometry: https://shiwehi.com/tetris/template/tsdopener.php
+  // Honey Cup TD-PC geometry: https://tetristemplate.info/post-835/
   static const auto patterns = [] {
     std::vector<OpeningPattern> result{
-        makeOpeningPattern("TKI-TSD/J-roof",
-            {"---JJJ----", "L--ZZJS---", "L---ZZSSOO", "LL-IIIISOO"},
-            {PieceType::T, 1, 37, 2}, false),
-        makeOpeningPattern("TKI-TSD/SZ-roof",
-            {"---SZZ----", "L--SSZZ---", "L---SJJJOO", "LL-IIIIJOO"},
-            {PieceType::T, 1, 37, 2}, false),
-        makeOpeningPattern("LST-TSD",
-            {"------I---", "---ZZ-IJJJ", "S---ZZIOOJ", "SS-cccIOOL", "cS-ccccLLL"},
-            {PieceType::T, 1, 36, 2}, true),
-        // TST-free option from the user-requested beginner-template Wiki.
-        // Normal-route diagram: https://w.atwiki.jp/sasasa123/pages/70.html
-        // The two second-bag arrangements have the same residual geometry;
-        // either can continue into either of the third-bag arrangements.
-        makeOpeningPattern("Reliable-TSD/1",
-            {"---------Z", "----S---ZZ", "----SS--ZJ",
-             "OOLLLS---J", "OOLIIII-JJ"},
-            {PieceType::T, 6, 37, 2}, false),
-        makeOpeningPattern("Reliable-TSD/2-LJ",
-            {"-----Z--OO", "I--LZZ--OO", "ILLLZS---c",
-             "IJJJcSS-cc", "I--JccS-cc"},
-            {PieceType::T, 6, 36, 2}, true, true),
-        makeOpeningPattern("Reliable-TSD/2-JL",
-            {"-----Z--OO", "J--IZZ--OO", "JJJIZS---c",
-             "LLLIcSS-cc", "L--IccS-cc"},
-            {PieceType::T, 6, 36, 2}, true, true),
-        makeOpeningPattern("Reliable-TSD/3-LJ",
-            {"---------I", "------Z--I", "-----ZZ--I", "LLLOOZ---I",
-             "LJJOOcS-cc", "cJ-cccSScc", "cJ-ccccScc"},
-            {PieceType::T, 6, 35, 2}, true),
-        makeOpeningPattern("Reliable-TSD/3-JL",
-            {"---------I", "------Z--I", "-----ZZ--I", "JJJOOZ---I",
-             "LLJOOcS-cc", "cL-cccSScc", "cL-ccccScc"},
-            {PieceType::T, 6, 35, 2}, true),
+        makeOpeningPattern("Honey-Cup/stack",
+            {"L---------", "L------ZZ-", "LLT----JZZ", "OOTTSS-JJJ", "OOTSS-IIII"},
+            {}, false, true, 0),
+        makeOpeningPattern("Honey-Cup/TST-A1",
+            {"------LLLI", "--ZJ--LOOI", "cZZJ---OOI", "cZJJSS-ccI",
+             "cccSS--ccc", "cccccc-ccc", "ccccc-cccc"},
+            {PieceType::T, 5, 36, 3}, true, true, 3),
+        makeOpeningPattern("Honey-Cup/TST-A2",
+            {"------IIII", "--OO--ZZLL", "cJOO---ZZL", "cJJJSS-ccL",
+             "cccSS--ccc", "cccccc-ccc", "ccccc-cccc"},
+            {PieceType::T, 5, 36, 3}, true, true, 3),
+        makeOpeningPattern("Honey-Cup/TST-A3",
+            {"------JJJI", "--LL--ZZJI", "cOOL---ZZI", "cOOLSS-ccI",
+             "cccSS--ccc", "cccccc-ccc", "ccccc-cccc"},
+            {PieceType::T, 5, 36, 3}, true, true, 3),
+        makeOpeningPattern("Honey-Cup/TST-B",
+            {"OO--------", "OO-------I", "LL-J--ZZ-I", "cL-J---ZZI", "cLJJSS-ccI",
+             "cccSS--ccc", "cccccc-ccc", "ccccc-cccc"},
+            {PieceType::T, 5, 36, 3}, true, true, 3),
     };
     const auto originals = result;
     for (auto pattern : originals) {
@@ -1917,11 +1904,6 @@ const std::vector<OpeningPattern>& openingPatterns() {
       }
       result.push_back(std::move(pattern));
     }
-    // Preserve existing TKI choices (including mirrors); Reliable fills in
-    // unsupported orders without changing those already verified routes.
-    std::stable_partition(result.begin(), result.end(), [](const auto& pattern) {
-      return pattern.name.find("Reliable-") != 0;
-    });
     return result;
   }();
   return patterns;
@@ -1936,12 +1918,13 @@ bool sameBoardGeometry(const Board& left, const Board& right) {
 
 std::optional<AgentDecision> openingRoute(
     const Board& board, const ActivePiece& target, const SearchLimit& limit,
-    std::uint64_t& nodes, bool& timedOut) {
+    std::uint64_t& nodes, bool& timedOut, int spinLines = 2,
+    bool allowClears = false) {
   if (!isValidPosition(board, target) || calcGhostY(board, target) != target.y)
     return std::nullopt;
-  const bool spin = target.type == PieceType::T;
+  const bool spin = target.type == PieceType::T && spinLines > 0;
   const auto clear = clearLines(lockMino(board, target));
-  if (clear.linesCleared != (spin ? 2 : 0)) return std::nullopt;
+  if (!allowClears && clear.linesCleared != (spin ? spinLines : 0)) return std::nullopt;
   // Prefer direct drops for setup pieces; tucks remain legal when required.
   for (int pass = spin ? 1 : 0; pass < 2; ++pass) {
     std::queue<SearchNode> pending;
@@ -1959,7 +1942,7 @@ std::optional<AgentDecision> openingRoute(
       dropped.y = calcGhostY(board, dropped);
       const int kick = dropped.y == node.piece.y ? node.lastRotationKickIndex : -1;
       if (dropped == target && (!spin ||
-          detectTSpin(board, target, kick >= 0, kick, 2) == TSpin::Full)) {
+          detectTSpin(board, target, kick >= 0, kick, clear.linesCleared) == TSpin::Full)) {
         node.actions.push_back(Action::HardDrop);
         return AgentDecision{target, std::move(node.actions), 0.0, clear.linesCleared};
       }
@@ -1977,6 +1960,94 @@ std::optional<AgentDecision> openingRoute(
       }
     }
   }
+  return std::nullopt;
+}
+
+// Exact bounded tiling search of the five rows after TST. Complete solutions
+// are replayed through SRS before accepting them, including the TSD rotation.
+std::optional<ExpertOpeningPlan> planTdPerfectClear(
+    const DecisionContext& context, const std::vector<PieceType>& queue,
+    bool mirrored, const SearchLimit& limit, std::uint64_t& nodes, bool& timedOut) {
+  int filled = 0;
+  for (int y = 0; y < kBoardRows; ++y)
+    for (int x = 0; x < kBoardCols; ++x) if (occupied(context.board, y, x)) {
+      if (y < kBoardRows - 5) return std::nullopt;
+      ++filled;
+    }
+  if (filled != 26) return std::nullopt;
+  struct Step { ActivePiece target; bool hold; };
+  std::vector<Step> path;
+  std::vector<AgentDecision> verified;
+  std::uint64_t rejectedRoutes = 0;
+  std::set<std::tuple<std::uint64_t, std::size_t, int, int, bool>> failed;
+  const auto solve = [&](auto&& self, const Board& board, std::size_t index,
+                         std::optional<PieceType> hold, int height, bool tsd) -> bool {
+    if (searchLimitReached(limit, nodes)) { timedOut = true; return false; }
+    ++nodes;
+    if (board.empty()) {
+      if (!tsd || path.size() != 6) return false;
+      Board replay = context.board;
+      verified.clear();
+      for (const auto& step : path) {
+        const auto clear = clearLines(lockMino(replay, step.target));
+        auto route = openingRoute(replay, step.target, limit, nodes, timedOut,
+                                  step.target.type == PieceType::T ? 2 : 0, true);
+        if (!route) { ++rejectedRoutes; return false; }
+        if (step.hold) route->actions.insert(route->actions.begin(), Action::Hold);
+        verified.push_back(std::move(*route));
+        replay = clear.board;
+      }
+      return true;
+    }
+    if (path.size() >= 6 || index >= queue.size()) return false;
+    std::uint64_t bits = 0;
+    for (int y = 0; y < 5; ++y)
+      for (int x = 0; x < kBoardCols; ++x)
+        if (occupied(board, kBoardRows - 5 + y, x)) bits |= 1ULL << (y * 10 + x);
+    const auto key = std::make_tuple(bits, index, hold ? static_cast<int>(*hold) : -1, height, tsd);
+    if (failed.count(key)) return false;
+    const auto rejectedBefore = rejectedRoutes;
+    const auto attempt = [&](PieceType type, bool useHold,
+                             std::optional<PieceType> holdAfter, std::size_t nextIndex) {
+      std::set<std::uint64_t> seen;
+      for (int y = kBoardRows - 1; y >= kBoardRows - height - 2; --y)
+        for (int x = -2; x < kBoardCols; ++x)
+          for (int rotation = 0; rotation < 4; ++rotation) {
+            if (searchLimitReached(limit, nodes)) { timedOut = true; return false; }
+            ++nodes;
+            const ActivePiece target{type, x, y, rotation};
+            if (!isValidPosition(board, target) || calcGhostY(board, target) != y) continue;
+            const auto cells = getMinoCells(target);
+            if (std::any_of(cells.begin(), cells.end(), [&](Point p) {
+                  return p.row < kBoardRows - height;
+                })) continue;
+            std::uint64_t footprint = 0;
+            for (Point p : cells) footprint |= 1ULL << ((p.row - (kBoardRows - 5)) * 10 + p.col);
+            if (type != PieceType::T && !seen.insert(footprint).second) continue;
+            const auto clear = clearLines(lockMino(board, target));
+            if (type == PieceType::T && (clear.linesCleared != 2 ||
+                detectTSpin(board, target, true, 0, 2) != TSpin::Full)) continue;
+            path.push_back({target, useHold});
+            if (self(self, clear.board, nextIndex, holdAfter,
+                     height - clear.linesCleared, tsd || type == PieceType::T)) return true;
+            path.pop_back();
+            if (timedOut) return false;
+          }
+      return false;
+    };
+    if (attempt(queue[index], false, hold, index + 1)) return true;
+    if (!path.empty() || context.canHold) {
+      if (hold && attempt(*hold, true, queue[index], index + 1)) return true;
+      if (!hold && index + 1 < queue.size() &&
+          attempt(queue[index + 1], true, queue[index], index + 2)) return true;
+    }
+    // Geometry-only failures are order-independent. Failed replay paths are
+    // not: another order reaching this state can make an earlier tuck legal.
+    if (rejectedBefore == rejectedRoutes && !timedOut) failed.insert(key);
+    return false;
+  };
+  if (solve(solve, context.board, 0, context.hold, 5, false))
+    return ExpertOpeningPlan{"TD/TSD-PC", mirrored, std::move(verified), false};
   return std::nullopt;
 }
 
@@ -2008,6 +2079,11 @@ std::optional<ExpertOpeningPlan> planOpening(
   }
   if (queue.size() != queueLength) return std::nullopt;
 
+  if (continuation) {
+    auto pc = planTdPerfectClear(context, queue, mirrored, limit, nodes, timedOut);
+    if (pc || timedOut) return pc;
+  }
+
   for (const auto& pattern : openingPatterns()) {
     if (pattern.continuation != continuation ||
         (continuation && pattern.mirrored != mirrored) ||
@@ -2025,18 +2101,17 @@ std::optional<ExpertOpeningPlan> planOpening(
                                std::optional<PieceType> holdAfter, std::size_t nextIndex) {
         const int typeIndex = static_cast<int>(type);
         const unsigned bit = 1U << typeIndex;
-        if ((placed & bit) || (type == PieceType::T && placed != (127U ^ bit))) return false;
+        if ((placed & bit) || (pattern.spinLines > 0 && type == PieceType::T && placed != (127U ^ bit))) return false;
         const auto routeKey = std::make_pair(placed, typeIndex);
         auto found = routes.find(routeKey);
         if (found == routes.end()) {
-          auto route = openingRoute(board, pattern.targets[typeIndex], limit, nodes, timedOut);
+          auto route = openingRoute(board, pattern.targets[typeIndex], limit, nodes, timedOut, pattern.spinLines);
           found = routes.emplace(routeKey, std::move(route)).first;
         }
         if (!found->second) return false;
         auto decision = *found->second;
         if (useHold) decision.actions.insert(decision.actions.begin(), Action::Hold);
         const auto after = clearLines(lockMino(board, decision.placement)).board;
-        if (type == PieceType::T && hasCoveredEmptyCell(after)) return false;
         path.push_back(std::move(decision));
         if (self(self, after, placed | bit, nextIndex, holdAfter)) return true;
         path.pop_back();
@@ -2049,11 +2124,10 @@ std::optional<ExpertOpeningPlan> planOpening(
           if (!hold && index + 1 < queue.size() &&
               attempt(queue[index + 1], true, queue[index], index + 2)) return true;
         }
-      } else if (placed == (127U ^ (1U << static_cast<int>(PieceType::T))) &&
-                 hold == PieceType::T) {
+      } else if (hold && placed == (127U ^ (1U << static_cast<int>(*hold)))) {
         // The next bag's active type is immaterial: immediately swap it for
-        // held T. Its identity is NOT guessed and is rechecked at execution.
-        if (attempt(PieceType::T, true, std::nullopt, index)) return true;
+        // the last held piece. Recheck its supply when executing the plan.
+        if (attempt(*hold, true, std::nullopt, index)) return true;
       }
       failed.insert(key);
       return false;
@@ -2205,11 +2279,11 @@ std::optional<AgentDecision> ExpertAgent::decide(
     } else {
       if (!openingPlan_ && (openingStage_ == 0 || openingStage_ == 2)) {
         // Leave most of the decision budget for ordinary search on failure.
-        const auto openingTime = std::min(std::chrono::milliseconds(10),
-                                         std::max(std::chrono::milliseconds(1), thinkTime_ / 3));
+        const auto openingTime = std::min(std::chrono::milliseconds(25),
+                                         std::max(std::chrono::milliseconds(1), thinkTime_ / 2));
         const SearchLimit openingLimit{
             std::min(limit.deadline, Clock::now() + openingTime),
-            maximumNodes_ ? std::max<std::uint64_t>(1, maximumNodes_ / 3) : 0};
+            maximumNodes_ ? std::max<std::uint64_t>(1, maximumNodes_ / 2) : 0};
         bool openingTimedOut = false;
         openingPlan_ = planOpening(context, openingStage_ == 2, openingMirrored_,
                                    openingLimit, nodesVisited, openingTimedOut);
