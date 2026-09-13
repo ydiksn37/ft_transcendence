@@ -425,7 +425,9 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
           {appState !== 'MENU' && !isMobileView && (
             <h2 style={{ 
-              margin: '0 0 30px 0', textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
+              margin: '0 0 30px 0',
+              paddingTop: isCustomRoom ? '10px' : '0',
+              textAlign: 'center', fontFamily: '"Press Start 2P", monospace',
               color: modeMeta.color, textShadow: '4px 4px 0px #000', fontSize: '24px', letterSpacing: '2px'
             }}>
               {modeMeta.label}
