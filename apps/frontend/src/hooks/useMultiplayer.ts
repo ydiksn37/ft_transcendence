@@ -39,7 +39,7 @@ type UseMultiplayerProps = {
   setOpponentScore: Dispatch<SetStateAction<number>>;
   setOpponentNextPieceKeys: React.Dispatch<React.SetStateAction<string[]>>;
   setOpponentHoldMino: React.Dispatch<React.SetStateAction<string | null>>;
-  setOpponents: React.Dispatch<React.SetStateAction<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>>>;
+  setOpponents: React.Dispatch<React.SetStateAction<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean; username?: string | null; playerIndex?: number; displayName?: string; }>>>;
   matchResult: 'WIN' | 'LOSE' | null;
   setMatchResult: Dispatch<SetStateAction<'WIN' | 'LOSE' | null>>;
   setPendingGarbage: Dispatch<SetStateAction<number[]>>;
@@ -68,11 +68,36 @@ export const useMultiplayer = ({
 
   const [customRoomIsPlaying, setCustomRoomIsPlaying] = useState(false);
   const activeRoom = useRef<string | null>(null);
-  const beginServerMatch = (data: { roomId: string }) => {
+  const beginServerMatch = (data: { roomId: string; users?: Record<string, { username: string | null }>; players?: string[]; displayNames?: Record<string, string> }) => {
     activeRoom.current = data.roomId;
     setServerState(null);
     setStartTime(Date.now());
-    setOpponents({});
+    const initialOpponents: Record<string, any> = {};
+    if (data.displayNames && socketRef.current) {
+      for (const [sid, dName] of Object.entries(data.displayNames)) {
+        if (sid !== socketRef.current.id) {
+          initialOpponents[sid] = {
+            stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
+            score: 0,
+            displayName: dName,
+            playerIndex: data.players ? data.players.indexOf(sid) : undefined
+          };
+        }
+      }
+    } else if (data.users && socketRef.current) {
+      // Fallback for older formats
+      for (const [sid, user] of Object.entries(data.users)) {
+        if (sid !== socketRef.current.id) {
+          initialOpponents[sid] = {
+            stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
+            score: 0,
+            username: user.username,
+            playerIndex: data.players ? data.players.indexOf(sid) : undefined
+          };
+        }
+      }
+    }
+    setOpponents(initialOpponents);
     setOpponentStage(null);
     gameOverRef.current = false;
     appStateRef.current = 'ONLINE_1V1';
@@ -159,7 +184,10 @@ export const useMultiplayer = ({
             score: data.score,
             nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
             holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver
+            isGameOver: data.isGameOver,
+            username: prev[data.playerId as string]?.username,
+            playerIndex: prev[data.playerId as string]?.playerIndex,
+            displayName: prev[data.playerId as string]?.displayName
           }
         }));
       }
@@ -260,7 +288,10 @@ export const useMultiplayer = ({
             score: data.score,
             nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
             holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver
+            isGameOver: data.isGameOver,
+            username: prev[data.playerId as string]?.username,
+            playerIndex: prev[data.playerId as string]?.playerIndex,
+            displayName: prev[data.playerId as string]?.displayName
           }
         }));
       }
@@ -292,10 +323,25 @@ export const useMultiplayer = ({
       }
     });
 
-    newSocket.on('spectating', (data: { roomId: string }) => {
+    newSocket.on('spectating', (data: { roomId: string; displayNames?: Record<string, string>; players?: string[] }) => {
       activeRoom.current = data.roomId;
       setServerState(null);
-      setOpponents({});
+      
+      const initialOpponents: Record<string, any> = {};
+      if (data.displayNames && socketRef.current) {
+        for (const [sid, dName] of Object.entries(data.displayNames)) {
+          if (sid !== socketRef.current.id) {
+            initialOpponents[sid] = {
+              stage: Array.from({ length: 20 }, () => Array(10).fill([0, 'clear'])),
+              score: 0,
+              displayName: dName,
+              playerIndex: data.players ? data.players.indexOf(sid) : undefined
+            };
+          }
+        }
+      }
+      setOpponents(initialOpponents);
+      
       setOpponentStage(null);
       setMatchResult(null);
       setGameOver(false);
@@ -309,8 +355,11 @@ export const useMultiplayer = ({
 
     newSocket.on('custom_room_state', (data: { isPlaying: boolean }) => {
       setCustomRoomIsPlaying(data.isPlaying);
-      // Automatically show game over screen when match ends, but do not return to room
-      if ((appStateRef.current === 'SPECTATING' || appStateRef.current === 'ONLINE_1V1') && !data.isPlaying) {
+      // 観戦中（SPECTATING）に試合が終了した場合のみゲームオーバー画面を表示する。
+      // ONLINE_1V1 中は game:over イベントで管理するため、ここでは SPECTATING のみを対象にする。
+      // こうしないと次のトーナメントラウンド開始時に isPlaying=false が届いた際に
+      // 不正に setGameOver(true) が呼ばれてホワイトアウトが起きる。
+      if (appStateRef.current === 'SPECTATING' && !data.isPlaying) {
         setGameOver(true);
       }
     });
@@ -401,7 +450,10 @@ export const useMultiplayer = ({
             score: data.score,
             nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
             holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver
+            isGameOver: data.isGameOver,
+            username: prev[data.playerId as string]?.username,
+            playerIndex: prev[data.playerId as string]?.playerIndex,
+            displayName: prev[data.playerId as string]?.displayName
           }
         }));
       }

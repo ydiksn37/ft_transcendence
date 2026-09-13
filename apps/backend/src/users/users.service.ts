@@ -6,7 +6,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateUserDto, SearchUsersDto, BanUserDto, SearchHistoryDto } from './dto/user.dto';
+import {
+  UpdateUserDto,
+  SearchUsersDto,
+  BanUserDto,
+  SearchHistoryDto,
+} from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -104,9 +109,12 @@ export class UsersService {
     }
 
     let orderBy: any = { stats: { rankPoints: 'desc' } };
-    if (dto.sortBy === 'WIN_RATE_DESC') orderBy = { stats: { winRate: 'desc' } };
-    else if (dto.sortBy === 'WIN_RATE_ASC') orderBy = { stats: { winRate: 'asc' } };
-    else if (dto.sortBy === 'GAMES_DESC') orderBy = { stats: { totalGames: 'desc' } };
+    if (dto.sortBy === 'WIN_RATE_DESC')
+      orderBy = { stats: { winRate: 'desc' } };
+    else if (dto.sortBy === 'WIN_RATE_ASC')
+      orderBy = { stats: { winRate: 'asc' } };
+    else if (dto.sortBy === 'GAMES_DESC')
+      orderBy = { stats: { totalGames: 'desc' } };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -118,7 +126,14 @@ export class UsersService {
           avatarUrl: true,
           isOnline: true,
           role: true,
-          stats: { select: { rank: true, rankPoints: true, winRate: true, totalGames: true } },
+          stats: {
+            select: {
+              rank: true,
+              rankPoints: true,
+              winRate: true,
+              totalGames: true,
+            },
+          },
         },
         orderBy,
         skip,
@@ -173,10 +188,20 @@ export class UsersService {
         take: limit,
         include: {
           player1: {
-            select: { id: true, username: true, displayName: true, avatarUrl: true },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
           },
           player2: {
-            select: { id: true, username: true, displayName: true, avatarUrl: true },
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
           },
           winner: { select: { id: true, username: true } },
         },

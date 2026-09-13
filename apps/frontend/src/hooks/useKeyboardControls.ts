@@ -28,7 +28,7 @@ type UseKeyboardControlsProps = {
   setSocket: (s: Socket | null) => void;
   setIsWaiting: (w: boolean) => void;
   setDropTime: (t: number | null) => void;
-  quitGame: () => void;
+  quitGame: (leaveRoomEntirely?: boolean) => void;
 };
 
 export const useKeyboardControls = ({
@@ -160,7 +160,7 @@ export const useKeyboardControls = ({
       if (appStateRef.current === 'SPECTATING') {
         if (code === conf.quitToMenu) {
           e.preventDefault();
-          if (!e.repeat) quitGame();
+          if (!e.repeat) quitGame(true);
         }
         return;
       }
@@ -185,17 +185,9 @@ export const useKeyboardControls = ({
       if (code === conf.quitToMenu) {
         if (gameOver) return;
         if (!e.repeat) {
-          if (socketRef.current) {
-            // オンライン対戦中にESCで抜けた場合は相手に勝利を与える
-            if (appStateRef.current === 'ONLINE_1V1') {
-              socketRef.current.emit('game_over');
-            }
-            socketRef.current.disconnect();
-            setSocket(null);
-          }
           setIsWaiting(false);
           setDropTime(null);
-          quitGame();
+          quitGame(true);
         }
         return;
       }

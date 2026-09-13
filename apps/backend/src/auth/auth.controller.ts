@@ -136,7 +136,13 @@ export class AuthController {
   @Post('2fa/authenticate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'ログイン時の2FAコード検証' })
-  authenticate2FA(@Body() body: { userId: string; code: string; tempToken: string }) {
-    return this.authService.authenticate2FA(body.userId, body.code, body.tempToken);
+  authenticate2FA(
+    @Body() body: { userId: string; code: string; tempToken: string },
+  ) {
+    return this.authService.authenticate2FA(
+      body.userId,
+      body.code,
+      body.tempToken,
+    );
   }
 }

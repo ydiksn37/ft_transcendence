@@ -101,9 +101,13 @@ export class GameService {
       const n = Number(val);
       return isNaN(n) ? 0 : n;
     };
-    
-    const avgApm = (safeNum(stats.avgApm) * stats.totalGames + (isNaN(apm) ? 0 : apm)) / totalGames;
-    const avgPps = (safeNum(stats.avgPps) * stats.totalGames + (isNaN(pps) ? 0 : pps)) / totalGames;
+
+    const avgApm =
+      (safeNum(stats.avgApm) * stats.totalGames + (isNaN(apm) ? 0 : apm)) /
+      totalGames;
+    const avgPps =
+      (safeNum(stats.avgPps) * stats.totalGames + (isNaN(pps) ? 0 : pps)) /
+      totalGames;
     const bestApm = Math.max(safeNum(stats.bestApm), isNaN(apm) ? 0 : apm);
     const bestPps = Math.max(safeNum(stats.bestPps), isNaN(pps) ? 0 : pps);
 

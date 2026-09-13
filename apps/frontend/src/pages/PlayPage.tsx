@@ -661,20 +661,30 @@ const PlayPage = () => {
     matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
   });
 
-  const quitGame = useCallback(() => {
-    // ゲーム中にQUITした場合は game_over をサーバーに送信して相手に勝利判定を与える
-    // （ESCキーで disconnect するのと同じ挙動にする）
-    if (socketRef.current && !gameOver && appState === 'ONLINE_1V1') {
-      socketRef.current.emit('game_over');
+  const quitGame = useCallback((leaveRoomEntirely: boolean = false) => {
+    if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+      if (leaveRoomEntirely) {
+        // カスタムルームの場合: 部屋一覧に戻り、ルーム自体からも完全に離脱する
+        socketRef.current.emit('game:leave_custom_room');
+      } else {
+        // Return to room の場合: ゲームルームから離脱してロビーにとどまる
+        if (!gameOver && (appState === 'ONLINE_1V1' || appState === 'SPECTATING')) {
+          socketRef.current.emit('game:quit_game_room');
+        }
+      }
+      setAppState('CUSTOM_ROOMS');
+    } else if (socketRef.current) {
+      // ONLINE_1V1など: game_over を送って切断
+      if (!gameOver && appState === 'ONLINE_1V1') {
+        socketRef.current.emit('game_over');
+      }
       socketRef.current.disconnect();
       setSocket(null);
-    }
-
-    if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-      setAppState('CUSTOM_ROOMS');
+      navigate(`/lobby/${mode}`);
     } else {
       navigate(`/lobby/${mode}`);
     }
+    setGameOver(true);
   }, [mode, navigate, setAppState, socketRef, setSocket, gameOver, appState]);
 
   initializeRouteRef.current = () => {
@@ -753,13 +763,7 @@ const PlayPage = () => {
   useTouchControls({
     stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
     ...controls,
-    startGame, quitGame: () => {
-      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-        setAppState('CUSTOM_ROOMS');
-      } else {
-        navigate(`/lobby/${mode}`);
-      }
-    }
+    startGame, quitGame
   });
 
   // Auto-drop (gravity)
@@ -828,8 +832,8 @@ const PlayPage = () => {
       isCustomRoom={mode === 'CUSTOM_ROOMS'}
       isVsAi={mode === 'VS_AI'}
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
-      quitGame={quitGame}
-      onQuit={quitGame}
+      quitGame={() => quitGame(false)}
+      onQuit={() => quitGame(true)}
       onSpectate={customRoomIsPlaying ? () => socketRef.current?.emit('room:spectate', {}) : undefined}
       onHold={() => controls.playerHold(stage[0].length, stage)}
     />

@@ -4,6 +4,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 #include "tetris/agent.hpp"
 
@@ -15,6 +18,9 @@ struct ExpertPatternFeatures {
   int completedTSpinDoubleLines = 0;
   int completedTSpinDoublePatterns = 0;
   int preTSpinDoublePatterns = 0;
+  int completedTSpinTriplePatterns = 0;
+  int ownedTSpinHoleCells = 0;
+  std::vector<ActivePiece> reachableTSpinSlots;
   std::array<int, 5> wellDistance{};
   // 0-indexed divider column. Columns 3/6 represent 3-6 or 6-3 stacking;
   // columns 4/5 represent 4-5 or 5-4 stacking.
@@ -27,6 +33,9 @@ struct ExpertPatternFeatures {
   int attackLaneDepth = 0;
   int attackLaneSideRoughness = 0;
   int attackLaneSideExcessRoughness = 0;
+  // Squared excess of each immediate Well neighbour above its own block's
+  // other columns. Two rows of headroom are allowed for a TSD roof.
+  int attackLaneShoulderExcess = 0;
   int attackLaneOccupiedCells = 0;
   // The one central surface valley which the stack is allowed to develop
   // into an I-piece Well. Other simultaneous valleys are competing Wells.
@@ -65,6 +74,10 @@ struct ExpertWeights {
   double unfillableCavityPenalty = 5000.0;
   double newUnfillableCavityPenalty = 1000000.0;
   double unfillableCavityRecoveryReward = 5000.0;
+  // Verified TSD/TST cells (including the TST kick entrance) are intentional.
+  // Other newly buried cells are stacking damage, even when a J/L could fit
+  // there geometrically after an unlikely tuck.
+  double newUnownedHolePenalty = 25000.0;
   double bumpinessPenalty = 0.6736262582190178;
   double rowTransitionsPenalty = 2.2;
   double columnTransitionsPenalty = 1.7;
@@ -75,6 +88,7 @@ struct ExpertWeights {
   double structuredSideRoughnessPenalty = 20.0;
   double flatSideExcessRoughnessPenalty = 150.0;
   double attackLaneObstructionPenalty = 2000.0;
+  double attackLaneShoulderPenalty = 220.0;
   double competingWellPenalty = 15.0;
   double newCompetingWellPenalty = 40.0;
   double secondWellCreationPenalty = 1000000.0;
@@ -91,6 +105,10 @@ struct ExpertWeights {
   double completedTSpinDoubleBreakPenalty = 6000.0;
   double preTSpinDoubleReward = 900.0;
   double preTSpinDoubleBreakPenalty = 4000.0;
+  double readyTSpinTripleReward = 4500.0;
+  double completedTSpinTripleBreakPenalty = 6000.0;
+  double donationUnlockReward = 3200.0;
+  double donationTemplateReward = 1800.0;
   double wellDistance0Penalty = 10.0;
   double wellDistance1Penalty = 5.0;
   double wellDistance2Reward = 10.0;
@@ -126,7 +144,9 @@ struct ExpertWeights {
   double backToBackContinuationReward = 813.0628762324335;
   double backToBackStartReward = 180.0;
   double backToBackBreakPenalty = 2997.0967507671885;
-  double tWastedPenalty = 180.0;
+  // Opportunity cost of spending T without a line-clearing spin. Scaled by
+  // replacement distance; reduced for repairs and disabled in emergencies.
+  double tWastedPenalty = 400.0;
 };
 
 struct ExpertBoardEvaluation {
@@ -136,6 +156,7 @@ struct ExpertBoardEvaluation {
   int preTSpinDoublePatterns = 0;
   int aggregateHeight = 0;
   int holes = 0;
+  int unownedHoleCells = 0;
   int coveredHoleDepth = 0;
   int unfillableCavityCells = 0;
   int garbageCells = 0;
@@ -152,7 +173,25 @@ struct ExpertBoardEvaluation {
   int competingWellUnits = 0;
   bool cleanForTSpinSetup = false;
   bool safeToPreserveTSpinSetup = false;
+  int reachableTSpinTriplePatterns = 0;
+  std::vector<ActivePiece> reachableTSpinSlots;
+  int donationSetupPieces = -1;
+  int attackLaneShoulderExcess = 0;
 };
+
+// A named local shape with a verified continuation, not merely a silhouette.
+// Setup placements are in playable order; the final T is stored separately.
+struct ExpertDonationPlan {
+  std::string_view name;
+  ActivePiece target;
+  std::vector<ActivePiece> setup;
+};
+
+// Next starts with the next playable piece (include Active when inspecting a
+// pre-decision board). Only up to two setup placements plus T are considered.
+[[nodiscard]] std::optional<ExpertDonationPlan> findExpertDonationTemplate(
+    const Board& board, std::optional<PieceType> hold,
+    const std::vector<PieceType>& next, std::size_t nextIndex = 0);
 
 // Exposed for deterministic feature tests and benchmark diagnostics. The
 // agent itself uses the same extractor in its board evaluation.
@@ -171,6 +210,25 @@ struct ExpertBoardEvaluation {
     const ExpertTAvailability& tAvailability = {},
     const ExpertIAvailability& iAvailability = {}) noexcept;
 
+// Diagnostic for a legal grounded donor placement: returns 2 or 3 for a
+// newly opened safe TSD/TST, otherwise 0. Availability is AFTER using Hold.
+[[nodiscard]] int expertDonationLines(
+    const Board& board, const ActivePiece& donor,
+    const ExpertTAvailability& remainingT) noexcept;
+
+struct ExpertOpeningPlan {
+  std::string_view name;
+  bool mirrored = false;
+  std::vector<AgentDecision> steps;
+  bool hasContinuation = false;
+};
+
+// Plans an entire bag of TKI/LST or Reliable TSD. Every
+// placement and the final spin are replayable. Never guesses a future bag.
+[[nodiscard]] std::optional<ExpertOpeningPlan> findExpertOpeningPlan(
+    const DecisionContext& context, bool continuation = false,
+    bool mirrored = false);
+
 class ExpertAgent final : public Agent {
  public:
   using Agent::decide;
@@ -183,12 +241,26 @@ class ExpertAgent final : public Agent {
   [[nodiscard]] std::string_view name() const noexcept override;
   [[nodiscard]] std::optional<AgentDecision> decide(
       const DecisionContext& context) override;
+  [[nodiscard]] std::string_view lastOpeningName() const noexcept {
+    return lastOpeningName_;
+  }
+  // Unselected until ordinary search evaluates the current board/queue.
+  [[nodiscard]] int attackLaneColumn() const noexcept {
+    return attackLaneColumn_;
+  }
 
  private:
   std::chrono::milliseconds thinkTime_;
   ExpertWeights weights_;
   std::uint64_t maximumNodes_;
-  int attackLaneColumn_ = 5;
+  int attackLaneColumn_ = -1;
+  // 0: first request, 1: first TSD, 2: book follow-up, 3: ordinary search.
+  int openingStage_ = 0;
+  bool openingMirrored_ = false;
+  std::optional<ExpertOpeningPlan> openingPlan_;
+  std::size_t openingStep_ = 0;
+  std::optional<Board> openingExpectedBoard_;
+  std::string_view lastOpeningName_;
 };
 
 }  // namespace tetris

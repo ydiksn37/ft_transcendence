@@ -42,7 +42,13 @@ export class FtOauthGuard extends AuthGuard('42') {
     };
   }
 
-  handleRequest(err: any, user: any, info: any, context: ExecutionContext, status?: any) {
+  handleRequest(
+    err: any,
+    user: any,
+    info: any,
+    context: ExecutionContext,
+    status?: any,
+  ) {
     if (err) {
       console.error('FtOauthGuard error:', err);
     }
