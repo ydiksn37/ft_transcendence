@@ -68,6 +68,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
   const [isShaking, setIsShaking] = useState(false);
+  const [isWideView, setIsWideView] = useState(window.innerWidth >= 1500);
   const navigate = useNavigate();
 
   // Animation Triggers
@@ -100,6 +101,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       const vw = window.innerWidth;
       const isMobile = vw <= 768;
       setIsMobileView(isMobile);
+      setIsWideView(vw >= 1500);
       
       const expectedHeight = isMobile ? 750 : 800;
       const scaleY = (vh - 40) / expectedHeight;
@@ -529,7 +531,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           )}
 
-          <div className="tetris-right-panel">
+          <div className="tetris-right-panel" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
               <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
               <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -562,13 +564,36 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 </div>
               ))}
             </div>
+
+            {bg?.campus && gameMode === 'ONLINE_1V1' && !isMobileView && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '100%',
+                  width: isWideView ? '100%' : '80px',
+                  textWrap: isWideView ? 'nowrap' : 'wrap',
+                  marginLeft: '24px',
+                  fontFamily: '"Press Start 2P", monospace',
+                  fontSize: '8px', 
+                  lineHeight: 1.8,
+                  color: '#fff',
+                }}
+              >
+                {isWideView ? (
+                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} | {bg.campus.campus}</a></p>
+                ) : (
+                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.campus}</a></p>
+                )}
+              </div>
+            )}
           </div>
           </>
           )}
         </div>
           )}
 
-        {bg?.campus && !isMobileView && (
+        {bg?.campus && !isMobileView && gameMode !== 'ONLINE_1V1' && isWideView && (
           <div style={{
             position: 'absolute',
             left: '100%', 
@@ -736,17 +761,21 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
       </div>
-      {bg?.campus && !isMobileView && (
+      {bg?.campus && gameMode !== 'ONLINE_1V1' &&  (
         <div
           style={{
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '8px',
             color: "#fff",
-            position: 'absolute',
-            bottom: '0'
+            position: isMobileView ? 'static' : 'absolute',
+            bottom: isMobileView ? undefined : 0,
           }}
         >
-          <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
+          {!isMobileView ? (
+            <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
+          ) : (
+            <p>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</p>
+          )}
         </div>
       )}
               {countdown && appState !== 'SPECTATING' && (
