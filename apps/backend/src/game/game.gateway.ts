@@ -168,7 +168,10 @@ export class GameGateway
           this.customRooms.delete(roomId);
         } else {
           if (activeRoom.ownerSocketId === client.id) {
-            activeRoom.ownerSocketId = activeRoom.players[0].socket.id;
+            const nextOwner = activeRoom.players.find(p => p.socket.id !== client.id && !p.socket.disconnected);
+            if (nextOwner) {
+              activeRoom.ownerSocketId = nextOwner.socket.id;
+            }
           }
           activeRoom.players.forEach((p) => {
             p.socket.emit('custom_room_state', {
@@ -480,8 +483,11 @@ export class GameGateway
       if (room.players.length === 0) {
         this.customRooms.delete(roomId);
       } else {
-        if (!room.players.find(p => p.socket.id === room.ownerSocketId)) {
-          room.ownerSocketId = room.players[0].socket.id;
+        if (room.ownerSocketId === client.id) {
+          const nextOwner = room.players.find(p => p.socket.id !== client.id && !p.socket.disconnected);
+          if (nextOwner) {
+            room.ownerSocketId = nextOwner.socket.id;
+          }
         }
         room.players.forEach((p) => {
           p.socket.emit('custom_room_state', {
@@ -581,6 +587,8 @@ export class GameGateway
       }
       
       if (room.ownerSocketId === oldSocketId) {
+        room.ownerSocketId = client.id;
+      } else if (!room.players.find(p => p.socket.id === room.ownerSocketId && !p.socket.disconnected)) {
         room.ownerSocketId = client.id;
       }
     } else {

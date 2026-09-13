@@ -539,5 +539,5 @@ export const useMultiplayer = ({
     }
   }, [gameOver, socket, appState, matchResult]);
 
-  return { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying };
+  return { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying, isSpectatingRef };
 };

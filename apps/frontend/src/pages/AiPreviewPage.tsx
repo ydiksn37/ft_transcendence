@@ -577,6 +577,7 @@ export default function AiPreviewPage() {
         opponentScore={0}
         pendingGarbage={[]}
         actionText={null}
+        lockEvent={null}
         countdown={null}
         finalTime={null}
         elapsedTime={0}

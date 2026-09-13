@@ -120,7 +120,8 @@ const PlayPage = () => {
   const comboRef = useRef(-1);
   const levelPointsRef = useRef(0);
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [actionText, setActionText] = useState<string | null>(null);
+  const actionKeyRef = useRef(0);
+  const [actionText, setActionText] = useState<{ text: string; key: number } | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
   const initializeRouteRef = useRef<(() => void) | null>(null);
@@ -342,18 +343,15 @@ const PlayPage = () => {
      }
 
     if (actionName && (isDifficult || comboRef.current > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
-       // Clear old text immediately to restart the animation if the same text is set again
-       setActionText(null);
-       
        if (actionTimeoutRef.current) {
          clearTimeout(actionTimeoutRef.current);
        }
        
-       // Use a tiny timeout to ensure React flushes the null state and restarts the CSS animation
-       setTimeout(() => {
-         setActionText(actionName);
-         actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
-       }, 0);
+       // Increment key each time so React always remounts the element,
+       // even when the same action text repeats (e.g. consecutive Tetris).
+       actionKeyRef.current++;
+       setActionText({ text: actionName, key: actionKeyRef.current });
+       actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
     }
   }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
 
@@ -611,6 +609,7 @@ const PlayPage = () => {
     comboRef.current = -1;
     b2bRef.current = false;
     levelPointsRef.current = 0;
+    actionKeyRef.current = 0;
     setActionText(null);
     if (nextMode !== 'ONLINE_1V1') {
       setAppState('PLAYING');
@@ -654,7 +653,7 @@ const PlayPage = () => {
     };
   }, [appState, gameOver, countdown]);
 
-  const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying } = useMultiplayer({
+  const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying, isSpectatingRef } = useMultiplayer({
     setServerState, setStartTime,
     appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
@@ -773,7 +772,7 @@ const PlayPage = () => {
 
   if (appState === 'VS_SCREEN') {
     const myId = socketRef.current?.id || null;
-    return <VsScreen opponents={opponents as any} mySocketId={myId} myUsername={myDisplayName || user?.username || null} />;
+    return <VsScreen opponents={opponents as any} mySocketId={myId} myUsername={myDisplayName || user?.username || null} isSpectating={isSpectatingRef.current} />;
   }
 
   // Prevent flashing the wrong mode's board on first render before useEffect triggers
@@ -816,6 +815,8 @@ const PlayPage = () => {
       opponents={opponents}
       pendingGarbage={serverMatch ? [serverState?.garbageQueue ?? 0] : pendingGarbage}
       actionText={actionText}
+      lockEvent={serverMatch ? null : lockEvent}
+      serverPiecesPlaced={serverMatch ? (serverState?.piecesPlaced ?? 0) : undefined}
       countdown={serverMatch ? (!serverState?.started && !isWaiting ? 'READY' : null) : countdown}
       finalTime={finalTime}
       elapsedTime={elapsedTime}

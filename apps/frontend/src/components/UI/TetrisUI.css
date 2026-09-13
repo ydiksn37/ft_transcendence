@@ -198,7 +198,7 @@
   100% { transform: translateY(0); }
 }
 .board-shake {
-  animation: boardShake 0.25s ease-out;
+  animation: boardShake 0.3s ease-out;
 }
 
 /* Danger Border */

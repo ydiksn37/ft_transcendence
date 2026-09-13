@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Stage } from '@pixi/react';
 import GameBoard from '../GameBoard';
 import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
@@ -32,7 +32,9 @@ type TetrisUIProps = {
   opponentHoldMino?: string | null;
   opponents?: Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>;
   pendingGarbage: number[];
-  actionText: string | null;
+  actionText: { text: string; key: number } | null;
+  lockEvent: { id: number; lines: number } | null;
+  serverPiecesPlaced?: number;
   countdown: string | null;
   finalTime: number | null;
   elapsedTime: number;
@@ -61,24 +63,46 @@ type TetrisUIProps = {
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
+  lockEvent, serverPiecesPlaced,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, isVsAi, quitGame,
   onlineRestartLabel, onHold, onQuit, onSpectate, extraLeftPanel, ghostYOverride
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
-  const [isShaking, setIsShaking] = useState(false);
   const [isWideView, setIsWideView] = useState(window.innerWidth >= 1500);
   const navigate = useNavigate();
 
-  // Animation Triggers
+  // Refs for DOM-level animation control (shake / flash)
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const [flashKey, setFlashKey] = useState(0);
+
+  // ── Hard-drop shake: triggered by lockEvent (local) or serverPiecesPlaced (server match) ──
+  const triggerShake = () => {
+    const el = boardContainerRef.current;
+    if (!el) return;
+    // Remove the class, force a reflow, then re-add to restart the CSS animation every time.
+    el.classList.remove('board-shake');
+    void el.offsetWidth; // triggers reflow
+    el.classList.add('board-shake');
+  };
+
   useEffect(() => {
-    if (actionText) {
-      setIsShaking(true);
-      const timer = setTimeout(() => setIsShaking(false), 150);
-      return () => clearTimeout(timer);
+    if (!lockEvent) return;
+    triggerShake();
+    // Trigger line-clear flash when lines are cleared
+    if (lockEvent.lines > 0) {
+      setFlashKey(prev => prev + 1);
     }
-  }, [actionText]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockEvent]);
+
+  // Server match: use piecesPlaced increments as the shake trigger
+  useEffect(() => {
+    if (serverPiecesPlaced === undefined || serverPiecesPlaced === 0) return;
+    triggerShake();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverPiecesPlaced]);
 
   // 非アクティブタブから戻ってきた際に WebGL コンテキストが失われている場合があるため
   // Stage を強制再マウントするためのキー。visibilitychange でインクリメントする。
@@ -437,7 +461,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   {renderTimeBlock()}
                 </div>
               )}
-          <div className={`tetris-board-container ${isShaking ? 'board-shake' : ''}`}>
+          <div className="tetris-board-container" ref={boardContainerRef}>
               {gameMode === 'ONLINE_1V1' ? (
                 <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
               ) : (
@@ -483,6 +507,11 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 </Stage>
               </div>
 
+            {/* Line-clear flash effect */}
+            {flashKey > 0 && (
+              <div key={flashKey} className="board-flash" />
+            )}
+
             {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
               <div style={{
                 position: 'absolute',
@@ -505,12 +534,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
           {actionText && (
             <div 
-              key={actionText} // forces re-render/re-animation when text changes
+              key={actionText.key}
               className={
-                actionText.includes('Perfect Clear') ? 'action-text-pc' :
-                actionText.includes('Tetris') ? 'action-text-tetris' :
-                actionText.includes('T-Spin') ? 'action-text-tspin' :
-                actionText.includes('Combo') ? 'action-text-combo' :
+                actionText.text.includes('Perfect Clear') ? 'action-text-pc' :
+                actionText.text.includes('Tetris') ? 'action-text-tetris' :
+                actionText.text.includes('T-Spin') ? 'action-text-tspin' :
+                actionText.text.includes('Combo') ? 'action-text-combo' :
                 'action-text-default'
               }
               style={{
@@ -527,7 +556,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               whiteSpace: 'pre-line',
               zIndex: 10
             }}>
-              {actionText}
+              {actionText.text}
             </div>
           )}
 
