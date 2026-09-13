@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { Cell } from '../utils/gameHelpers';
 
 export const useGameState = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>('MENU');
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING'>('MENU');
   const appStateRef = useRef(appState);
   useEffect(() => { appStateRef.current = appState; }, [appState]);
 
@@ -40,6 +40,8 @@ export const useGameState = () => {
 
   const [dropTime, setDropTime] = useState<number | null>(null);
   const [gameOver, setGameOver] = useState(false);
+  const gameOverRef = useRef(false);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   const [score, setScore] = useState(0);
 
   const [level, setLevel] = useState(1);
@@ -73,7 +75,7 @@ export const useGameState = () => {
     finalTime, setFinalTime,
     countdown, setCountdown, countdownRef, countdownTimeoutsRef,
     dropTime, setDropTime,
-    gameOver, setGameOver,
+    gameOver, setGameOver, gameOverRef,
     score, setScore,
     level, setLevel,
     lines, setLines,

@@ -86,7 +86,7 @@ export class AuthService {
     if (user.twoFactorEnabled) {
       const tempToken = this.jwtService.sign(
         { sub: user.id, isTwoFactor: true },
-        { expiresIn: '5m' }
+        { expiresIn: '5m' },
       );
       return { require2FA: true, tempToken, userId: user.id };
     }
@@ -158,7 +158,7 @@ export class AuthService {
     if (user.twoFactorEnabled) {
       const tempToken = this.jwtService.sign(
         { sub: user.id, isTwoFactor: true },
-        { expiresIn: '5m' }
+        { expiresIn: '5m' },
       );
       return { require2FA: true, tempToken, userId: user.id };
     }
@@ -226,16 +226,16 @@ export class AuthService {
   async generateTwoFactorAuthSecret(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    
+
     const secret = authenticator.generateSecret();
     const appName = 'ft_transcendence';
     const otpauthUrl = authenticator.keyuri(user.email, appName, secret);
-    
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { twoFactorSecret: secret },
     });
-    
+
     return {
       secret,
       qrCodeDataUrl: await toDataURL(otpauthUrl),
@@ -244,33 +244,34 @@ export class AuthService {
 
   async turnOnTwoFactorAuth(userId: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.twoFactorSecret) throw new BadRequestException('シークレットが生成されていません');
-    
+    if (!user || !user.twoFactorSecret)
+      throw new BadRequestException('シークレットが生成されていません');
+
     const isCodeValid = authenticator.verify({
       token: code,
       secret: user.twoFactorSecret,
     });
-    
+
     if (!isCodeValid) throw new UnauthorizedException('コードが無効です');
-    
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { twoFactorEnabled: true },
     });
     return { success: true };
   }
-  
+
   async turnOffTwoFactorAuth(userId: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.twoFactorSecret) throw new BadRequestException();
-    
+
     const isCodeValid = authenticator.verify({
       token: code,
       secret: user.twoFactorSecret,
     });
-    
+
     if (!isCodeValid) throw new UnauthorizedException('コードが無効です');
-    
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
@@ -280,24 +281,26 @@ export class AuthService {
 
   async authenticate2FA(userId: string, code: string, tempToken: string) {
     try {
-      const payload = this.jwtService.verify(tempToken, { secret: process.env.JWT_SECRET });
+      const payload = this.jwtService.verify(tempToken, {
+        secret: process.env.JWT_SECRET,
+      });
       if (payload.sub !== userId || !payload.isTwoFactor) {
         throw new UnauthorizedException('トークンが無効です');
       }
     } catch {
       throw new UnauthorizedException('トークンが期限切れ、または無効です');
     }
-    
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.twoFactorSecret) throw new UnauthorizedException();
-    
+
     const isCodeValid = authenticator.verify({
       token: code,
       secret: user.twoFactorSecret,
     });
-    
+
     if (!isCodeValid) throw new UnauthorizedException('コードが無効です');
-    
-    return this.issueTokens(user as any);
+
+    return this.issueTokens(user);
   }
 }

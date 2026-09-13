@@ -2,19 +2,19 @@
   "color": true,
   "softDropFactor": 0,
   "dasMilliseconds": 133,
-  "arrMilliseconds": 33,
-  "softDropIntervalMilliseconds": 33,
+  "arrMilliseconds": 0,
+  "softDropIntervalMilliseconds": 1,
   "keyBindings": {
-    "moveLeft": "left",
-    "moveRight": "right",
-    "softDrop": "down",
-    "hardDrop": "up",
-    "rotateCW": "d",
-    "rotateCCW": "a",
-    "rotate180": "s",
-    "hold": "w",
+    "moveLeft": "a",
+    "moveRight": "f",
+    "softDrop": "s",
+    "hardDrop": "d",
+    "rotateCW": "/",
+    "rotateCCW": ",",
+    "rotate180": ".",
+    "hold": "Shift",
     "pause": "p",
-    "restart": "r",
-    "quit": "q"
+    "restart": "q",
+    "quit": "esc"
   }
 }

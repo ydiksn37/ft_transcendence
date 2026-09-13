@@ -46,7 +46,7 @@ struct TunedParameter {
   WeightMember member;
 };
 
-constexpr std::array<TunedParameter, 56> kParameters{{
+constexpr std::array<TunedParameter, 63> kParameters{{
     {"board_stability_multiplier",
      &tetris::ExpertWeights::boardStabilityMultiplier},
     {"aggregate_height_penalty",
@@ -61,6 +61,8 @@ constexpr std::array<TunedParameter, 56> kParameters{{
      &tetris::ExpertWeights::newUnfillableCavityPenalty},
     {"unfillable_cavity_recovery_reward",
      &tetris::ExpertWeights::unfillableCavityRecoveryReward},
+    {"new_unowned_hole_penalty",
+     &tetris::ExpertWeights::newUnownedHolePenalty},
     {"bumpiness_penalty", &tetris::ExpertWeights::bumpinessPenalty},
     {"maximum_height_penalty",
      &tetris::ExpertWeights::maximumHeightPenalty},
@@ -74,6 +76,8 @@ constexpr std::array<TunedParameter, 56> kParameters{{
      &tetris::ExpertWeights::flatSideExcessRoughnessPenalty},
     {"attack_lane_obstruction_penalty",
      &tetris::ExpertWeights::attackLaneObstructionPenalty},
+    {"attack_lane_shoulder_penalty",
+     &tetris::ExpertWeights::attackLaneShoulderPenalty},
     {"competing_well_penalty",
      &tetris::ExpertWeights::competingWellPenalty},
     {"new_competing_well_penalty",
@@ -103,6 +107,12 @@ constexpr std::array<TunedParameter, 56> kParameters{{
     {"pre_tsd_reward", &tetris::ExpertWeights::preTSpinDoubleReward},
     {"pre_tsd_break_penalty",
      &tetris::ExpertWeights::preTSpinDoubleBreakPenalty},
+    {"ready_tst_reward", &tetris::ExpertWeights::readyTSpinTripleReward},
+    {"donation_unlock_reward", &tetris::ExpertWeights::donationUnlockReward},
+    {"donation_template_reward", &tetris::ExpertWeights::donationTemplateReward},
+    {"completed_tst_break_penalty",
+     &tetris::ExpertWeights::completedTSpinTripleBreakPenalty},
+    {"tspin_triple_reward", &tetris::ExpertWeights::tSpinTripleReward},
     {"well_distance_0_penalty",
      &tetris::ExpertWeights::wellDistance0Penalty},
     {"well_distance_1_penalty",

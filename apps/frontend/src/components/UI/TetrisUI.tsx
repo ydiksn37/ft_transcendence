@@ -44,29 +44,44 @@ type TetrisUIProps = {
   setDropTime: React.Dispatch<React.SetStateAction<number | null>>;
   formatTime: (ms: number) => string;
   createStage: (width?: number) => Cell[][];
-  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1' | 'CUSTOM_ROOMS';
+  appState?: 'MENU' | 'PLAYING' | 'RECORDS' | 'CONFIG' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING';
   restartGame: () => void;
   joinOnline?: () => void;
   isCustomRoom?: boolean;
+  isVsAi?: boolean;
   quitGame?: () => void;
   onlineRestartLabel?: string;
   onHold: () => void;
   onQuit?: () => void;
   extraLeftPanel?: React.ReactNode;
   ghostYOverride?: number;
+  onSpectate?: () => void;
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
-  formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, quitGame,
-  onlineRestartLabel, onHold, onQuit, extraLeftPanel, ghostYOverride
+  formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, isVsAi, quitGame,
+  onlineRestartLabel, onHold, onQuit, onSpectate, extraLeftPanel, ghostYOverride
 }) => {
   const [scale, setScale] = useState(1);
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
   const [isWideView, setIsWideView] = useState(window.innerWidth >= 1500);
   const navigate = useNavigate();
+
+  // 非アクティブタブから戻ってきた際に WebGL コンテキストが失われている場合があるため
+  // Stage を強制再マウントするためのキー。visibilitychange でインクリメントする。
+  const [stageKey, setStageKey] = useState(0);
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setStageKey(prev => prev + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -80,9 +95,11 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       
       const expectedHeight = isMobile ? 750 : 800;
       const scaleY = (vh - 40) / expectedHeight;
+      // 観戦時: 各盤面はフルサイズ(560px)で並ぶ → 2人なら 560*2+gap≈1160, 1人なら 560
+      // 通常1v1: 自分+相手で 1100px, ソロ: 700px
       const expectedWidth = isMobile
-        ? (gameMode === 'ONLINE_1V1' ? 550 : 460)
-        : (gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
+        ? (gameMode === 'ONLINE_1V1' && appState !== 'SPECTATING' ? 550 : 460)
+        : (appState === 'SPECTATING' ? 1160 : gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
       const scaleX = (vw - 20) / expectedWidth;
       setScale(Math.min(1.5, scaleY, scaleX));
     };
@@ -143,13 +160,18 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     );
   };
 
-  const modeMeta = {
-    'MARATHON': { label: 'MARATHON', color: 'var(--color-neon-cyan)' },
-    '40_LINES': { label: '40 LINES', color: 'var(--color-neon-cyan)' },
-    '4_WIDE': { label: '4 WIDE', color: 'var(--color-neon-cyan)' },
-    'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
-    'AI_PREVIEW': { label: 'AI PREVIEW', color: 'var(--color-neon-cyan)' },
-  }[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  const modeMeta = (() => {
+    if (appState === 'SPECTATING') {
+      return { label: 'SPECTATING MATCH', color: '#f1c40f' };
+    }
+    return ({
+      'MARATHON':   { label: 'MARATHON',     color: 'var(--color-neon-cyan)' },
+      '40_LINES':   { label: '40 LINES',     color: 'var(--color-neon-cyan)' },
+      '4_WIDE':     { label: '4 WIDE',       color: 'var(--color-neon-cyan)' },
+      'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
+      'AI_PREVIEW': { label: 'AI PREVIEW',   color: 'var(--color-neon-cyan)' },
+    } as const)[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
+  })();
 
   const modules = import.meta.glob<string>(
     "../../assets/images/tetrisbg_*.png",
@@ -205,12 +227,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>
         <h1 style={{ fontSize: '48px', color: '#e74c3c', textShadow: '4px 4px 0px #000', marginBottom: '40px', animation: 'blink 1s infinite alternate', textAlign: 'center', lineHeight: '1.5' }}>
-          SEARCHING FOR<br/>OPPONENT...
+          {isVsAi ? <>LOADING<br/>AI...</> : <>SEARCHING FOR<br/>OPPONENT...</>}
         </h1>
         <button
           onClick={() => {
             if (socketRef.current) { socketRef.current.disconnect(); setSocket(null); }
-            navigate('/lobby/MULTI_PLAY');
+            navigate(isVsAi ? '/lobby/VS_AI' : '/lobby/MULTI_PLAY');
           }}
           style={{
             fontFamily: '"Press Start 2P", monospace', padding: '20px 40px',
@@ -317,7 +339,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
       onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
     >
-      QUIT
+      {isCustomRoom && gameOver ? 'RETURN TO ROOM' : 'QUIT'}
     </button>
   ) : null;
 
@@ -392,135 +414,163 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           )}
 
+          <div style={{ display: 'flex', flexDirection: isMobileView ? 'column' : 'row', gap: isMobileView ? '20px' : '40px', justifyContent: 'center', alignItems: isMobileView ? 'center' : 'flex-start', width: '100%' }}>
+          {appState !== 'SPECTATING' && (
           <div className="tetris-ui-layout touch-flick-area">
-            {!isMobileView && (
-              <div className="tetris-side-panel">
-                {holdBlock}
-                {extraLeftPanel}
-                {quitButton}
-                {renderTimeBlock()}
-              </div>
-            )}
-        <div className="tetris-board-container">
-            {gameMode === 'ONLINE_1V1' ? (
-              <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
-            ) : (
-              <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
-            )}
-          <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
-            <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-              <Stage width={stage.length > 0 ? stage[0].length * 30 : 300} height={1200} options={{ backgroundAlpha: 0 }}>
-                <GameBoard 
-                  stage={stage} 
-                  player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
-                  ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
-                  targetLine={
-                    gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
-                      ? 22 - (40 - lines) 
-                      : undefined
-                  }
-                />
-              </Stage>
-            </div>
-
-
-          {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
-            <div style={{
-              position: 'absolute',
-              bottom: 0,
-              left: '-20px',
-              width: '10px',
-              height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
-              backgroundColor: 'red',
-              borderRadius: '5px',
-              transition: 'height 0.2s',
-              boxShadow: '0 0 10px red'
-            }}>
-              <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
-                {pendingGarbage.reduce((a,b)=>a+b,0)}
-              </span>
-            </div>
-          )}
-        </div>
-        </div>
-
-        {actionText && (
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '30%',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-            color: '#fff',
-            textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            textAlign: 'center',
-            whiteSpace: 'pre-line',
-            animation: 'pop 0.3s ease-out',
-            zIndex: 10
-          }}>
-            {actionText}
-          </div>
-        )}
-
-        <div className="tetris-right-panel" style={{ position: 'relative'}}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
-            <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
-            <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {renderNextPieces(nextPieceKeys, 5)}
-            </div>
-          </div>
-
-          <div className="score-container" style={{
-            backgroundColor: '#000',
-            border: '4px solid #fff',
-            boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
-            padding: '20px 16px',
-            display: 'flex', 
-            flexDirection: 'column',
-            gap: '20px',
-            fontFamily: '"Press Start 2P", monospace'
-          }}>
-            {[
-              { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
-              { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
-              { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
-            ].map((s) => (
-              <div key={s.label} className="score-item">
-                <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                  {s.label}
+          {(
+            <>
+              {!isMobileView && (
+                <div className="tetris-side-panel">
+                  {holdBlock}
+                  {extraLeftPanel}
+                  {quitButton}
+                  {renderTimeBlock()}
                 </div>
-                <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
-                  {s.value}
-                </div>
+              )}
+          <div className="tetris-board-container">
+              {gameMode === 'ONLINE_1V1' ? (
+                <h3 style={{ textAlign: 'center', color: '#4caf50', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>YOU</h3>
+              ) : (
+                <h3 style={{ margin: '0 0 10px 0', visibility: 'hidden' }}>PLAYER</h3>
+              )}
+            <div style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                <Stage 
+                  key={stageKey}
+                  width={stage.length > 0 ? stage[0].length * 30 : 300} 
+                  height={1200} 
+                  options={{ backgroundAlpha: 0 }}
+                  onMount={(app) => {
+                    const canvas = app.view as HTMLCanvasElement;
+                    const onLost = (e: Event) => e.preventDefault();
+                    const onRestored = () => app.renderer.reset();
+                    canvas.addEventListener('webglcontextlost', onLost);
+                    canvas.addEventListener('webglcontextrestored', onRestored);
+                    (app as any)._onLost = onLost;
+                    (app as any)._onRestored = onRestored;
+                  }}
+                  onUnmount={(app) => {
+                    const canvas = app.view as HTMLCanvasElement;
+                    if ((app as any)._onLost) {
+                      canvas.removeEventListener('webglcontextlost', (app as any)._onLost);
+                      canvas.removeEventListener('webglcontextrestored', (app as any)._onRestored);
+                    }
+                  }}
+                >
+                  <GameBoard 
+                    stage={stage} 
+                    player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
+                    ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
+                    targetLine={
+                      gameMode === '40_LINES' && (40 - lines) <= 20 && (40 - lines) > 0 
+                        ? 22 - (40 - lines) 
+                        : undefined
+                    }
+                  />
+                </Stage>
               </div>
-            ))}
-          </div>
 
-        {bg?.campus && gameMode === 'ONLINE_1V1' && !isMobileView &&  (
-        <div
-          style={{
+            {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && pendingGarbage.length > 0 && (
+              <div style={{
                 position: 'absolute',
                 bottom: 0,
-                left: '100%',
-                width: isWideView ? '100%' : '80px',
-                textWrap: isWideView ? 'nowrap' : 'wrap',
-                marginLeft: '24px',
-                fontFamily: '"Press Start 2P", monospace',
-                fontSize: '8px', 
-                lineHeight: 1.8,
-                color: '#fff',
-          }}
-        >
-          {isWideView ? (
-            <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} | {bg.campus.campus}</a></p>
-          ) : (
-            <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.campus}</a></p>
+                left: '-20px',
+                width: '10px',
+                height: `${Math.min(100, (pendingGarbage.reduce((a,b)=>a+b,0) / 20) * 100)}%`,
+                backgroundColor: 'red',
+                borderRadius: '5px',
+                transition: 'height 0.2s',
+                boxShadow: '0 0 10px red'
+              }}>
+                <span style={{ position: 'absolute', top: '-25px', left: '-5px', color: 'red', fontWeight: 'bold' }}>
+                  {pendingGarbage.reduce((a,b)=>a+b,0)}
+                </span>
+              </div>
+            )}
+          </div>
+          </div>
+
+          {actionText && (
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '30%',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              color: '#fff',
+              textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              whiteSpace: 'pre-line',
+              animation: 'pop 0.3s ease-out',
+              zIndex: 10
+            }}>
+              {actionText}
+            </div>
+          )}
+
+          <div className="tetris-right-panel" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
+              <h3 style={{ margin: '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px', textShadow: '2px 2px 0px #000' }}>NEXT</h3>
+              <div className="next-pieces-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {renderNextPieces(nextPieceKeys, 5)}
+              </div>
+            </div>
+
+            <div className="score-container" style={{
+              backgroundColor: '#000',
+              border: '4px solid #fff',
+              boxShadow: '4px 4px 0px rgba(0,0,0,0.8)',
+              padding: '20px 16px',
+              display: 'flex', 
+              flexDirection: 'column',
+              gap: '20px',
+              fontFamily: '"Press Start 2P", monospace'
+            }}>
+              {[
+                { label: 'SCORE', value: score, color: 'var(--color-neon-cyan)' },
+                { label: 'LEVEL', value: level, color: 'var(--color-neon-purple)' },
+                { label: 'LINES', value: lines, color: 'var(--color-neon-green)' },
+              ].map((s) => (
+                <div key={s.label} className="score-item">
+                  <div style={{ fontSize: '10px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums', textShadow: '2px 2px 0px #000'}}>
+                    {s.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {bg?.campus && gameMode === 'ONLINE_1V1' && !isMobileView && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '100%',
+                  width: isWideView ? '100%' : '80px',
+                  textWrap: isWideView ? 'nowrap' : 'wrap',
+                  marginLeft: '24px',
+                  fontFamily: '"Press Start 2P", monospace',
+                  fontSize: '8px', 
+                  lineHeight: 1.8,
+                  color: '#fff',
+                }}
+              >
+                {isWideView ? (
+                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} | {bg.campus.campus}</a></p>
+                ) : (
+                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.campus}</a></p>
+                )}
+              </div>
+            )}
+          </div>
+          </>
           )}
         </div>
-        )}
-        </div>
+          )}
 
         {bg?.campus && !isMobileView && gameMode !== 'ONLINE_1V1' && isWideView && (
           <div style={{
@@ -563,11 +613,15 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
          )}
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginLeft: '40px', maxWidth: '600px' }}>
-            {(() => {
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: appState === 'SPECTATING' ? '100%' : undefined }}>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: appState === 'SPECTATING' ? '100%' : undefined, maxWidth: appState === 'SPECTATING' ? 'none' : '600px' }}>
+              {(() => {
               const numOpp = Math.max(1, Object.keys(opponents || {}).length);
-              // 人数が多いほど小さくする (1人: 1.0, 2人: 0.55, 3人: 0.45...)
-              const oppScale = numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45);
+              // 観戦時は通常対戦と同じフルサイズで表示する
+              // 通常対戦時のみ人数に応じて縮小する (1人: 1.0, 2人: 0.55, 3人: 0.45...)
+              const oppScale = appState === 'SPECTATING'
+                ? 1
+                : (numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45));
               const oppWidth = 560; // 本来の幅 (300 + 80 + 80 + gaps)
               const oppHeight = 700; // 本来の高さ
 
@@ -590,11 +644,32 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                     {/* 相手の 中央パネル (GameBoard) */}
                     <div className="tetris-board-container">
                       <h3 style={{ textAlign: 'center', color: '#e74c3c', margin: '0 0 10px 0', fontFamily: '"Press Start 2P", monospace', fontSize: '14px' }}>
-                        OPPONENT {isFallback ? '' : index + 1}
+                        {opp.displayName ? opp.displayName : (opp.username ? opp.username : (isFallback ? 'OPPONENT' : `Player ${opp.playerIndex !== undefined ? opp.playerIndex + 1 : index + 2}`))}
                       </h3>
                       <div style={{ position: 'relative', width: 300, height: 660 }}>
                         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                          <Stage width={300} height={1200} options={{ backgroundAlpha: 0 }}>
+                          <Stage 
+                            key={stageKey}
+                            width={300} 
+                            height={1200} 
+                            options={{ backgroundAlpha: 0 }}
+                            onMount={(app) => {
+                              const canvas = app.view as HTMLCanvasElement;
+                              const onLost = (e: Event) => e.preventDefault();
+                              const onRestored = () => app.renderer.reset();
+                              canvas.addEventListener('webglcontextlost', onLost);
+                              canvas.addEventListener('webglcontextrestored', onRestored);
+                              (app as any)._onLost = onLost;
+                              (app as any)._onRestored = onRestored;
+                            }}
+                            onUnmount={(app) => {
+                              const canvas = app.view as HTMLCanvasElement;
+                              if ((app as any)._onLost) {
+                                canvas.removeEventListener('webglcontextlost', (app as any)._onLost);
+                                canvas.removeEventListener('webglcontextrestored', (app as any)._onRestored);
+                              }
+                            }}
+                          >
                             <GameBoard 
                               stage={opp.stage || createStage(10)} 
                               player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
@@ -659,8 +734,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 ? Object.entries(opponents!).map(([id, opp], index) => renderOpponent(id, opp, index))
                 : renderOpponent('fallback', { stage: opponentStage, score: opponentScore, nextPieceKeys: opponentNextPieceKeys, holdMino: opponentHoldMino }, 0, true);
             })()}
+            </div>
           </div>
         )}
+        </div>
 
       </div>
       {bg?.campus && gameMode !== 'ONLINE_1V1' &&  (
@@ -679,8 +756,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             <p>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</p>
           )}
         </div>
-        )}
-              {countdown && (
+      )}
+              {countdown && appState !== 'SPECTATING' && (
             <div style={{
               position: 'fixed',
               top: '50%',
@@ -737,26 +814,40 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
                 {isCustomRoom ? (
-                  <button
-                    autoFocus
-                    onClick={() => {
-                      if (quitGame) {
-                        quitGame();
-                      }
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      if (quitGame) {
-                        quitGame();
-                      }
-                    }}
-                    style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
-                    onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
-                    onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
-                  >
-                    {isMobileView ? 'RETURN TO ROOM' : 'RETURN TO ROOM (ENTER)'}
-                  </button>
+                  <>
+                    <button
+                      autoFocus
+                      onClick={() => {
+                        if (quitGame) {
+                          quitGame();
+                        }
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        if (quitGame) {
+                          quitGame();
+                        }
+                      }}
+                      style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #4caf50', boxShadow: '4px 4px 0px rgba(76,175,80,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                      onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                      onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                    >
+                      {isMobileView ? 'RETURN TO ROOM' : 'RETURN TO ROOM (ENTER)'}
+                    </button>
+                    {onSpectate && (
+                      <button
+                        onClick={() => onSpectate()}
+                        onTouchEnd={(e) => { e.preventDefault(); onSpectate(); }}
+                        style={{ fontFamily: '"Press Start 2P", monospace', padding: '15px', backgroundColor: '#000', color: '#fff', border: '4px solid #3498db', boxShadow: '4px 4px 0px rgba(52,152,219,0.5)', cursor: 'pointer', textTransform: 'uppercase', fontSize: '14px', transition: 'transform 0.1s' }}
+                        onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
+                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                      >
+                        SPECTATE MATCH
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     {gameMode === 'ONLINE_1V1' ? (
@@ -824,7 +915,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             </div>
           )}
 </div>
-    </div>
     </div>
   );
 };

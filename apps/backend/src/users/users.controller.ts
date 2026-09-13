@@ -23,7 +23,12 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { UpdateUserDto, SearchUsersDto, BanUserDto, SearchHistoryDto } from './dto/user.dto';
+import {
+  UpdateUserDto,
+  SearchUsersDto,
+  BanUserDto,
+  SearchHistoryDto,
+} from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -149,10 +154,7 @@ export class UsersController {
 
   @Get('me/history')
   @ApiOperation({ summary: '自分の対戦履歴取得' })
-  getMyHistory(
-    @CurrentUser() user: any,
-    @Query() dto: SearchHistoryDto
-  ) {
+  getMyHistory(@CurrentUser() user: any, @Query() dto: SearchHistoryDto) {
     return this.usersService.getGameHistory(user.id, dto);
   }
 
@@ -170,10 +172,7 @@ export class UsersController {
 
   @Get(':id/history')
   @ApiOperation({ summary: '対戦履歴取得' })
-  getGameHistory(
-    @Param('id') id: string,
-    @Query() dto: SearchHistoryDto
-  ) {
+  getGameHistory(@Param('id') id: string, @Query() dto: SearchHistoryDto) {
     return this.usersService.getGameHistory(id, dto);
   }
 }
