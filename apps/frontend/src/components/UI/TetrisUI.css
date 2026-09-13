@@ -105,6 +105,10 @@
     flex-direction: column;
     align-items: center;
   }
+
+  .tetris-campus-info {
+    display: none !important;
+  }
 }
 
 @keyframes fadeInDelay {

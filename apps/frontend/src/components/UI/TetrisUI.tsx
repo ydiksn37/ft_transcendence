@@ -623,7 +623,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
 
         {bg?.campus && !isMobileView && gameMode !== 'ONLINE_1V1' && isWideView && (
-          <div style={{
+          <div className="tetris-campus-info" style={{
             position: 'absolute',
             left: '100%', 
             bottom: 0,
@@ -790,21 +790,17 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
       </div>
-      {bg?.campus && gameMode !== 'ONLINE_1V1' &&  (
+      {bg?.campus && gameMode !== 'ONLINE_1V1' && !isMobileView && (
         <div
           style={{
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '8px',
             color: "#fff",
-            position: isMobileView ? 'static' : 'absolute',
-            bottom: isMobileView ? undefined : 0,
+            position: 'absolute',
+            bottom: 0,
           }}
         >
-          {!isMobileView ? (
-            <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
-          ) : (
-            <p>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</p>
-          )}
+          <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
         </div>
       )}
               {countdown && appState !== 'SPECTATING' && (
