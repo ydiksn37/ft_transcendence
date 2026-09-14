@@ -21,6 +21,7 @@ export default function LobbyPage() {
   
   const [startLevel, setStartLevel] = useState(1);
   const [aiSpeedPercent, setAiSpeedPercent] = useState(80);
+  const [selectedAiDifficulty, setSelectedAiDifficulty] = useState<AiDifficulty | null>(null);
   const aiActionDelayMs = Math.round(
     MAX_AI_ACTION_DELAY_MS * (1 - aiSpeedPercent / 100),
   );
@@ -55,6 +56,14 @@ export default function LobbyPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (listeningAction) return;
+
+      if (selectedAiDifficulty) {
+        if (e.code === 'Escape' || e.code === keyConfig.quitToMenu) {
+          e.preventDefault();
+          setSelectedAiDifficulty(null);
+        }
+        return;
+      }
 
       if (e.code === keyConfig.quitToMenu) {
         navigate('/menu');
@@ -117,7 +126,7 @@ export default function LobbyPage() {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, token, user]);
+  }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, selectedAiDifficulty, token, user]);
 
   const [records, setRecords] = useState<any[]>([]);
   const [myRecords, setMyRecords] = useState<any[]>([]);
@@ -292,65 +301,44 @@ export default function LobbyPage() {
         })()}
 
         {mode === 'MULTI_PLAY' && (
-          <div className="multi-play-buttons" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '20px', marginBottom: '40px' }}>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/ONLINE_1V1`)}
-              style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c`, marginBottom: 0 }}
-            >
-              RANDOM MATCH
-            </button>
-            <button 
-              className="start-game-btn" 
-              onClick={() => handleStartGame(`/play/CUSTOM_ROOMS`)}
-              style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400', marginBottom: 0 }}
-            >
-              CUSTOM ROOMS
-            </button>
-            <fieldset className="ai-speed-selector">
-              <legend>AI MOVE SPEED</legend>
-              <div className="ai-speed-value">
-                <strong>{aiSpeedPercent === 100 ? 'INSTANT' : `${aiSpeedPercent}%`}</strong>
-                <span>{aiActionDelayMs} ms / move</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={aiSpeedPercent}
-                aria-label="AI move speed"
-                onChange={(event) => setAiSpeedPercent(Number(event.target.value))}
-                style={{
-                  background: `linear-gradient(to right, #00ffff 0%, #00ffff ${aiSpeedPercent}%, #333 ${aiSpeedPercent}%, #333 100%)`,
-                }}
-              />
-              <div className="ai-speed-scale" aria-hidden="true">
-                <span>SLOW</span>
-                <span>INSTANT</span>
-              </div>
-            </fieldset>
-            {AI_DIFFICULTIES.map((difficulty) => {
-              const color = AI_DIFFICULTY_COLORS[difficulty];
-              return (
-                <button
-                  key={difficulty}
-                  className="start-game-btn"
-                  onClick={() => handleStartGame(
-                    `/play/VS_AI?difficulty=${difficulty}&aiSpeedMs=${aiActionDelayMs}`,
-                  )}
-                  style={{
-                    borderColor: color,
-                    boxShadow: `0 0 20px ${color}`,
-                    color,
-                    marginBottom: 0,
-                    fontSize: '12px',
-                  }}
-                >
-                  VS AI ({difficulty})
-                </button>
-              );
-            })}
+          <div className="multi-play-buttons">
+            <div className="multi-play-primary-row">
+              <button
+                className="start-game-btn"
+                onClick={() => handleStartGame(`/play/ONLINE_1V1`)}
+                style={{ borderColor: '#e74c3c', boxShadow: `0 0 20px #e74c3c`, marginBottom: 0 }}
+              >
+                RANDOM MATCH
+              </button>
+              <button
+                className="start-game-btn"
+                onClick={() => handleStartGame(`/play/CUSTOM_ROOMS`)}
+                style={{ borderColor: '#d35400', boxShadow: `0 0 20px #d35400`, color: '#d35400', marginBottom: 0 }}
+              >
+                CUSTOM ROOMS
+              </button>
+            </div>
+            <div className="multi-play-ai-buttons">
+              <h2 className="multi-play-ai-title">VS AI</h2>
+              {AI_DIFFICULTIES.map((difficulty) => {
+                const color = AI_DIFFICULTY_COLORS[difficulty];
+                return (
+                  <button
+                    key={difficulty}
+                    className="start-game-btn"
+                    onClick={() => setSelectedAiDifficulty(difficulty)}
+                    style={{
+                      borderColor: color,
+                      boxShadow: `0 0 20px ${color}`,
+                      color,
+                      marginBottom: 0,
+                    }}
+                  >
+                    {difficulty}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -440,6 +428,70 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+
+      {selectedAiDifficulty && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-speed-title"
+          className="ai-speed-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedAiDifficulty(null);
+          }}
+        >
+          <div className="ai-speed-modal">
+            <h3 id="ai-speed-title">AI MOVE SPEED</h3>
+            <div className="ai-speed-modal-difficulty">
+              VS AI (
+              <span style={{ color: AI_DIFFICULTY_COLORS[selectedAiDifficulty] }}>
+                {selectedAiDifficulty}
+              </span>
+              )
+            </div>
+            <fieldset className="ai-speed-selector">
+              <legend>SPEED</legend>
+              <div className="ai-speed-value">
+                <strong>{aiSpeedPercent === 100 ? 'INSTANT' : `${aiSpeedPercent}%`}</strong>
+                <span>{aiActionDelayMs} ms / move</span>
+              </div>
+              <div className="ai-speed-tetromino-slider">
+                <div className="ai-speed-slider-track" aria-hidden="true" />
+                {Array.from({ length: 4 + aiSpeedPercent / 5 }).map((_, index) => (
+                  <div className="ai-speed-slider-block" key={index} aria-hidden="true" />
+                ))}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={aiSpeedPercent}
+                  aria-label="AI move speed"
+                  onChange={(event) => setAiSpeedPercent(Number(event.target.value))}
+                />
+              </div>
+              <div className="ai-speed-scale" aria-hidden="true">
+                <span>SLOW</span>
+                <span>INSTANT</span>
+              </div>
+            </fieldset>
+            <div className="ai-speed-modal-actions">
+              <button onClick={() => setSelectedAiDifficulty(null)}>CANCEL</button>
+              <button
+                className="ai-speed-start-btn"
+                onClick={() => {
+                  const difficulty = selectedAiDifficulty;
+                  setSelectedAiDifficulty(null);
+                  handleStartGame(
+                    `/play/VS_AI?difficulty=${difficulty}&aiSpeedMs=${aiActionDelayMs}`,
+                  );
+                }}
+              >
+                START
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showMobileConfig && (
         <div style={{
