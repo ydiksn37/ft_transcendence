@@ -154,7 +154,6 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  animation: epicWinBg 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
   pointer-events: none;
 }
 
@@ -167,6 +166,10 @@
   font-weight: bold;
   text-align: center;
   white-space: nowrap;
+  padding: 20px 40px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 20px;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
   animation: 
     epicWinScale 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards,
     epicWinFlash 0.5s infinite alternate;
