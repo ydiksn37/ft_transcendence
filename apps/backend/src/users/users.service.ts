@@ -11,6 +11,7 @@ import {
   SearchUsersDto,
   BanUserDto,
   SearchHistoryDto,
+  UpdateGameSettingsDto,
 } from './dto/user.dto';
 
 @Injectable()
@@ -39,20 +40,24 @@ export class UsersService {
   }
 
   // ── ゲーム設定更新 ──────────────────────────────────────
-  async updateGameSettings(userId: string, data: any) {
-    const { touchFlick, ...safeData } = data; // touchFlickを除外
+  async updateGameSettings(userId: string, dto: UpdateGameSettingsDto) {
+    const { touchFlick: _touchFlick, ...settings } = dto;
     return this.prisma.userGameSettings.upsert({
       where: {
         userId,
       },
       update: {
-        ...safeData,
-        keyBindings: safeData.keyBindings ? safeData.keyBindings : undefined,
+        ...settings,
+        keyBindings: settings.keyBindings
+          ? { ...settings.keyBindings }
+          : undefined,
       },
       create: {
         userId,
-        ...safeData,
-        keyBindings: safeData.keyBindings ? safeData.keyBindings : undefined,
+        ...settings,
+        keyBindings: settings.keyBindings
+          ? { ...settings.keyBindings }
+          : undefined,
       },
     });
   }

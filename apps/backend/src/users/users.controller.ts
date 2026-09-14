@@ -28,6 +28,7 @@ import {
   SearchUsersDto,
   BanUserDto,
   SearchHistoryDto,
+  UpdateGameSettingsDto,
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -55,8 +56,8 @@ export class UsersController {
 
   @Patch('me/settings')
   @ApiOperation({ summary: 'ゲーム設定を更新する' })
-  updateSettings(@CurrentUser() user: any, @Body() body: any) {
-    return this.usersService.updateGameSettings(user.id, body);
+  updateSettings(@CurrentUser() user: any, @Body() dto: UpdateGameSettingsDto) {
+    return this.usersService.updateGameSettings(user.id, dto);
   }
 
   @Delete('me')

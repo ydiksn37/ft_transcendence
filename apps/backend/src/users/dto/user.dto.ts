@@ -1,5 +1,174 @@
-import { IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsDefined,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MinoSkin } from '@prisma/client';
+
+export class KeyBindingsDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  left?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  right?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  moveLeft?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  moveRight?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  softDrop?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  hardDrop?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  rotateCW?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  rotateCCW?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  rotate180?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  hold?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  restart?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  quitToMenu?: string;
+}
+
+export class UpdateGameSettingsDto {
+  @ApiPropertyOptional({ enum: MinoSkin })
+  @IsOptional()
+  @IsEnum(MinoSkin)
+  minoSkin?: MinoSkin;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  showGhost?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5000)
+  arr?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5000)
+  das?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5000)
+  dcd?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 1000 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000)
+  sdf?: number;
+
+  @ApiPropertyOptional({ type: KeyBindingsDto })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => KeyBindingsDto)
+  keyBindings?: KeyBindingsDto;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  volume?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sfxEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  musicEnabled?: boolean;
+
+  // This preference currently belongs to the frontend and is not persisted.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  touchFlick?: boolean;
+}
+
+export class ImportUserSettingsDto {
+  @ApiProperty({ type: UpdateGameSettingsDto })
+  @IsDefined()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => UpdateGameSettingsDto)
+  settings!: UpdateGameSettingsDto;
+}
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'New Display Name' })

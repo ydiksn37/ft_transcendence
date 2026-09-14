@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateGameSettingsDto } from './dto/user.dto';
 
 @Injectable()
 export class ExportService {
@@ -50,35 +51,21 @@ export class ExportService {
     };
   }
 
-  async importUserSettings(userId: string, settingsData: any) {
-    if (!settingsData) return null;
-
-    // Whitelist the settings to update
-    const allowedKeys = [
-      'minoSkin',
-      'showGhost',
-      'arr',
-      'das',
-      'dcd',
-      'sdf',
-      'keyBindings',
-      'volume',
-      'sfxEnabled',
-      'musicEnabled',
-    ];
-    const updateData: any = {};
-    for (const key of allowedKeys) {
-      if (settingsData[key] !== undefined) {
-        updateData[key] = settingsData[key];
-      }
-    }
-
+  async importUserSettings(
+    userId: string,
+    settingsData: UpdateGameSettingsDto,
+  ) {
+    const { touchFlick: _touchFlick, ...updateData } = settingsData;
     if (Object.keys(updateData).length === 0) return null;
+
+    const keyBindings = updateData.keyBindings
+      ? { ...updateData.keyBindings }
+      : undefined;
 
     return this.prisma.userGameSettings.upsert({
       where: { userId },
-      create: { userId, ...updateData },
-      update: updateData,
+      create: { userId, ...updateData, keyBindings },
+      update: { ...updateData, keyBindings },
     });
   }
 }

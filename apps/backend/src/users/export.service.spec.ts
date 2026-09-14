@@ -71,4 +71,23 @@ describe('ExportService', () => {
     expect(result.profile).not.toHaveProperty('passwordHash');
     expect(result.profile).not.toHaveProperty('twoFactorSecret');
   });
+
+  it('does not persist frontend-only settings during import', async () => {
+    const service = new ExportService(prisma as unknown as PrismaService);
+    const upsert = jest.fn().mockResolvedValue({ volume: 75 });
+    Object.assign(prisma, {
+      userGameSettings: { findUnique: jest.fn(), upsert },
+    });
+
+    await service.importUserSettings(userId, {
+      volume: 75,
+      touchFlick: true,
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: { userId },
+      create: { userId, volume: 75, keyBindings: undefined },
+      update: { volume: 75, keyBindings: undefined },
+    });
+  });
 });

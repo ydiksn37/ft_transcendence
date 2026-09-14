@@ -14,6 +14,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { ImportUserSettingsDto } from './dto/user.dto';
 
 @ApiTags('Data Export/Import')
 @Controller('users/me/export')
@@ -33,7 +34,10 @@ export class ExportController {
   @Post('import')
   @ApiOperation({ summary: '設定をインポート (JSON)' })
   @ApiResponse({ status: 200, description: 'インポートした設定を保存します。' })
-  async importSettings(@Request() req: any, @Body() body: any) {
+  async importSettings(
+    @Request() req: any,
+    @Body() body: ImportUserSettingsDto,
+  ) {
     return this.exportService.importUserSettings(req.user.id, body.settings);
   }
 }
