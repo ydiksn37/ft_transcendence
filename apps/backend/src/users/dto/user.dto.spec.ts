@@ -1,5 +1,11 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { ImportUserSettingsDto, UpdateGameSettingsDto } from './user.dto';
+import {
+  AdminUsersQueryDto,
+  BanUserDto,
+  ImportUserSettingsDto,
+  UpdateGameSettingsDto,
+  UpdateUserRoleDto,
+} from './user.dto';
 
 describe('game settings DTO validation', () => {
   const pipe = new ValidationPipe({
@@ -68,6 +74,55 @@ describe('game settings DTO validation', () => {
         { settings: { volume: 50, passwordHash: 'must-not-pass' } },
         ImportUserSettingsDto,
       ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('admin DTO validation', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    transform: true,
+    forbidNonWhitelisted: true,
+  });
+
+  const transform = <T>(value: unknown, metatype: new () => T) =>
+    pipe.transform(value, { type: 'body', metatype });
+
+  it('accepts valid roles and rejects arbitrary role values', async () => {
+    await expect(
+      transform({ role: 'MODERATOR' }, UpdateUserRoleDto),
+    ).resolves.toBeInstanceOf(UpdateUserRoleDto);
+    await expect(
+      transform({ role: 'SUPER_ADMIN' }, UpdateUserRoleDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('accepts the duration-based BAN payload sent by the frontend', async () => {
+    await expect(
+      transform({ reason: 'Violation of terms', durationDays: 7 }, BanUserDto),
+    ).resolves.toBeInstanceOf(BanUserDto);
+  });
+
+  it.each([
+    [{}],
+    [{ reason: '   ', durationDays: 7 }],
+    [{ reason: 'reason', durationDays: 0 }],
+    [{ reason: 'reason', durationDays: 3651 }],
+    [{ reason: 'reason', durationDays: 1.5 }],
+    [{ reason: 'reason', bannedUntil: 'not-a-date' }],
+    [{ reason: 'reason', unexpected: true }],
+  ])('rejects an invalid BAN payload: %p', async (value) => {
+    await expect(transform(value, BanUserDto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('transforms and bounds admin pagination query values', async () => {
+    await expect(
+      transform({ page: '2', limit: '100' }, AdminUsersQueryDto),
+    ).resolves.toMatchObject({ page: 2, limit: 100 });
+    await expect(
+      transform({ page: '0', limit: '101' }, AdminUsersQueryDto),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

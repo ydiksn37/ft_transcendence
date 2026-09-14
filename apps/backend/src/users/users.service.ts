@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Role } from '@prisma/client';
 import {
   UpdateUserDto,
   SearchUsersDto,
@@ -13,6 +14,21 @@ import {
   SearchHistoryDto,
   UpdateGameSettingsDto,
 } from './dto/user.dto';
+
+const ADMIN_USER_SELECT = {
+  id: true,
+  email: true,
+  username: true,
+  displayName: true,
+  avatarUrl: true,
+  role: true,
+  isOnline: true,
+  lastSeenAt: true,
+  bannedUntil: true,
+  banReason: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 @Injectable()
 export class UsersService {
@@ -381,6 +397,7 @@ export class UsersService {
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where: { deletedAt: null },
+        select: ADMIN_USER_SELECT,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -397,23 +414,43 @@ export class UsersService {
   }
 
   // ── [ADMIN] ロール変更 ────────────────────────────────────
-  async adminUpdateRole(targetId: string, role: any) {
+  async adminUpdateRole(targetId: string, role: Role) {
     return this.prisma.user.update({
       where: { id: targetId },
       data: { role },
+      select: ADMIN_USER_SELECT,
     });
   }
 
   // ── [ADMIN/MOD] BAN ────────────────────────────────────────
   async adminBanUser(targetId: string, dto: BanUserDto) {
+    if (dto.durationDays !== undefined && dto.bannedUntil !== undefined) {
+      throw new BadRequestException(
+        'durationDaysとbannedUntilは同時に指定できません',
+      );
+    }
+
+    let bannedUntil: Date;
+    if (dto.durationDays !== undefined) {
+      bannedUntil = new Date(
+        Date.now() + dto.durationDays * 24 * 60 * 60 * 1000,
+      );
+    } else if (dto.bannedUntil !== undefined) {
+      bannedUntil = new Date(dto.bannedUntil);
+      if (bannedUntil <= new Date()) {
+        throw new BadRequestException('bannedUntilは未来の日時にしてください');
+      }
+    } else {
+      bannedUntil = new Date('9999-12-31T23:59:59.999Z');
+    }
+
     return this.prisma.user.update({
       where: { id: targetId },
       data: {
-        bannedUntil: dto.bannedUntil
-          ? new Date(dto.bannedUntil)
-          : new Date('9999-12-31'),
+        bannedUntil,
         banReason: dto.reason,
       },
+      select: ADMIN_USER_SELECT,
     });
   }
 
@@ -422,18 +459,20 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: targetId },
       data: { bannedUntil: null, banReason: null },
+      select: ADMIN_USER_SELECT,
     });
   }
 
   // ── ユーザー情報サニタイズ ────────────────────────────────
   private sanitizeUser(user: any) {
-    const { passwordHash, ...safeUser } = user;
+    const { passwordHash, twoFactorSecret, ...safeUser } = user;
     return safeUser;
   }
 
   private sanitizePublicUser(user: any) {
     const {
       passwordHash,
+      twoFactorSecret,
       email,
       oauthId,
       bannedUntil,

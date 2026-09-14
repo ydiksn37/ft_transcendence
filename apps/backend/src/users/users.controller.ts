@@ -10,8 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
-  ParseIntPipe,
-  DefaultValuePipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -29,6 +28,8 @@ import {
   BanUserDto,
   SearchHistoryDto,
   UpdateGameSettingsDto,
+  UpdateUserRoleDto,
+  AdminUsersQueryDto,
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -187,33 +188,36 @@ export class AdminUsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('ADMIN')
-  @ApiOperation({ summary: '[ADMIN] 全ユーザー一覧' })
-  adminGetUsers(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
-  ) {
-    return this.usersService.adminGetUsers(page, limit);
+  @Roles('ADMIN', 'MODERATOR')
+  @ApiOperation({ summary: '[ADMIN/MOD] 全ユーザー一覧' })
+  adminGetUsers(@Query() query: AdminUsersQueryDto) {
+    return this.usersService.adminGetUsers(query.page, query.limit);
   }
 
   @Patch(':id/role')
   @Roles('ADMIN')
   @ApiOperation({ summary: '[ADMIN] ユーザーロール変更' })
-  adminUpdateRole(@Param('id') id: string, @Body() body: { role: any }) {
-    return this.usersService.adminUpdateRole(id, body.role);
+  adminUpdateRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserRoleDto,
+  ) {
+    return this.usersService.adminUpdateRole(id, dto.role);
   }
 
   @Post(':id/ban')
   @Roles('ADMIN', 'MODERATOR')
   @ApiOperation({ summary: '[ADMIN/MOD] ユーザーBAN' })
-  adminBanUser(@Param('id') id: string, @Body() dto: BanUserDto) {
+  adminBanUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BanUserDto,
+  ) {
     return this.usersService.adminBanUser(id, dto);
   }
 
   @Delete(':id/ban')
   @Roles('ADMIN', 'MODERATOR')
   @ApiOperation({ summary: '[ADMIN/MOD] BAN解除' })
-  adminUnbanUser(@Param('id') id: string) {
+  adminUnbanUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.adminUnbanUser(id);
   }
 }

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
   IsDefined,
   IsEnum,
   IsInt,
@@ -12,10 +13,11 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MinoSkin } from '@prisma/client';
+import { MinoSkin, Role } from '@prisma/client';
 
 export class KeyBindingsDto {
   @IsOptional()
@@ -222,17 +224,55 @@ export class SearchUsersDto {
 }
 
 export class BanUserDto {
-  @ApiPropertyOptional({ example: '不正行為のため' })
+  @ApiProperty({ example: '不正行為のため' })
   @IsString()
-  @IsOptional()
-  reason?: string;
+  @IsNotEmpty()
+  @Matches(/\S/, { message: 'reason must contain a non-whitespace character' })
+  @MaxLength(500)
+  reason!: string;
 
   @ApiPropertyOptional({
-    example: '2026-08-30T00:00:00Z',
-    description: '未指定は永久BAN',
+    example: 7,
+    minimum: 1,
+    maximum: 3650,
+    description: 'BAN期間（日数）。未指定の場合は永久BAN',
   })
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  durationDays?: number;
+
+  @ApiPropertyOptional({
+    example: '2027-08-30T00:00:00Z',
+    description: 'BAN解除日時。durationDaysとの同時指定は不可',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
   bannedUntil?: string;
+}
+
+export class UpdateUserRoleDto {
+  @ApiProperty({ enum: Role })
+  @IsEnum(Role)
+  role!: Role;
+}
+
+export class AdminUsersQueryDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @ApiPropertyOptional({ default: 50, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 50;
 }
 
 export class SearchHistoryDto {
