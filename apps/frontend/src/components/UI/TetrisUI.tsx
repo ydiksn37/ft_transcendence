@@ -33,6 +33,7 @@ type TetrisUIProps = {
   opponents?: Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>;
   pendingGarbage: number[];
   actionText: { text: string; key: number } | null;
+  combo: number;
   lockEvent: { id: number; lines: number } | null;
   serverPiecesPlaced?: number;
   countdown: string | null;
@@ -62,7 +63,7 @@ type TetrisUIProps = {
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
   stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
-  isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText,
+  isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText, combo,
   lockEvent, serverPiecesPlaced,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
   formatTime, createStage, appState, restartGame, joinOnline, isCustomRoom, isVsAi, quitGame,
@@ -554,25 +555,42 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 actionText.text.includes('Perfect Clear') ? 'action-text-pc' :
                 actionText.text.includes('Tetris') ? 'action-text-tetris' :
                 actionText.text.includes('T-Spin') ? 'action-text-tspin' :
-                actionText.text.includes('Combo') ? 'action-text-combo' :
                 'action-text-default'
               }
               style={{
               position: 'absolute',
               left: '50%',
-              top: '30%',
+              top: '35%',
               transform: 'translate(-50%, -50%)',
               pointerEvents: 'none',
-              color: '#fff',
-              textShadow: '2px 2px 4px #000, 0 0 10px #ff00ff',
-              fontSize: '24px',
-              fontWeight: 'bold',
               textAlign: 'center',
               whiteSpace: 'pre-line',
-              zIndex: 10
+              zIndex: 11
             }}>
               {actionText.text}
             </div>
+          )}
+          
+          {combo > 0 && (
+             <div
+               key={`combo-${combo}`}
+               className="action-text-combo"
+               style={{
+                 position: 'absolute',
+                 left: '50%',
+                 top: '55%',
+                 transform: 'translate(-50%, -50%)',
+                 pointerEvents: 'none',
+                 textAlign: 'center',
+                 whiteSpace: 'nowrap',
+                 zIndex: 12,
+                 fontSize: `${Math.min(64, 28 + combo * 3)}px`
+               }}
+             >
+               <span className={`combo-shake-${Math.min(Math.floor((combo - 1) / 3), 3)}`}>
+                 {combo} COMBO
+               </span>
+             </div>
           )}
 
           <div className="tetris-right-panel" style={{ position: 'relative' }}>

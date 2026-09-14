@@ -160,38 +160,35 @@ const PlayPage = () => {
     let actionName = '';
     let baseScore = 0;
     
-    if (tSpinType === 't-spin') {
+    if (perfectClear) {
+      actionName = 'Perfect Clear';
+      if (lines === 1) baseScore = 800;
+      else if (lines === 2) baseScore = 1200;
+      else if (lines === 3) baseScore = 1800;
+      else if (lines === 4) baseScore = 2000;
+    } else if (tSpinType === 't-spin') {
       if (lines === 0) { actionName = 'T-Spin'; baseScore = 400; }
       else if (lines === 1) { actionName = 'T-Spin Single'; baseScore = 800; }
       else if (lines === 2) { actionName = 'T-Spin Double'; baseScore = 1200; }
       else if (lines === 3) { actionName = 'T-Spin Triple'; baseScore = 1600; }
     } else if (tSpinType === 'mini-t-spin') {
       if (lines === 0) { actionName = 'T-Spin Mini'; baseScore = 100; }
-      else if (lines === 1) { actionName = 'T-Spin Mini Single'; baseScore = 200; }
-      else if (lines === 2) { actionName = 'T-Spin Mini Double'; baseScore = 400; }
+      else if (lines === 1) { actionName = 'T-Spin Single'; baseScore = 200; }
+      else if (lines === 2) { actionName = 'T-Spin Double'; baseScore = 400; }
     } else {
-      if (lines === 1) { actionName = 'Single'; baseScore = 100; }
-      else if (lines === 2) { actionName = 'Double'; baseScore = 300; }
-      else if (lines === 3) { actionName = 'Triple'; baseScore = 500; }
+      if (lines === 1) { baseScore = 100; }
+      else if (lines === 2) { baseScore = 300; }
+      else if (lines === 3) { baseScore = 500; }
       else if (lines === 4) { actionName = 'Tetris'; baseScore = 800; }
     }
     
     if (isB2B && lines > 0) {
-      actionName = 'B2B ' + actionName;
+      if (!perfectClear) actionName = 'B2B ' + actionName;
       baseScore = Math.floor(baseScore * 1.5);
-    }
-    
-    if (perfectClear) {
-      actionName = 'Perfect Clear!' + (actionName ? '\n' + actionName : '');
-      if (lines === 1) baseScore += 800;
-      else if (lines === 2) baseScore += 1200;
-      else if (lines === 3) baseScore += 1800;
-      else if (lines === 4) baseScore += 2000;
     }
     
     let comboScore = 0;
     if (comboRef.current > 0) {
-      actionName += (actionName ? '\n' : '') + `${comboRef.current} Combo`;
       comboScore = 50 * comboRef.current * level;
     }
     
@@ -375,35 +372,26 @@ const PlayPage = () => {
 
     let actionName = '';
     
-    if (tSpinType === 't-spin') {
+    if (perfectClear) {
+      actionName = 'Perfect Clear';
+    } else if (tSpinType === 't-spin') {
       if (lines === 0) actionName = 'T-Spin';
       else if (lines === 1) actionName = 'T-Spin Single';
       else if (lines === 2) actionName = 'T-Spin Double';
       else if (lines === 3) actionName = 'T-Spin Triple';
     } else if (tSpinType === 'mini-t-spin') {
       if (lines === 0) actionName = 'T-Spin Mini';
-      else if (lines === 1) actionName = 'T-Spin Mini Single';
-      else if (lines === 2) actionName = 'T-Spin Mini Double';
+      else if (lines === 1) actionName = 'T-Spin Single';
+      else if (lines === 2) actionName = 'T-Spin Double';
     } else {
-      if (lines === 1) actionName = 'Single';
-      else if (lines === 2) actionName = 'Double';
-      else if (lines === 3) actionName = 'Triple';
-      else if (lines === 4) actionName = 'Tetris';
+      if (lines === 4) actionName = 'Tetris';
     }
     
-    if (serverState.b2b > 0 && lines > 0 && isDifficult) {
+    if (serverState.b2b > 0 && lines > 0 && isDifficult && !perfectClear) {
       actionName = 'B2B ' + actionName;
     }
     
-    if (perfectClear) {
-      actionName = 'Perfect Clear!' + (actionName ? '\n' + actionName : '');
-    }
-    
-    if (serverState.combo > 0) {
-      actionName += (actionName ? '\n' : '') + `${serverState.combo} Combo`;
-    }
-    
-    if (actionName && (isDifficult || serverState.combo > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
+    if (actionName) {
        if (actionTimeoutRef.current) {
          clearTimeout(actionTimeoutRef.current);
        }
@@ -411,7 +399,7 @@ const PlayPage = () => {
        setActionText({ text: actionName, key: actionKeyRef.current });
        actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
     }
-  }, [serverMatch, serverState?.lastLock, serverState?.combo, serverState?.b2b]);
+  }, [serverMatch, serverState?.lastLock, serverState?.b2b]);
 
   // Sprint Record Submission Effect
   useEffect(() => {
@@ -873,6 +861,7 @@ const PlayPage = () => {
       opponents={opponents}
       pendingGarbage={serverMatch ? [serverState?.garbageQueue ?? 0] : pendingGarbage}
       actionText={actionText}
+      combo={serverMatch ? serverState?.combo ?? 0 : Math.max(0, comboRef.current)}
       lockEvent={serverMatch ? null : lockEvent}
       serverPiecesPlaced={serverMatch ? (serverState?.piecesPlaced ?? 0) : undefined}
       countdown={serverMatch ? (!serverState?.started && !isWaiting ? 'READY' : null) : countdown}
