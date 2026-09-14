@@ -310,8 +310,27 @@ describe('GameInstance AI matches', () => {
     game.stop();
   });
 
+  it('releases the room AI and treats stopped pending work as normal cancellation', async () => {
+    let cancel: ((error: Error) => void) | undefined;
+    const releaseMatch = jest.fn(() => cancel?.(new Error('AI match ended')));
+    const getDecision = jest.fn(() => new Promise((_, reject) => { cancel = reject; }));
+    const aiAgent = { releaseMatch, getDecision } as unknown as AiAgentService;
+    const game = new GameInstance('cancel_room', server, 42, undefined, aiAgent);
+    game.addPlayer('human', null);
+    game.addPlayer('ai_cancel_room', null);
+    game.start('EXPERT');
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(getDecision).toHaveBeenCalledTimes(1);
+    game.stop();
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(releaseMatch).toHaveBeenCalledWith('cancel_room');
+    expect(getDecision).toHaveBeenCalledTimes(1);
+    expect(emissions.some((e) => e.event === ServerEvent.ERROR)).toBe(false);
+  });
+
   it('publishes a 40-row opponent stage including the active AI mino', () => {
     const aiAgent = {
+      releaseMatch: jest.fn(),
       getDecision: jest.fn(() => new Promise(() => undefined)),
     } as unknown as AiAgentService;
     const roomId = 'ai_test_room';
@@ -345,6 +364,7 @@ describe('GameInstance AI matches', () => {
 
   it('uses the synthetic AI player even when the human userId is null', async () => {
     const aiAgent = {
+      releaseMatch: jest.fn(),
       getDecision: jest.fn().mockResolvedValue({ gameOver: true, actions: [] }),
     } as unknown as AiAgentService;
     const roomId = 'ai_identity_room';
@@ -377,6 +397,7 @@ describe('GameInstance AI matches', () => {
 
   it('publishes each AI movement before publishing the locked board', async () => {
     const aiAgent = {
+      releaseMatch: jest.fn(),
       getDecision: jest
         .fn()
         .mockResolvedValueOnce({

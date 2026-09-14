@@ -262,6 +262,7 @@ export class GameInstance {
       // AI が存在する場合は非同期で動かす
       if (this.aiDifficulty) {
         void this.runAiLoop().catch((error: unknown) => {
+          if (!this.isRunning) return; // Expected cancellation from stop().
           this.logger.error(
             `AI loop failed in room ${this.roomId}`,
             error instanceof Error ? error.stack : String(error),
@@ -1095,6 +1096,7 @@ export class GameInstance {
 
       const delay = AI_BOT_CONFIGS[this.aiDifficulty].thinkDelayMs;
       await new Promise((r) => setTimeout(r, delay));
+      if (!this.isRunning || aiPlayer.isGameOver) break;
 
       if (decision.gameOver) {
         // AIがおじゃまブロックによって死んだことを見せるため、
@@ -1551,6 +1553,7 @@ export class GameInstance {
     }
     this.isRunning = false;
     this.cppAgents.clear();
+    this.aiAgentService?.releaseMatch(this.roomId);
     this.cppPreviewOptions = null;
     if (this.simulationStartTimer) clearTimeout(this.simulationStartTimer);
     this.simulationStartTimer = null;
