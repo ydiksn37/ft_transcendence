@@ -160,7 +160,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     const idx = players.findIndex(p => p.socketId === socketId);
     if (idx === -1) return `Player (left)`;
     const p = players[idx];
-    return p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+    return p.username || 'Player';
   };
 
   return (
@@ -233,7 +233,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             TOURNAMENT BRACKET
           </h1>
           
-          <div style={{ transform: 'scale(1.5)', transformOrigin: 'center top', marginBottom: '120px' }}>
+          <div style={{ width: '100%', overflowX: 'auto', display: 'flex', justifyContent: 'center', marginBottom: '60px', padding: '0 20px' }}>
             <TournamentBracket 
               node={tournament.root} 
               getPlayerName={getPlayerName} 

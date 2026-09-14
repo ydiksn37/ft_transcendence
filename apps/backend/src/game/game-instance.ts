@@ -82,6 +82,12 @@ export interface PlayerState {
   piecesPlaced: number;
   tSpins: number;
   tetrises: number;
+  lastLock?: {
+    id: number;
+    lines: number;
+    tSpinType: 'none' | 't-spin' | 'mini-t-spin';
+    perfectClear: boolean;
+  };
 }
 
 export class GameInstance {
@@ -604,13 +610,21 @@ export class GameInstance {
     }
     player.board = clearedBoard;
     player.piecesPlaced++;
+    
+    const perfectClear = isPerfectClear(player.board);
+    
+    player.lastLock = {
+      id: player.piecesPlaced,
+      lines: linesCleared,
+      tSpinType: tspin === 'tspin' ? 't-spin' : (tspin === 'tspin_mini' ? 'mini-t-spin' : 'none'),
+      perfectClear: perfectClear,
+    };
 
     if (linesCleared > 0) {
       player.combo++;
       player.lines += linesCleared;
       player.level = Math.floor(player.lines / 10) + 1;
 
-      const perfectClear = isPerfectClear(player.board);
       const { garbage, clearType } = calcGarbage(
         linesCleared,
         tspin,
@@ -860,6 +874,7 @@ export class GameInstance {
       isGameOver: player.isGameOver,
       apm: Math.round(apm * 10) / 10,
       pps: Math.round(pps * 100) / 100,
+      lastLock: player.lastLock,
     };
 
     const previewSide = this.cppPreviewSides.get(socketId);

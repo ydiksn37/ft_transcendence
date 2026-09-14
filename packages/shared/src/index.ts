@@ -38,6 +38,12 @@ export interface GameState {
   isGameOver: boolean;
   apm: number;               // Attacks Per Minute
   pps: number;               // Pieces Per Second
+  lastLock?: {
+    id: number;
+    lines: number;
+    tSpinType: 'none' | 't-spin' | 'mini-t-spin';
+    perfectClear: boolean;
+  };
 }
 
 /** Human multiplayer inputs target a specific room and active piece. */

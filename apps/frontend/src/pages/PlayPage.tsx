@@ -355,6 +355,64 @@ const PlayPage = () => {
     }
   }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
 
+  const lastProcessedServerEventIdRef = useRef(-1);
+
+  // Generate action text for server matches
+  useEffect(() => {
+    if (!serverMatch || !serverState?.lastLock) return;
+    const lock = serverState.lastLock;
+    if (lock.id === lastProcessedServerEventIdRef.current) return;
+    lastProcessedServerEventIdRef.current = lock.id;
+
+    const { lines, tSpinType, perfectClear } = lock;
+    const isDifficult = lines === 4 || tSpinType !== 'none';
+    
+    if (lines === 4) {
+      soundManager.playSe('tetris');
+    } else if (lines > 0) {
+      soundManager.playSe('clear');
+    }
+
+    let actionName = '';
+    
+    if (tSpinType === 't-spin') {
+      if (lines === 0) actionName = 'T-Spin';
+      else if (lines === 1) actionName = 'T-Spin Single';
+      else if (lines === 2) actionName = 'T-Spin Double';
+      else if (lines === 3) actionName = 'T-Spin Triple';
+    } else if (tSpinType === 'mini-t-spin') {
+      if (lines === 0) actionName = 'T-Spin Mini';
+      else if (lines === 1) actionName = 'T-Spin Mini Single';
+      else if (lines === 2) actionName = 'T-Spin Mini Double';
+    } else {
+      if (lines === 1) actionName = 'Single';
+      else if (lines === 2) actionName = 'Double';
+      else if (lines === 3) actionName = 'Triple';
+      else if (lines === 4) actionName = 'Tetris';
+    }
+    
+    if (serverState.b2b > 0 && lines > 0 && isDifficult) {
+      actionName = 'B2B ' + actionName;
+    }
+    
+    if (perfectClear) {
+      actionName = 'Perfect Clear!' + (actionName ? '\n' + actionName : '');
+    }
+    
+    if (serverState.combo > 0) {
+      actionName += (actionName ? '\n' : '') + `${serverState.combo} Combo`;
+    }
+    
+    if (actionName && (isDifficult || serverState.combo > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
+       if (actionTimeoutRef.current) {
+         clearTimeout(actionTimeoutRef.current);
+       }
+       actionKeyRef.current++;
+       setActionText({ text: actionName, key: actionKeyRef.current });
+       actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
+    }
+  }, [serverMatch, serverState?.lastLock, serverState?.combo, serverState?.b2b]);
+
   // Sprint Record Submission Effect
   useEffect(() => {
     if (gameOver && finalTime && gameModeRef.current === '40_LINES') {

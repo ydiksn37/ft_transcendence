@@ -129,18 +129,31 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       
       const expectedHeight = isMobile ? 750 : 800;
       const scaleY = (vh - 40) / expectedHeight;
-      // 観戦時: 各盤面はフルサイズ(560px)で並ぶ → 2人なら 560*2+gap≈1160, 1人なら 560
-      // 通常1v1: 自分+相手で 1100px, ソロ: 700px
+
+      const numOpp = Math.max(1, Object.keys(opponents || {}).length);
+      const oppScale = appState === 'SPECTATING' ? 1 : (numOpp === 1 ? 1 : (numOpp === 2 ? 0.55 : 0.45));
+      const oppWidth = 560; // Base width of an opponent
+      const opponentsTotalWidth = numOpp > 0 
+        ? (appState === 'SPECTATING' 
+            ? (numOpp * oppWidth * oppScale + 20 * (numOpp - 1))
+            : (oppWidth * oppScale)) 
+        : 0;
+      
       const expectedWidth = isMobile
         ? (gameMode === 'ONLINE_1V1' && appState !== 'SPECTATING' ? 550 : 460)
-        : (appState === 'SPECTATING' ? 1160 : gameMode === 'ONLINE_1V1' ? 1100 : gameMode === 'AI_PREVIEW' ? 850 : 700);
+        : (appState === 'SPECTATING' 
+            ? (opponentsTotalWidth + 40) 
+            : gameMode === 'ONLINE_1V1' 
+                ? (560 + 40 + opponentsTotalWidth) 
+                : gameMode === 'AI_PREVIEW' ? 850 : 700);
+
       const scaleX = (vw - 20) / expectedWidth;
       setScale(Math.min(1.5, scaleY, scaleX));
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [gameMode, appState]);
+  }, [gameMode, appState, opponents]);
 
   useEffect(() => {
     if (!gameOver) return;
@@ -373,7 +386,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
       onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
     >
-      {isCustomRoom && gameOver ? 'RETURN TO ROOM' : 'QUIT'}
+      QUIT
     </button>
   ) : null;
 
@@ -595,29 +608,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                 </div>
               ))}
             </div>
-
-            {bg?.campus && gameMode === 'ONLINE_1V1' && !isMobileView && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: '100%',
-                  width: isWideView ? '100%' : '80px',
-                  textWrap: isWideView ? 'nowrap' : 'wrap',
-                  marginLeft: '24px',
-                  fontFamily: '"Press Start 2P", monospace',
-                  fontSize: '8px', 
-                  lineHeight: 1.8,
-                  color: '#fff',
-                }}
-              >
-                {isWideView ? (
-                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} | {bg.campus.campus}</a></p>
-                ) : (
-                  <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.campus}</a></p>
-                )}
-              </div>
-            )}
           </div>
           </>
           )}
@@ -666,7 +656,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
         {appState !== 'MENU' && gameMode === 'ONLINE_1V1' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: appState === 'SPECTATING' ? '100%' : undefined }}>
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: appState === 'SPECTATING' ? '100%' : undefined, maxWidth: appState === 'SPECTATING' ? 'none' : '600px' }}>
+            <div style={{ display: 'flex', flexDirection: appState === 'SPECTATING' ? 'row' : 'column', gap: '20px', flexWrap: appState === 'SPECTATING' ? 'wrap' : 'nowrap', justifyContent: 'center', width: appState === 'SPECTATING' ? '100%' : undefined, maxWidth: 'none' }}>
               {(() => {
               const numOpp = Math.max(1, Object.keys(opponents || {}).length);
               // 観戦時は通常対戦と同じフルサイズで表示する
@@ -792,17 +782,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
         </div>
 
       </div>
-      {bg?.campus && gameMode !== 'ONLINE_1V1' && !isMobileView && (
+      {bg?.campus && !isMobileView && (
         <div
           style={{
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '8px',
             color: "#fff",
             position: 'absolute',
-            bottom: 0,
+            bottom: '10px',
+            left: '20px',
+            zIndex: 10
           }}
         >
-          <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
+          <p><a href={bg.campus.url} target="_blank" rel="noreferrer" style={{color: "#fff", textDecoration: 'none', textShadow: '1px 1px 2px #000'}}>{bg.campus.flag} {bg.campus.country} |  {bg.campus.campus}</a></p>
         </div>
       )}
               {countdown && appState !== 'SPECTATING' && (
