@@ -8,7 +8,30 @@ export class ExportService {
   async exportUserData(userId: string) {
     const [user, stats, settings, gameResultsP1, gameResultsP2, sprintRecords] =
       await Promise.all([
-        this.prisma.user.findUnique({ where: { id: userId } }),
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          // Keep this as an explicit allowlist. Authentication secrets such as
+          // passwordHash and twoFactorSecret must never leave the server.
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            bio: true,
+            role: true,
+            isOnline: true,
+            lastSeenAt: true,
+            bannedUntil: true,
+            banReason: true,
+            oauthProvider: true,
+            oauthId: true,
+            twoFactorEnabled: true,
+            deletedAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
         this.prisma.userStats.findUnique({ where: { userId } }),
         this.prisma.userGameSettings.findUnique({ where: { userId } }),
         this.prisma.gameResult.findMany({ where: { player1Id: userId } }),
@@ -16,7 +39,7 @@ export class ExportService {
         this.prisma.sprintRecord.findMany({ where: { userId } }),
       ]);
 
-    // GDPA Data Export Payload
+    // GDPR data export payload
     return {
       profile: user,
       stats,
