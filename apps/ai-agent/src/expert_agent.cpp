@@ -583,8 +583,24 @@ ExpertPatternFeatures extractExpertPatternFeaturesWithHeights(
   return features;
 }
 
+template <typename Multiplier>
+double expectedAvailabilityMultiplier(const ExpertPieceAvailability& availability,
+                                      Multiplier multiplier) noexcept {
+  double result = 0;
+  auto possible = availability;
+  possible.forecast = false;
+  possible.exact = true;
+  possible.visibleCount = 1;
+  for (int distance = 1; distance < 32; ++distance) {
+    possible.movesUntilPiece = distance;
+    result += availability.arrivalProbability[distance] * multiplier(possible);
+  }
+  return result;
+}
+
 double completedPatternMultiplier(
     const ExpertTAvailability& availability) noexcept {
+  if (availability.forecast) return expectedAvailabilityMultiplier(availability, completedPatternMultiplier);
   if (!availability.exact) return 0.98;
   if (availability.inHold) return 1.05;
   if (availability.movesUntilPiece <= 1) return 1.03;
@@ -596,6 +612,7 @@ double completedPatternMultiplier(
 
 double prePatternMultiplier(
     const ExpertTAvailability& availability) noexcept {
+  if (availability.forecast) return expectedAvailabilityMultiplier(availability, prePatternMultiplier);
   if (!availability.exact) return 0.98;
   if (availability.inHold) return 1.00;
   if (availability.movesUntilPiece == 1) return 0.99;
@@ -608,6 +625,7 @@ double prePatternMultiplier(
 
 double tWastedMultiplier(
     const ExpertTAvailability& replacementT) noexcept {
+  if (replacementT.forecast) return expectedAvailabilityMultiplier(replacementT, tWastedMultiplier);
   // Using the only available T and waiting for an unseen bag is materially
   // different from spending a spare T while another is already held.
   if (replacementT.inHold) return 0.20;
@@ -643,6 +661,7 @@ ExpertPieceAvailability determinePieceAvailability(
 
 double iAvailabilityMultiplier(
     const ExpertIAvailability& availability) noexcept {
+  if (availability.forecast) return expectedAvailabilityMultiplier(availability, iAvailabilityMultiplier);
   // Even outside the visible preview, 7-bag guarantees the next I within at
   // most 13 pieces. Keep one ordinary Well viable, but value it less until
   // its I is close enough to plan around precisely.
@@ -1237,6 +1256,8 @@ double placementReward(const Board& boardBefore,
   // made the versus agent abandon all attack construction too early.
   const double recoveryUrgency = emergencyMode ? 1.0 : heightUrgency;
   const double offenseFactor = emergencyMode ? 0.0 : 1.0;
+  // Preserve rewards for actual attacks, not speculative setup bonuses.
+  const double attackFactor = emergencyMode ? 0.5 : 1.0;
   const int unlockedLines = donationLines(
       boardBefore, placement, currentFeatures, resultFeatures, replacementT);
   if (unlockedLines > 0) {
@@ -1555,19 +1576,19 @@ double placementReward(const Board& boardBefore,
   }
 
   const int garbage = garbageFor(placement, backToBackChain);
-  reward += offenseFactor * weights.garbageReward * garbage +
+  reward += attackFactor * weights.garbageReward * garbage +
             weights.lineReward * placement.linesCleared;
   if (placement.tSpin == TSpin::Full) {
     if (placement.linesCleared == 1)
-      reward += offenseFactor * weights.tSpinSingleReward;
+      reward += attackFactor * weights.tSpinSingleReward;
     if (placement.linesCleared == 2)
-      reward += offenseFactor * weights.tSpinDoubleReward;
+      reward += attackFactor * weights.tSpinDoubleReward;
     if (placement.linesCleared == 3)
-      reward += offenseFactor * weights.tSpinTripleReward;
+      reward += attackFactor * weights.tSpinTripleReward;
   } else if (placement.tSpin == TSpin::Mini) {
-    reward += offenseFactor * weights.tSpinMiniReward;
+    reward += attackFactor * weights.tSpinMiniReward;
   } else if (placement.linesCleared == 4) {
-    reward += offenseFactor * weights.tetrisReward;
+    reward += attackFactor * weights.tetrisReward;
     const bool plannedLaneCashout =
         verticalIColumn == currentFeatures.attackLaneColumn;
     if (plannedLaneCashout) {
@@ -1577,7 +1598,7 @@ double placementReward(const Board& boardBefore,
       const double wellCashoutUrgency = std::clamp(
           static_cast<double>(currentFeatures.structuredWellDepth) / 4.0,
           0.0, 1.0);
-      reward += offenseFactor * weights.tetrisCashoutReward *
+      reward += attackFactor * weights.tetrisCashoutReward *
                 std::max(heightCashoutUrgency, wellCashoutUrgency);
     }
   }
@@ -1963,101 +1984,56 @@ std::optional<AgentDecision> openingRoute(
   return std::nullopt;
 }
 
-// Exact bounded tiling search of the five rows after TST. Complete solutions
-// are replayed through SRS before accepting them, including the TSD rotation.
-std::optional<ExpertOpeningPlan> planTdPerfectClear(
-    const DecisionContext& context, const std::vector<PieceType>& queue,
-    bool mirrored, const SearchLimit& limit, std::uint64_t& nodes, bool& timedOut) {
-  int filled = 0;
-  for (int y = 0; y < kBoardRows; ++y)
-    for (int x = 0; x < kBoardCols; ++x) if (occupied(context.board, y, x)) {
-      if (y < kBoardRows - 5) return std::nullopt;
-      ++filled;
-    }
-  if (filled != 26) return std::nullopt;
-  struct Step { ActivePiece target; bool hold; };
-  std::vector<Step> path;
-  std::vector<AgentDecision> verified;
-  std::uint64_t rejectedRoutes = 0;
-  std::set<std::tuple<std::uint64_t, std::size_t, int, int, bool>> failed;
-  const auto solve = [&](auto&& self, const Board& board, std::size_t index,
-                         std::optional<PieceType> hold, int height, bool tsd) -> bool {
-    if (searchLimitReached(limit, nodes)) { timedOut = true; return false; }
-    ++nodes;
-    if (board.empty()) {
-      if (!tsd || path.size() != 6) return false;
-      Board replay = context.board;
-      verified.clear();
-      for (const auto& step : path) {
-        const auto clear = clearLines(lockMino(replay, step.target));
-        auto route = openingRoute(replay, step.target, limit, nodes, timedOut,
-                                  step.target.type == PieceType::T ? 2 : 0, true);
-        if (!route) { ++rejectedRoutes; return false; }
-        if (step.hold) route->actions.insert(route->actions.begin(), Action::Hold);
-        verified.push_back(std::move(*route));
-        replay = clear.board;
-      }
-      return true;
-    }
-    if (path.size() >= 6 || index >= queue.size()) return false;
-    std::uint64_t bits = 0;
-    for (int y = 0; y < 5; ++y)
-      for (int x = 0; x < kBoardCols; ++x)
-        if (occupied(board, kBoardRows - 5 + y, x)) bits |= 1ULL << (y * 10 + x);
-    const auto key = std::make_tuple(bits, index, hold ? static_cast<int>(*hold) : -1, height, tsd);
-    if (failed.count(key)) return false;
-    const auto rejectedBefore = rejectedRoutes;
-    const auto attempt = [&](PieceType type, bool useHold,
-                             std::optional<PieceType> holdAfter, std::size_t nextIndex) {
-      std::set<std::uint64_t> seen;
-      for (int y = kBoardRows - 1; y >= kBoardRows - height - 2; --y)
-        for (int x = -2; x < kBoardCols; ++x)
-          for (int rotation = 0; rotation < 4; ++rotation) {
-            if (searchLimitReached(limit, nodes)) { timedOut = true; return false; }
-            ++nodes;
-            const ActivePiece target{type, x, y, rotation};
-            if (!isValidPosition(board, target) || calcGhostY(board, target) != y) continue;
-            const auto cells = getMinoCells(target);
-            if (std::any_of(cells.begin(), cells.end(), [&](Point p) {
-                  return p.row < kBoardRows - height;
-                })) continue;
-            std::uint64_t footprint = 0;
-            for (Point p : cells) footprint |= 1ULL << ((p.row - (kBoardRows - 5)) * 10 + p.col);
-            if (type != PieceType::T && !seen.insert(footprint).second) continue;
-            const auto clear = clearLines(lockMino(board, target));
-            if (type == PieceType::T && (clear.linesCleared != 2 ||
-                detectTSpin(board, target, true, 0, 2) != TSpin::Full)) continue;
-            path.push_back({target, useHold});
-            if (self(self, clear.board, nextIndex, holdAfter,
-                     height - clear.linesCleared, tsd || type == PieceType::T)) return true;
-            path.pop_back();
-            if (timedOut) return false;
+#include "honeycup_book.inc"
+
+#ifdef TETRIS_BOOK_GENERATOR
+// At a completed seven-bag boundary the next bag's first type is uniform.
+// Rank residuals by E[best legal hard-drop repair] rather than the best lucky
+// future type. This is a cheap robustness heuristic, NOT a PC-success rate.
+double expectedOpeningContinuation(const Board& board) {
+  double expected = 0;
+  for (int type = 0; type < 7; ++type) {
+    double best = -1.0e6;
+    for (int rotation = 0; rotation < 4; ++rotation)
+      for (int x = -2; x < kBoardCols; ++x) {
+        ActivePiece piece{static_cast<PieceType>(type), x, kSpawnY, rotation};
+        if (!isValidPosition(board, piece)) continue;
+        piece.y = calcGhostY(board, piece);
+        const auto clear = clearLines(lockMino(board, piece));
+        int holes = 0, aggregate = 0, roughness = 0, previous = -1;
+        for (int col = 0; col < kBoardCols; ++col) {
+          int height = 0;
+          for (int row = 0; row < kBoardRows; ++row) {
+            if (occupied(clear.board, row, col)) {
+              if (height == 0) height = kBoardRows - row;
+            } else if (height) ++holes;
           }
-      return false;
-    };
-    if (attempt(queue[index], false, hold, index + 1)) return true;
-    if (!path.empty() || context.canHold) {
-      if (hold && attempt(*hold, true, queue[index], index + 1)) return true;
-      if (!hold && index + 1 < queue.size() &&
-          attempt(queue[index + 1], true, queue[index], index + 2)) return true;
-    }
-    // Geometry-only failures are order-independent. Failed replay paths are
-    // not: another order reaching this state can make an earlier tuck legal.
-    if (rejectedBefore == rejectedRoutes && !timedOut) failed.insert(key);
-    return false;
-  };
-  if (solve(solve, context.board, 0, context.hold, 5, false))
-    return ExpertOpeningPlan{"TD/TSD-PC", mirrored, std::move(verified), false};
-  return std::nullopt;
+          aggregate += height;
+          if (previous >= 0) roughness += std::abs(height - previous);
+          previous = height;
+        }
+        best = std::max(best, 100.0 * clear.linesCleared - 200.0 * holes -
+                             aggregate - 5.0 * roughness + (clear.board.empty() ? 3000.0 : 0.0));
+      }
+    expected += best / 7.0;
+  }
+  return expected;
 }
 
-std::optional<ExpertOpeningPlan> planOpening(
+[[maybe_unused]] std::optional<ExpertOpeningPlan> planOpeningOffline(
     const DecisionContext& context, bool continuation, bool mirrored,
     const SearchLimit& limit, std::uint64_t& nodes, bool& timedOut) {
   if (context.garbageQueue > 0 || !context.garbageGapColumns.empty() ||
       context.spawnX != 3 || context.spawnY != kSpawnY || context.spawnRotation != 0)
     return std::nullopt;
   if (!continuation && (!context.board.empty() || context.hold)) return std::nullopt;
+
+  auto book = planHoneyBook(context, continuation, mirrored, limit, nodes, timedOut);
+  if (book || timedOut) return book;
+  if (continuation) {
+    auto mountain = planHoneyBook(context, true, mirrored, limit, nodes, timedOut, true);
+    if (mountain || timedOut) return mountain;
+  }
 
   // At either supported bag boundary, Hold + Active + Next describe one new
   // seven-bag. Deduce ONLY its final missing type when six distinct types are
@@ -2079,17 +2055,19 @@ std::optional<ExpertOpeningPlan> planOpening(
   }
   if (queue.size() != queueLength) return std::nullopt;
 
-  if (continuation) {
-    auto pc = planTdPerfectClear(context, queue, mirrored, limit, nodes, timedOut);
-    if (pc || timedOut) return pc;
-  }
-
+  std::optional<ExpertOpeningPlan> bestPlan;
   for (const auto& pattern : openingPatterns()) {
     if (pattern.continuation != continuation ||
         (continuation && pattern.mirrored != mirrored) ||
         !sameBoardGeometry(context.board, pattern.base)) continue;
     std::set<std::tuple<unsigned, std::size_t, int>> failed;
+#ifdef TETRIS_BOOK_GENERATOR
+    static std::map<std::pair<std::string_view, bool>,
+        std::map<std::pair<unsigned, int>, std::optional<AgentDecision>>> cache;
+    auto& routes = cache[{pattern.name, pattern.mirrored}];
+#else
     std::map<std::pair<unsigned, int>, std::optional<AgentDecision>> routes;
+#endif
     std::vector<AgentDecision> path;
     const auto solve = [&](auto&& self, const Board& board, unsigned placed,
                            std::size_t index, std::optional<PieceType> hold) -> bool {
@@ -2132,13 +2110,22 @@ std::optional<ExpertOpeningPlan> planOpening(
       failed.insert(key);
       return false;
     };
-    if (solve(solve, context.board, 0, 0, context.hold))
-      return ExpertOpeningPlan{pattern.name, pattern.mirrored, std::move(path),
-                               pattern.hasContinuation};
+    if (solve(solve, context.board, 0, 0, context.hold)) {
+      Board residual = context.board;
+      for (const auto& step : path) residual = clearLines(lockMino(residual, step.placement)).board;
+      const double expected = expectedOpeningContinuation(residual);
+      if (!bestPlan || expected > bestPlan->expectedContinuationValue)
+        bestPlan = ExpertOpeningPlan{pattern.name, pattern.mirrored, std::move(path),
+                                    pattern.hasContinuation, expected};
+    }
     if (timedOut) break;
   }
-  return std::nullopt;
+  return bestPlan ? bestPlan : planHoneyBook(context, continuation, mirrored,
+                                           limit, nodes, timedOut, true);
 }
+
+#endif  // TETRIS_BOOK_GENERATOR
+#include "opening_table.inc"
 
 bool openingMatchesVisibleSupply(const ExpertOpeningPlan& plan, std::size_t step,
                                  const DecisionContext& context) {
@@ -2162,6 +2149,80 @@ bool openingMatchesVisibleSupply(const ExpertOpeningPlan& plan, std::size_t step
     if (active != plan.steps[i].placement.type) return false;
   }
   return true;
+}
+
+int openingHeight(const Board& board) {
+  for (int y = 0; y < kBoardRows; ++y)
+    for (int x = 0; x < kBoardCols; ++x)
+      if (occupied(board, y, x)) return kBoardRows - y;
+  return 0;
+}
+
+// Accept only a pure garbage rise: no missing/changed template cells, no
+// top truncation, and exactly one gap per new garbage row.
+std::optional<int> openingRise(const Board& expected, const Board& actual) {
+  if (expected == actual) return 0;
+  for (int rise = 1; rise <= 12; ++rise) {
+    bool match = true;
+    for (int y = 0; y < rise; ++y)
+      for (int x = 0; x < kBoardCols; ++x) if (occupied(expected, y, x)) match = false;
+    for (int y = 0; y < kBoardRows - rise; ++y)
+      for (int x = 0; x < kBoardCols; ++x)
+        if (actual.cells()[y][x] != expected.cells()[y + rise][x]) match = false;
+    for (int y = kBoardRows - rise; y < kBoardRows; ++y) {
+      int gaps = 0;
+      for (int x = 0; x < kBoardCols; ++x) {
+        const auto c = actual.cells()[y][x];
+        gaps += c == Cell::Empty;
+        if (c != Cell::Empty && c != Cell::Garbage) match = false;
+      }
+      if (gaps != 1) match = false;
+    }
+    if (match) return rise;
+  }
+  return std::nullopt;
+}
+
+Board openingCanonicalBoard(const Board& board, int rise) {
+  Board result;
+  for (int y = rise; y < kBoardRows; ++y)
+    for (int x = 0; x < kBoardCols; ++x) result.set(y, x, board.cells()[y - rise][x]);
+  return result;
+}
+
+// Re-route the whole remaining phase, but return only the current move.
+// Incoming garbage applies AFTER the current lock, without cancellation in TS.
+std::optional<AgentDecision> pressuredOpeningMove(
+    const ExpertOpeningPlan& plan, std::size_t step, const DecisionContext& context,
+    int rise, const SearchLimit& limit, std::uint64_t& nodes) {
+  Board board = context.board;
+  const bool pc = plan.name.find("PC-") != std::string_view::npos;
+  const bool tst = plan.name.find("TST-") != std::string_view::npos;
+  const auto gaps = projectedGarbageGaps(context);
+  std::optional<AgentDecision> first;
+  bool fired = false, timeout = false;
+  for (std::size_t i = step; i < plan.steps.size(); ++i) {
+    auto target = plan.steps[i].placement;
+    target.y -= rise;
+    const int spin = target.type == PieceType::T ? (tst ? 3 : pc ? 2 : 0) : 0;
+    if (openingHeight(board) >= 19) return std::nullopt;
+    auto route = openingRoute(board, target, limit, nodes, timeout, spin, pc);
+    if (!route || timeout || (spin && route->linesCleared != spin)) return std::nullopt;
+    if (plan.steps[i].actions.front() == Action::Hold)
+      route->actions.insert(route->actions.begin(), Action::Hold);
+    if (!first) first = *route;
+    board = clearLines(lockMino(board, target)).board;
+    if (i == step) { board = applyPendingGarbage(board, gaps); rise += gaps.size(); }
+    // Unknown next-bag spawn must also remain safe. No assumed cancellation.
+    for (int type = 0; type < 7; ++type)
+      if (!isValidPosition(board, {static_cast<PieceType>(type), 3, kSpawnY, 0})) return std::nullopt;
+    if (openingHeight(board) >= 19) return std::nullopt;
+    if (spin) { fired = true; break; }
+    // High boards cannot spend a long time waiting to convert the template.
+    if (openingHeight(board) > 12 && i - step >= 2) return std::nullopt;
+  }
+  if (!fired && (pc || tst || openingHeight(board) > 12)) return std::nullopt;
+  return first;
 }
 
 double stateRank(double accumulatedReward, double futureWeight,
@@ -2221,11 +2282,7 @@ std::optional<ExpertDonationPlan> findExpertDonationTemplate(
 
 std::optional<ExpertOpeningPlan> findExpertOpeningPlan(
     const DecisionContext& context, bool continuation, bool mirrored) {
-  std::uint64_t nodes = 0;
-  bool timedOut = false;
-  return planOpening(context, continuation, mirrored,
-                     {Clock::now() + std::chrono::milliseconds(50), 50000},
-                     nodes, timedOut);
+  return planOpening(context, continuation, mirrored);
 }
 
 int expertDonationLines(const Board& board, const ActivePiece& donor,
@@ -2251,9 +2308,27 @@ std::string_view ExpertAgent::name() const noexcept { return "expert"; }
 
 std::optional<AgentDecision> ExpertAgent::decide(
     const DecisionContext& context) {
+  bagForecast_ = bagTracker_.observe(context);
+  auto decision = decideImpl(context);
+  if (decision) bagTracker_.commit(context, *decision);
+  return decision;
+}
+
+std::optional<AgentDecision> ExpertAgent::decideImpl(
+    const DecisionContext& context) {
   const Board& board = context.board;
   const PieceType type = context.active;
   const std::vector<PieceType>& nextPieces = context.next;
+  const auto predictedAvailability = [&](PieceType target, std::optional<PieceType> hold,
+                                          std::size_t index = 0) {
+    auto result = determinePieceAvailability(target, hold, nextPieces, index);
+    if (!result.exact) {
+      result.forecast = true;
+      result.arrivalProbability = bagForecast_.arrival(target,
+          static_cast<int>(nextPieces.size() - std::min(index, nextPieces.size())));
+    }
+    return result;
+  };
   const std::optional<PieceType> holdPiece = context.hold;
   const bool canHold = context.canHold;
   const int spawnX = context.spawnX;
@@ -2270,46 +2345,63 @@ std::optional<AgentDecision> ExpertAgent::decide(
   std::uint64_t nodesVisited = 0;
   lastOpeningName_ = {};
   if (openingStage_ < 3) {
-    const bool interrupted = context.garbageQueue > 0 || !garbageGaps.empty() ||
-        spawnX != 3 || spawnY != kSpawnY || spawnRotation != 0 ||
-        (openingExpectedBoard_ && !(*openingExpectedBoard_ == board));
+    bool interrupted = spawnX != 3 || spawnY != kSpawnY || spawnRotation != 0;
+    if (openingExpectedBoard_) {
+      const auto rise = openingRise(*openingExpectedBoard_, board);
+      if (!rise) interrupted = true;
+      else {
+        openingGarbageRows_ += *rise;
+        openingUnderPressure_ |= *rise > 0;
+      }
+    }
+    openingUnderPressure_ |= !garbageGaps.empty();
+    if (openingGarbageRows_ >= 19) interrupted = true;
+    if (!interrupted && !openingPlan_ && (openingStage_ == 0 || openingStage_ == 2)) {
+      auto canonical = context;
+      // Only an already-started book may survive garbage. Never start a new
+      // opener on an arbitrary garbage board.
+      if (openingStage_ != 0) {
+        canonical.board = openingCanonicalBoard(board, openingGarbageRows_);
+        canonical.garbageQueue = 0;
+        canonical.garbageGapColumns.clear();
+      }
+      openingPlan_ = planOpening(canonical, openingStage_ == 2, openingMirrored_);
+      if (openingPlan_) {
+        openingStage_ = openingStage_ == 0 ? 1 : 2;
+        openingMirrored_ = openingPlan_->mirrored;
+        openingStep_ = 0;
+      } else interrupted = true;
+    }
+    if (!interrupted && openingPlan_) {
+      interrupted = !openingMatchesVisibleSupply(*openingPlan_, openingStep_, context);
+      std::optional<AgentDecision> decision;
+      if (!interrupted) {
+        if (openingUnderPressure_) {
+          const SearchLimit rescueLimit{
+              std::min(limit.deadline, Clock::now() + std::min(thinkTime_ / 2, std::chrono::milliseconds(25))),
+              maximumNodes_ ? std::max<std::uint64_t>(1, maximumNodes_ / 2) : 0};
+          decision = pressuredOpeningMove(*openingPlan_, openingStep_, context,
+                                          openingGarbageRows_, rescueLimit, nodesVisited);
+        } else decision = openingPlan_->steps[openingStep_];
+        interrupted = !decision;
+      }
+      if (decision && !interrupted) {
+        decision->completedDepth = static_cast<int>(openingPlan_->steps.size() - openingStep_);
+        decision->nodesVisited = nodesVisited;
+        lastOpeningName_ = openingPlan_->name;
+        openingExpectedBoard_ = clearLines(lockMino(board, decision->placement)).board;
+        const bool cashedOut = openingUnderPressure_ &&
+            decision->placement.type == PieceType::T && decision->linesCleared >= 2;
+        if (++openingStep_ == openingPlan_->steps.size() || cashedOut) {
+          openingStage_ = !cashedOut && openingPlan_->hasContinuation ? 2 : 3;
+          openingPlan_.reset();
+        }
+        return decision;
+      }
+    }
     if (interrupted) {
       openingStage_ = 3;
       openingPlan_.reset();
-    } else {
-      if (!openingPlan_ && (openingStage_ == 0 || openingStage_ == 2)) {
-        // Leave most of the decision budget for ordinary search on failure.
-        const auto openingTime = std::min(std::chrono::milliseconds(25),
-                                         std::max(std::chrono::milliseconds(1), thinkTime_ / 2));
-        const SearchLimit openingLimit{
-            std::min(limit.deadline, Clock::now() + openingTime),
-            maximumNodes_ ? std::max<std::uint64_t>(1, maximumNodes_ / 2) : 0};
-        bool openingTimedOut = false;
-        openingPlan_ = planOpening(context, openingStage_ == 2, openingMirrored_,
-                                   openingLimit, nodesVisited, openingTimedOut);
-        if (openingPlan_) {
-          openingStage_ = openingStage_ == 0 ? 1 : 2;
-          openingMirrored_ = openingPlan_->mirrored;
-          openingStep_ = 0;
-        } else openingStage_ = 3;
-      }
-      if (openingPlan_) {
-        if (!openingMatchesVisibleSupply(*openingPlan_, openingStep_, context)) {
-          openingPlan_.reset();
-          openingStage_ = 3;
-        } else {
-          AgentDecision decision = openingPlan_->steps[openingStep_];
-          decision.completedDepth = static_cast<int>(openingPlan_->steps.size() - openingStep_);
-          decision.nodesVisited = nodesVisited;
-          lastOpeningName_ = openingPlan_->name;
-          openingExpectedBoard_ = clearLines(lockMino(board, decision.placement)).board;
-          if (++openingStep_ == openingPlan_->steps.size()) {
-            openingStage_ = openingPlan_->hasContinuation ? 2 : 3;
-            openingPlan_.reset();
-          }
-          return decision;
-        }
-      }
     }
   }
   std::vector<PlacementOption> currentPlacements = enumeratePlacements(
@@ -2356,9 +2448,9 @@ std::optional<AgentDecision> ExpertAgent::decide(
   }
 
   const ExpertTAvailability initialT =
-      determineExpertTAvailability(holdPiece, nextPieces);
+      predictedAvailability(PieceType::T, holdPiece);
   const ExpertIAvailability initialI =
-      determineExpertIAvailability(holdPiece, nextPieces);
+      predictedAvailability(PieceType::I, holdPiece);
   std::vector<PieceType> initialQueue{type};
   initialQueue.insert(initialQueue.end(), nextPieces.begin(), nextPieces.end());
   // Compare both orientations: 3-6, 4-5, 5-4 and 6-3. Select once when
@@ -2389,10 +2481,10 @@ std::optional<AgentDecision> ExpertAgent::decide(
       const int attackLane = chooseOpeningLane
                                  ? openingAttackLanes[laneIndex]
                                  : attackLaneColumn_;
-      const ExpertTAvailability replacementT = determineExpertTAvailability(
-          root.holdPiece, nextPieces, root.nextIndex);
-      const ExpertIAvailability replacementI = determineExpertIAvailability(
-          root.holdPiece, nextPieces, root.nextIndex);
+      const ExpertTAvailability replacementT = predictedAvailability(
+          PieceType::T, root.holdPiece, root.nextIndex);
+      const ExpertIAvailability replacementI = predictedAvailability(
+          PieceType::I, root.holdPiece, root.nextIndex);
       const BoardFeatures& initialFeatures = initialFeaturesByLane[laneIndex];
       const BoardFeatures features = evaluateBoardForExpert(
           root.placement.board, weights_, replacementT, replacementI,
@@ -2450,11 +2542,9 @@ std::optional<AgentDecision> ExpertAgent::decide(
         if (timedOut) return;
         for (const PlacementOption& placement : placements) {
           const ExpertTAvailability replacementT =
-              determineExpertTAvailability(holdAfter, nextPieces,
-                                           nextIndexAfter);
+              predictedAvailability(PieceType::T, holdAfter, nextIndexAfter);
           const ExpertIAvailability replacementI =
-              determineExpertIAvailability(holdAfter, nextPieces,
-                                           nextIndexAfter);
+              predictedAvailability(PieceType::I, holdAfter, nextIndexAfter);
           const BoardFeatures features =
               evaluateBoardForExpert(placement.board, weights_, replacementT,
                                      replacementI,

@@ -205,36 +205,89 @@ when T is held or visible within three Next entries. It is a soft stacking
 preference, not a ban on Tetris, a reward for creating holes, or a restriction
 on the verified opening book.
 
-Expert uses [Honey Cup (はちみつ砲)](https://tetristemplate.info/post-835/)
-instead of the former TKI/LST/Reliable TSD book. It supports first-bag stacking,
-three A arrangements and the B arrangement for the second-bag TST, and their
-horizontal mirrors. The intended sequence is **stack -> TST -> TSD + perfect
-clear**. Gamushiro is not included; its held-piece/bag-boundary variations
-require separate layouts and verification.
+Expert uses [Honey Cup (はちみつ砲)](https://shiwehi.com/tetris/template/honeycup.php)
+instead of the former TKI/LST/Reliable TSD book. The preferred first bag places
+six pieces and carries J (L when mirrored) in Hold. Five second-bag layouts
+place eight pieces, including both the carried and new J/L, ending in TST.
+The reference's 15 PC diagrams are encoded (the page text says 14), with
+horizontal mirrors for all phases. The previous seven-piece first-bag and
+A/B TST arrangements remain fallbacks. Gamushiro is not included.
 
-Before using a layout, the book verifies all seven placements with the actual
+If neither Honey Cup first-bag arrangement is possible, Expert uses
+[Mountainous Stacking 2 (山岳積み2号)](https://w.atwiki.jp/sasasa123/pages/851.html).
+Its six-piece first bag carries L (J when mirrored). Seven second-bag TST
+arrangements and their mirrors are registered. The ideal and normal residuals
+with PC coverage are preferred over the three older TST-only arrangements.
+Honey Cup remains preferred; Mountain 2 is selected only on an empty initial
+board, not by switching templates midway through a failed Honey Cup.
+After a supported TST, Mountain 2 tries a third-bag PC: 14 ideal-residual and
+8 normal-residual solutions from the
+[companion diagrams](https://shiwehi.com/tetris/template/mountainous2.php),
+plus mirrors. TSD+PC is preferred; ordinary PC is used when no TSD+PC matches
+the supply. Disconnected diagram cells are projected through earlier clears
+and every operation is replay-verified during the build. Neither the published
+theoretical PC rate nor a PC on every seed is guaranteed.
+PC or an unsupported order/residual hands off to ordinary
+Expert. The older TST-only arrangements still hand off immediately after TST.
+Four-line PC before TST and fourth/fifth-bag extensions are not included.
+All three stages use the precomputed table without runtime search when undisturbed.
+
+During the build, the book verifies all placements with the actual
 movement/SRS rules and Hold order. Bag one clears nothing; bag two must end
 with a real three-line T-spin. Covered cells are allowed in these verified
 templates (the ordinary midgame evaluator is unchanged).
 
-After TST, an exact, bounded six-piece search tries to clear the five remaining
-rows, including a real TSD. Complete solutions are movement-checked before
-execution. A TSD and perfect clear can occur in the same placement. This is
-not a guarantee of the published theoretical PC rate: unseen supply, search
-budget, and the project's own rotation rules can prevent a solution. The book
-uses at most half the decision budget, capped at 25 ms, leaving time for normal
-search when setup or PC search fails. It does not loop openers after PC.
+After TST, the offline diagram solver first tries **TSD + PC**, then
+**ordinary PC** if no TSD solution is found. Diagram coordinates
+are projected through earlier row clears; disconnected cells in a reference
+diagram are never accepted as a tetromino until they form a legal shape.
+The previous online six-piece tiling fallback is replaced by the registered
+PC table; runtime never searches unregistered PC arrangements.
+All successful entries are also independently replayed during generation.
+A TSD and perfect clear can occur in the same placement. This is
+not a guarantee of the published theoretical PC rate: unseen supply,
+template coverage, and the project's own rotation rules can prevent a solution.
+Runtime uses a binary-search table lookup with no search deadline/node limit.
+It does not loop openers after PC.
+
+CMake automatically builds `ai_opening_table_generator` before `ai_engine`.
+It enumerates all 5,040 seven-bag permutations (720 remaining-piece orders
+when a current-bag piece is held), each supported starting geometry, and both
+Hold-permission states. Second-bag carried J/L is handled separately.
+The generated `build/ai-agent/opening_table_data.inc` is embedded in the binary;
+no runtime file, download, or working-directory setting is required. Web builds
+generate their own table in `build/ai-agent-web` using `make ai-web-build`.
+The first build and builds after relevant source changes take longer;
+unchanged incremental builds reuse the table. Generation has no search budget:
+an absent entry means no plan was found in the registered templates, not a
+timeout. Any generation/replay failure fails the build.
 
 The server's five Next entries are sufficient when Active (and possibly Hold)
 identify six distinct pieces of the fresh seven-bag: only the final missing
 type is deduced. Shorter or inconsistent previews are rejected. If a piece is held
 at the bag boundary, the next active piece may be swapped for it regardless of
 that unknown piece's identity; no future RNG is reproduced or predicted.
+At the second-bag boundary the carried J/L is excluded from the new bag's
+uniqueness check, allowing two copies to be placed without inventing supply.
 
 Every request rechecks the expected board, visible piece order, Hold permission,
-spawn position, and pending garbage. A mismatch or incoming garbage cancels the
-book immediately and permanently for that agent's game. Unsupported orders or
-an exhausted planning budget also fall back to ordinary Expert search. The
+spawn position, and pending garbage. Arbitrary board/supply mismatches cancel
+the book. A pure garbage rise is recognized by matching every existing cell
+and validating the new garbage rows (one gap per row, no truncated cells).
+An already-started book can continue at a translated height, but its remaining
+phase is movement-checked on the actual board. The current queued garbage is
+applied after the first simulated lock, exactly as in TS: outgoing attacks do
+NOT cancel it. Known rises are removed only for template lookup, never from
+the board used to validate the moves.
+
+Under pressure, non-firing construction must remain at most 12 rows high;
+above 12, a conversion must finish within three placements. Predicted heights
+of 19 or more and blocked next spawns reject continuation. Route validation
+uses up to half the decision budget, capped at 25 ms; failure/time exhaustion
+falls back to ordinary search. After a full TSD/TST the book ends instead of
+chasing PC. Existing PC plans may cash out a reachable TSD before giving up PC.
+Fresh openers are still disallowed with queued garbage. Unsupported orders
+also fall back to ordinary Expert search. The
 book is attempted only on a fresh agent's empty first board, runs for at most
 20 placements, and does not restart after a midgame perfect clear. Start a fresh
 agent process/object for a new game, as the backend already does.
@@ -242,6 +295,29 @@ agent process/object for a new game, as the backend already does.
 `findExpertOpeningPlan` exposes the full plan for deterministic diagnostics;
 `ExpertAgent::lastOpeningName()` identifies decisions actually made by the
 book. Easy/Hard, JSON input, and TS game rules are unchanged.
+
+#### Seven-bag expectation
+
+Expert tracks the drawn-piece history separately from Hold. It conditions a
+distribution of remaining-bag masks on Active and visible Next; it never
+duplicates preview observations or counts a Hold swap as a new random draw.
+When the initial bag boundary is unknown or observations change unexpectedly,
+it uses a uniform phase/subset prior and conditions on the observed window.
+An impossible seven-bag window falls back to uncertainty rather than inventing
+a certain next piece. Repeated identical requests do not advance history.
+
+For unseen T and I, arrival distributions weight the existing TSD setup,
+T-resource conservation, and Well multipliers. For example, a piece remaining
+among three types has probability 1/3 at each of the next three unseen positions;
+an already consumed type must wait for the following bag. These probabilities
+do not grant permission to execute a donation or expand a beam with guessed
+pieces. Visible moves and the opening action queue remain deterministic.
+
+When multiple opening layouts fit, Expert compares their residual boards by
+the expected best hard-drop repair for the first piece of the next fresh bag
+(all seven types equally likely), instead of returning the first matching
+layout. This is a bounded-horizon robustness heuristic, not a measured PC
+success probability or a full expectimax search of future bags.
 
 #### Donation templates
 

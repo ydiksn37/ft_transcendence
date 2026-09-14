@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "tetris/agent.hpp"
+#include "tetris/seven_bag_forecast.hpp"
 
 namespace tetris {
 
@@ -60,6 +61,10 @@ struct ExpertPieceAvailability {
   // Includes Hold and every occurrence remaining in the visible Next queue.
   // Invisible future bags are deliberately not counted as available supply.
   int visibleCount = 0;
+  // Conditional probability of the first unseen occurrence at each distance.
+  // Does not grant exact/visible supply for donation or move generation.
+  std::array<double, 32> arrivalProbability{};
+  bool forecast = false;
 };
 
 using ExpertTAvailability = ExpertPieceAvailability;
@@ -221,9 +226,10 @@ struct ExpertOpeningPlan {
   bool mirrored = false;
   std::vector<AgentDecision> steps;
   bool hasContinuation = false;
+  double expectedContinuationValue = 0.0;
 };
 
-// Honey Cup stack -> TST (including mirrors) -> bounded TSD+PC search.
+// Precomputed Honey Cup stack -> TST (including mirrors) -> TSD/ordinary PC.
 // Every placement and spin is replayable. Never guesses a future bag.
 [[nodiscard]] std::optional<ExpertOpeningPlan> findExpertOpeningPlan(
     const DecisionContext& context, bool continuation = false,
@@ -250,16 +256,21 @@ class ExpertAgent final : public Agent {
   }
 
  private:
+  [[nodiscard]] std::optional<AgentDecision> decideImpl(const DecisionContext& context);
+  SevenBagTracker bagTracker_;
+  SevenBagForecast bagForecast_;
   std::chrono::milliseconds thinkTime_;
   ExpertWeights weights_;
   std::uint64_t maximumNodes_;
   int attackLaneColumn_ = -1;
-  // 0: first request, 1: first TSD, 2: book follow-up, 3: ordinary search.
+  // 0: first request, 1: initial stack, 2: book follow-up, 3: ordinary search.
   int openingStage_ = 0;
   bool openingMirrored_ = false;
   std::optional<ExpertOpeningPlan> openingPlan_;
   std::size_t openingStep_ = 0;
   std::optional<Board> openingExpectedBoard_;
+  int openingGarbageRows_ = 0;
+  bool openingUnderPressure_ = false;
   std::string_view lastOpeningName_;
 };
 

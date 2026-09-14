@@ -525,6 +525,10 @@ void testExpertRejectsSidePocketBesideSingleWell() {
 
 void testExpertKeepsCleanSoloStackFreeOfUnownedHoles() {
   tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 5000);
+  // This regression targets ordinary stacking, not intentional TD cavities.
+  // An initial request without enough Next disables the opening book.
+  const auto warmup = agent.decide(tetris::DecisionContext{});
+  expect(warmup && agent.lastOpeningName().empty(), "ordinary stacking test must disable openers");
   int maximumUnownedHoles = 0;
   const auto result = tetris::simulateGame(
       agent, 982451653U, 80,
@@ -682,6 +686,26 @@ void testExpertWellRewardFollowsIAvailability() {
       tetris::evaluateExpertBoard(makeWell(4), weights, {}, noVisibleI).value;
   expect(supported > unsupported,
          "a four-row Well must be valued more when its I is visible");
+
+  auto likelySoon = noVisibleI;
+  likelySoon.forecast = true;
+  likelySoon.arrivalProbability[1] = 1.0;
+  auto likelyLate = noVisibleI;
+  likelyLate.forecast = true;
+  likelyLate.arrivalProbability[13] = 1.0;
+  auto mixed = noVisibleI;
+  mixed.forecast = true;
+  mixed.arrivalProbability[1] = mixed.arrivalProbability[13] = 0.5;
+  const auto expectedValue = [&](const auto& availability) {
+    return tetris::evaluateExpertBoard(makeWell(4), weights, {}, availability).value;
+  };
+  expect(expectedValue(likelySoon) > expectedValue(likelyLate),
+         "unseen I arrival probabilities must affect the actual board evaluation");
+  expect(std::abs(expectedValue(mixed) -
+      (expectedValue(likelySoon) + expectedValue(likelyLate)) / 2.0) < 1e-8,
+      "evaluate the probability-weighted outcomes, not the optimistic arrival");
+  expect(!mixed.exact && mixed.visibleCount == 0,
+         "probabilistic supply must not masquerade as a known usable I");
 
   const tetris::ExpertIAvailability delayedI =
       tetris::determineExpertIAvailability(
@@ -1813,49 +1837,216 @@ class OpeningReplay {
   tetris::BagGenerator bag;
 };
 
+void testSevenBagForecast() {
+  using tetris::PieceType;
+  const auto near = [](double a, double b) { return std::abs(a - b) < 1e-9; };
+  tetris::DecisionContext context;
+  context.active = PieceType::I;
+  context.next = {PieceType::O, PieceType::T, PieceType::S};
+  tetris::SevenBagTracker tracker;
+  auto forecast = tracker.observe(context);
+  const auto z = forecast.arrival(PieceType::Z);
+  expect(near(z[1], 1.0 / 3) && near(z[2], 1.0 / 3) && near(z[3], 1.0 / 3),
+         "three unseen remaining types have uniform arrival order");
+  const auto i = forecast.arrival(PieceType::I);
+  expect(near(i[1] + i[2] + i[3], 0.0) && near(i[4], 1.0 / 7) && near(i[10], 1.0 / 7),
+         "an already drawn I cannot reappear before the next bag");
+  context.next = {PieceType::O, PieceType::T, PieceType::S, PieceType::Z, PieceType::J};
+  tetris::SevenBagTracker holdTracker;
+  forecast = holdTracker.observe(context);
+  expect(near(forecast.arrival(PieceType::L)[1], 1.0), "six known types determine the seventh");
+  const tetris::AgentDecision useHold{{PieceType::O, 3, 38, 0},
+      {tetris::Action::Hold, tetris::Action::HardDrop}, 0.0, 0};
+  holdTracker.commit(context, useHold);
+  expect(near(holdTracker.observe(context).arrival(PieceType::L)[1], 1.0),
+         "repeated observations must not consume the bag twice");
+  holdTracker.commit(context, useHold);
+  context.active = PieceType::T;
+  context.hold = PieceType::I;
+  context.next = {PieceType::S, PieceType::Z, PieceType::J, PieceType::L, PieceType::I};
+  context.board.set(39, 0, tetris::Cell::O);
+  forecast = holdTracker.observe(context);
+  expect(near(forecast.arrival(PieceType::O)[1], 1.0 / 6),
+         "empty Hold consumes two queue pieces, not the held piece twice");
+  holdTracker.commit(context, useHold);
+  context.active = PieceType::S;
+  context.hold = PieceType::T;
+  context.next = {PieceType::Z, PieceType::J, PieceType::L, PieceType::I, PieceType::O};
+  forecast = holdTracker.observe(context);
+  expect(near(forecast.arrival(PieceType::T)[1], 1.0 / 5),
+         "swapping occupied Hold consumes only one queue piece");
+
+  tetris::BagGenerator bag(42);
+  std::vector<PieceType> sequence;
+  for (int n = 0; n < 110; ++n) sequence.push_back(bag.next());
+  tetris::SevenBagTracker history;
+  context = {};
+  for (int n = 0; n < 100; ++n) {
+    context.active = sequence[n];
+    context.next.assign(sequence.begin() + n + 1, sequence.begin() + n + 6);
+    const auto predicted = history.observe(context);
+    expect(predicted.arrival(sequence[n + 6])[1] > 0,
+           "bag tracking must never rule out the actual hidden next piece");
+    const auto probabilities = predicted.arrival(PieceType::T);
+    double sum = 0;
+    for (double p : probabilities) sum += p;
+    expect(near(sum, 1.0), "arrival probabilities must remain normalized across bag boundaries");
+    history.commit(context, {{context.active, 3, 38, 0}, {tetris::Action::HardDrop}, 0.0, 0});
+    context.board.set(39, 0, tetris::Cell::O);
+  }
+  context.next.assign(5, context.active);
+  const auto inconsistent = history.observe(context);
+  expect(near(inconsistent.arrival(PieceType::T)[1], 1.0 / 7),
+         "inconsistent streams must fall back to uncertain bag phase");
+}
+
 void testExpertOpeningBook() {
   int starts = 0, tst = 0, pc = 0, mirrors = 0;
+  int carriedStarts = 0, tsdPc = 0, ordinaryPc = 0;
   int runtimePc = 0;
+  int mountainStarts = 0, mountainTst = 0, mountainPc = 0, mountainTsdPc = 0;
   for (unsigned seed = 1; seed <= 40; ++seed) {
     OpeningReplay replay(seed);
     auto plan = tetris::findExpertOpeningPlan(replay.context);
     if (!plan) continue;
+    if (plan->name == "Mountain-2/Hold-stack") {
+      ++mountainStarts;
+      const bool mirrored = plan->mirrored;
+      expect(plan->steps.size() == 6, "Mountain 2 must carry the seventh piece");
+      for (const auto& step : plan->steps)
+        expect(replay.play(step) == 0, "Mountain 2 first bag must not clear");
+      expect(replay.context.hold == (mirrored ? tetris::PieceType::J : tetris::PieceType::L),
+             "Mountain 2 must hold L or mirrored J");
+      plan = tetris::findExpertOpeningPlan(replay.context, true, mirrored);
+      if (plan) {
+        expect(plan->name.find("Mountain-2/TST-") == 0,
+               "Mountain 2 second bag must use a TST layout");
+        const bool pcContinuation = plan->hasContinuation;
+        for (const auto& step : plan->steps) replay.play(step);
+        expect(replay.triples == 1, "Mountain 2 must replay a genuine TST");
+        ++mountainTst;
+        const auto pcPlan = pcContinuation
+            ? tetris::findExpertOpeningPlan(replay.context, true, mirrored) : std::nullopt;
+        if (pcPlan) {
+          expect(pcPlan->name.find("Mountain-2/PC-") == 0 && !pcPlan->hasContinuation,
+                 "Mountain 2 third bag must finish with a registered PC");
+          auto interrupted = replay.context;
+          interrupted.garbageQueue = 1;
+          expect(!tetris::findExpertOpeningPlan(interrupted, true, mirrored),
+                 "incoming garbage must prevent Mountain 2 PC execution");
+          interrupted = replay.context;
+          interrupted.board.set(0, 0, tetris::Cell::Garbage);
+          expect(!tetris::findExpertOpeningPlan(interrupted, true, mirrored),
+                 "a changed residual must not match the Mountain 2 PC table");
+          for (const auto& step : pcPlan->steps) replay.play(step);
+          expect(replay.context.board.empty() && replay.perfects == 1,
+                 "Mountain 2 PC must replay to an empty board");
+          ++mountainPc;
+          mountainTsdPc += replay.doubles > 0;
+        }
+        OpeningReplay live(seed);
+        tetris::ExpertAgent agent(std::chrono::milliseconds(1), {}, 1);
+        for (int n = 0; n < 14; ++n) {
+          const auto decision = agent.decide(live.context);
+          expect(decision && agent.lastOpeningName().find("Mountain-2/") == 0 &&
+                 decision->nodesVisited == 0, "Mountain 2 must use precomputed operations");
+          live.play(*decision);
+        }
+        expect(live.triples == 1, "live Mountain 2 must complete TST");
+        if (pcPlan) {
+          for (std::size_t n = 0; n < pcPlan->steps.size(); ++n) {
+            const auto decision = agent.decide(live.context);
+            expect(decision && agent.lastOpeningName().find("Mountain-2/PC-") == 0 &&
+                   decision->nodesVisited == 0 && !decision->timedOut,
+                   "Mountain 2 PC must ignore runtime search budgets");
+            live.play(*decision);
+          }
+          expect(live.perfects == 1 && live.context.board.empty(),
+                 "live Mountain 2 must complete its PC");
+        }
+        expect(agent.decide(live.context) && agent.lastOpeningName().empty(),
+               "Mountain 2 must hand off after PC or unsupported continuation");
+      }
+      continue;
+    }
     ++starts;
     mirrors += plan->mirrored;
-    expect(plan->name == "Honey-Cup/stack" && plan->steps.size() == 7,
+    const bool carried = plan->name == "Honey-Cup/Hold-stack";
+    carriedStarts += carried;
+    expect((carried && plan->steps.size() == 6) ||
+           (plan->name == "Honey-Cup/stack" && plan->steps.size() == 7),
            "TD opener must start with a complete stack, not a TSD");
     const bool mirrored = plan->mirrored;
     for (const auto& step : plan->steps)
       expect(replay.play(step) == 0, "bag one must stack without clearing");
+    if (carried) expect(replay.context.hold == (mirrored ? tetris::PieceType::L : tetris::PieceType::J),
+                        "first bag must carry J/L into the second bag");
+    // Even a one-node budget must not truncate a registered opening.
+    OpeningReplay tiny(seed);
+    tetris::ExpertAgent tinyAgent(std::chrono::milliseconds(1), {}, 1);
+    const auto tinyDecision = tinyAgent.decide(tiny.context);
+    expect(tinyDecision && !tinyAgent.lastOpeningName().empty() &&
+           tinyDecision->nodesVisited == 0 && !tinyDecision->timedOut,
+           "opening lookup must not consume the search budget");
     plan = tetris::findExpertOpeningPlan(replay.context, true, mirrored);
     if (!plan) continue;
-    expect(plan->name.find("Honey-Cup/TST-") == 0, "bag two must use a TST template");
+    expect(plan->name.find("Honey-Cup/TST-") == 0 ||
+           plan->name.find("Honey-Cup/Hold-TST-") == 0, "bag two must use a TST template");
     for (const auto& step : plan->steps) replay.play(step);
     expect(replay.triples == 1, "bag two must replay a genuine TST");
     ++tst;
     plan = tetris::findExpertOpeningPlan(replay.context, true, mirrored);
     if (!plan) continue;
-    expect(plan->name == "TD/TSD-PC" && !plan->hasContinuation,
-           "third bag must finish with the verified TSD+PC plan");
+    expect((plan->name == "TD/TSD-PC" || plan->name.find("Honey-Cup/PC-") == 0) && !plan->hasContinuation,
+           "third bag must finish with a verified PC plan");
     for (const auto& step : plan->steps) replay.play(step);
-    expect(replay.doubles == 1 && replay.perfects == 1 && replay.context.board.empty(),
-           "PC route must contain a real TSD and leave an empty board");
+    expect(replay.perfects == 1 && replay.context.board.empty(),
+           "PC route must leave an empty board");
     ++pc;
+    if (replay.doubles) ++tsdPc;
+    else ++ordinaryPc;
     OpeningReplay live(seed);
-    tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 150000);
+    tetris::ExpertAgent agent(std::chrono::milliseconds(1), {}, 1);
     for (int i = 0; i < 20; ++i) {
       const auto decision = agent.decide(live.context);
       if (!decision || agent.lastOpeningName().empty()) break;
+      expect(decision->nodesVisited == 0 && !decision->timedOut,
+             "every opening phase must use the table, even with one node");
       live.play(*decision);
     }
-    if (live.triples == 1 && live.doubles == 1 && live.perfects == 1) {
+    if (live.triples == 1 && live.perfects == 1) {
       ++runtimePc;
       const auto ordinary = agent.decide(live.context);
       expect(ordinary && agent.lastOpeningName().empty(), "PC must hand off to normal search");
     }
   }
   std::cout << "TD smoke: starts=" << starts << " mirrors=" << mirrors
-            << " TST=" << tst << " TSD-PC=" << pc << " runtime-PC=" << runtimePc << '\n';
+            << " carried=" << carriedStarts << " TST=" << tst << " PC=" << pc
+            << " TSD-PC=" << tsdPc << " ordinary-PC=" << ordinaryPc
+            << " runtime-PC=" << runtimePc << '\n';
+  std::cout << "Mountain 2 fallback: starts=" << mountainStarts << " TST=" << mountainTst
+            << " PC=" << mountainPc << " TSD-PC=" << mountainTsdPc << '\n';
+  expect(mountainStarts > 0 && mountainTst > 0, "Mountain 2 must cover unsupported Honey Cup orders");
+  expect(mountainPc >= 6 && mountainTsdPc > 0 && mountainTsdPc < mountainPc,
+         "Mountain 2 must retain TSD-PC and ordinary PC fallback coverage");
+  std::vector<tetris::PieceType> permutation{
+      tetris::PieceType::I, tetris::PieceType::O, tetris::PieceType::T,
+      tetris::PieceType::S, tetris::PieceType::Z, tetris::PieceType::J, tetris::PieceType::L};
+  int mountainDirections[2] = {};
+  do {
+    tetris::DecisionContext context;
+    context.active = permutation.front();
+    context.next.assign(permutation.begin() + 1, permutation.begin() + 6);
+    const auto first = tetris::findExpertOpeningPlan(context);
+    expect(first.has_value(), "Honey Cup plus Mountain 2 must cover every fresh seven-bag order");
+    if (first->name == "Mountain-2/Hold-stack") ++mountainDirections[first->mirrored];
+  } while (std::next_permutation(permutation.begin(), permutation.end()));
+  expect(mountainDirections[0] > 0 && mountainDirections[1] > 0,
+         "Mountain 2 fallback must support both orientations");
+  expect(carriedStarts > 0 && tsdPc > 0 && ordinaryPc > 0,
+         "Honey Cup must support carried J/L, TSD-PC and ordinary PC fallback");
+  expect(pc >= 24 && runtimePc == pc,
+         "table lookup must preserve PC coverage across legacy/mirrored residuals and tiny budgets");
   expect(starts > 0 && mirrors > 0 && tst > 0 && pc > 0 && runtimePc > 0,
          "TD book must work in both orientations and complete TSD+PC within the runtime budget");
 }
@@ -1878,12 +2069,58 @@ void testExpertTdOpeningSafety() {
     const auto first = agent.decide(interrupted.context);
     if (!first || agent.lastOpeningName().empty()) continue;
     interrupted.play(*first);
-    interrupted.context.garbageQueue = 1;
+    interrupted.context.garbageQueue = 20;
     const auto fallback = agent.decide(interrupted.context);
-    expect(fallback && agent.lastOpeningName().empty(), "garbage cancels TD immediately");
+    expect(fallback && agent.lastOpeningName().empty(), "lethal incoming garbage must cancel TD");
     return;
   }
   expect(false, "runtime Expert must execute the TD opener within budget");
+}
+
+void testExpertOpeningSurvivesSafeGarbage() {
+  unsigned fixture = 0;
+  for (unsigned seed = 1; seed <= 40 && !fixture; ++seed) {
+    OpeningReplay probe(seed);
+    auto plan = tetris::findExpertOpeningPlan(probe.context);
+    if (!plan) continue;
+    const bool mirror = plan->mirrored;
+    for (const auto& step : plan->steps) probe.play(step);
+    plan = tetris::findExpertOpeningPlan(probe.context, true, mirror);
+    if (plan && plan->name.find("TST-") != std::string_view::npos) fixture = seed;
+  }
+  expect(fixture != 0, "garbage tests need a known TST opener");
+  for (int mode = 0; mode < 3; ++mode) {
+    OpeningReplay live(fixture);
+    tetris::ExpertAgent agent(std::chrono::milliseconds(200), {}, 0);
+    for (int n = 0; n < 14; ++n) {
+      // Low-stack waiting garbage, a rise just before TST, and incoming
+      // garbage on the firing move. TS does NOT cancel any of these lines.
+      if (mode == 0 && n == 1) {
+        live.context.garbageQueue = 1;
+        live.context.garbageGapColumns = {4};
+      }
+      if (mode == 1 && n == 12)
+        live.context.board = tetris::applyPendingGarbage(live.context.board, {2, 7, 4});
+      if (mode == 2 && n == 13) {
+        live.context.garbageQueue = 2;
+        live.context.garbageGapColumns = {1, 8};
+      }
+      const auto decision = agent.decide(live.context);
+      expect(decision && !agent.lastOpeningName().empty(),
+             "safe garbage must not discard an executable TST opener");
+      live.play(*decision);
+      if (live.context.garbageQueue) {
+        live.context.board = tetris::applyPendingGarbage(
+            live.context.board, live.context.garbageGapColumns);
+        live.context.garbageQueue = 0;
+        live.context.garbageGapColumns.clear();
+      }
+    }
+    expect(live.triples == 1, "translated operation sequence must still produce a full TST");
+    expect(!live.context.board.empty(), "outgoing TST must not erase pending garbage");
+    expect(agent.decide(live.context) && agent.lastOpeningName().empty(),
+           "under pressure, cash out TST and relinquish the PC plan");
+  }
 }
 
 void testGarbageCalculationMatchesTypeScript() {
@@ -1964,8 +2201,10 @@ int main() {
     testExpertRecognizesAndExecutesTSpinTriple();
     testExpertEvaluatesDonationUnlocks();
     testExpertDonationTemplates();
+    testSevenBagForecast();
     testExpertOpeningBook();
     testExpertTdOpeningSafety();
+    testExpertOpeningSurvivesSafeGarbage();
     testExpertWellDistanceFeature();
     testExpertBoardStabilityPenalizesBuriedHoles();
     testExpertAvoidsWastingTWithHold();

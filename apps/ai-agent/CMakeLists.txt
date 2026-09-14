@@ -21,17 +21,28 @@ add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
 target_include_directories(nlohmann_json INTERFACE
                            "${NLOHMANN_JSON_INCLUDE_DIR}")
 
-add_library(ai_engine
+set(AI_ENGINE_COMMON_SOURCES
   src/agent.cpp
   src/bag.cpp
   src/board.cpp
   src/decision_context.cpp
   src/easy_agent.cpp
-  src/expert_agent.cpp
   src/game_simulator.cpp
   src/hard_agent.cpp
+  src/seven_bag_forecast.cpp
 )
+add_executable(ai_opening_table_generator
+  src/opening_table_generator.cpp ${AI_ENGINE_COMMON_SOURCES})
+target_include_directories(ai_opening_table_generator PRIVATE include)
+set(OPENING_TABLE "${CMAKE_CURRENT_BINARY_DIR}/opening_table_data.inc")
+add_custom_command(OUTPUT "${OPENING_TABLE}"
+  COMMAND ai_opening_table_generator "${OPENING_TABLE}"
+  DEPENDS ai_opening_table_generator
+  COMMENT "Precomputing legal opener plans for all supported seven-bag/Hold states"
+  VERBATIM)
+add_library(ai_engine ${AI_ENGINE_COMMON_SOURCES} src/expert_agent.cpp "${OPENING_TABLE}")
 target_include_directories(ai_engine PUBLIC include)
+target_include_directories(ai_engine PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 find_package(Threads REQUIRED)
 
