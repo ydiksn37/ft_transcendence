@@ -23,7 +23,7 @@ function getBalancedPartition(
   min_val: number,
   max_val: number,
 ): number[] {
-  for (const k of [2, 3]) {
+  for (const k of [3, 2]) {
     const base = Math.floor(N / k);
     const rem = N % k;
     if (base >= min_val && (rem === 0 || base + 1 <= max_val)) {
