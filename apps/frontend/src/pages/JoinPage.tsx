@@ -122,6 +122,25 @@ export default function JoinPage() {
           <div className="loading-text">LOADING...</div>
         </div>
       )}
+
+      {/* 法的ページへのリンク（目立たないように下部に配置） */}
+      {!loading && (
+        <div style={{
+          position: 'absolute',
+          bottom: '15px',
+          left: '0',
+          width: '100%',
+          textAlign: 'center',
+          fontFamily: 'sans-serif',
+          fontSize: '12px',
+          opacity: 0.5,
+          zIndex: 10
+        }}>
+          <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); navigate('/privacy-policy'); }} style={{ color: '#fff', textDecoration: 'none', margin: '0 10px' }}>Privacy Policy</a>
+          <span style={{ color: '#fff' }}>|</span>
+          <a href="/terms-of-service" onClick={(e) => { e.preventDefault(); navigate('/terms-of-service'); }} style={{ color: '#fff', textDecoration: 'none', margin: '0 10px' }}>Terms of Service</a>
+        </div>
+      )}
     </div>
   );
 }
