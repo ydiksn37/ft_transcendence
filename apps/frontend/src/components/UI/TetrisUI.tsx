@@ -976,7 +976,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
           )}
           {gameOver && matchResult === 'TOURNAMENT_WIN' && (
             <div className="epic-win-overlay">
-              <div className="epic-win-text">VICTORY!</div>
+              <div className="epic-win-text">Champion!</div>
             </div>
           )}
         </div>
