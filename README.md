@@ -23,12 +23,16 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
    ```bash
    cp .env.example .env
    ```
-3. Start the application using Docker Compose:
+3. Run npm install:
+   ```bash
+   make install
+   ```
+4. Start the application using Docker Compose:
    ```bash
    make up
    # or docker-compose up --build
    ```
-4. Access the application:
+5. Access the application:
    - Open your browser and navigate to `https://localhost` (or the appropriate domain/IP).
    - *Note: Since we use self-signed certificates for HTTPS, you may need to bypass the browser security warning.*
 
@@ -54,25 +58,25 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 *(Refer to `ER.md` for the detailed Entity-Relationship diagram)*
 
 ## Team Information
-- **[login1] - Game Engine & Frontend Logic (Player 1)**: Responsible for PixiJS rendering, game state synchronization, local input handling.
-- **[login2] - AI & Multiplayer Logic (Player 2)**: Focused on the C++ headless AI integration, collision detection, and WebSocket real-time synchronization.
-- **[login3] - UI/UX & React Developer (Player 3)**: Designed the neon-themed SPA, dashboard charts, tournament brackets, and overall responsive design.
-- **[login4] - Backend, DevOps & Security (Player 4)**: Managed Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redis, and overall system architecture.
+- **sonakamu - Game Engine & Frontend Logic (Player 1)**: Responsible for PixiJS rendering, game state synchronization, local input handling.
+- **ssawa - AI & Multiplayer Logic (Player 2)**: Focused on the C++ headless AI integration, collision detection, and WebSocket real-time synchronization.
+- **kaisuzuk - UI/UX & React Developer (Player 3)**: Designed the neon-themed SPA, dashboard charts, tournament brackets, and overall responsive design.
+- **yukusano - Backend, DevOps & Security (Player 4)**: Managed Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redis, and overall system architecture.
 
 ## Project Management
 - **Organization:** We adopted an agile-like parallel development approach. The team split into specialized roles (Frontend Game, Frontend UI, Backend/Infra) to prevent bottlenecks.
-- **Task Tracking:** We used [GitHub Issues / Trello / Notion - PLEASE SPECIFY] to manage our sprint backlogs and track progress.
-- **Communication:** Daily stand-ups and real-time collaboration were conducted via [Discord / Slack - PLEASE SPECIFY]. Code reviews were mandatory for pull requests affecting the core game loop.
+- **Task Tracking:** We used GitHub to manage our sprint backlogs and track progress.
+- **Communication:** Daily stand-ups and real-time collaboration were conducted via Discord.
 
 ## Features List
-- **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: [login1, login2, login4]).
-- **Tournament System:** Single-elimination brackets with real-time progress (Responsible: [login3, login4]).
-- **AI Opponent:** Play against an intelligent bot with adjustable difficulties (Responsible: [login2]).
-- **Spectator Mode:** Watch live matches with real-time board updates (Responsible: [login1, login4]).
-- **Analytics Dashboard:** Visual graphs for APM, PPS, and win rates (Responsible: [login3, login4]).
-- **Public API:** Rate-limited and secured API endpoints for fetching stats (Responsible: [login4]).
-- **Social Features:** Friend lists, real-time chat, profile customization (Responsible: [login3, login4]).
-- **Advanced Security:** ModSecurity WAF and HashiCorp Vault integration (Responsible: [login4]).
+- **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: sonakamu).
+- **Tournament System:** Single-elimination brackets with real-time progress (Responsible: sonakamu).
+- **AI Opponent:** Play against an intelligent bot with adjustable difficulties (Responsible: ssawa).
+- **Spectator Mode:** Watch live matches with real-time board updates (Responsible: sonakamu).
+- **Analytics Dashboard:** Visual graphs for APM, PPS, and win rates (Responsible: yukusano).
+- **Public API:** Rate-limited and secured API endpoints for fetching stats (Responsible: yukusano).
+- **Social Features:** Friend lists, real-time chat, profile customization (Responsible: yukusano).
+- **Advanced Security:** ModSecurity WAF and HashiCorp Vault integration (Responsible: yukusano).
 
 ## Modules (Total: 35 pts)
 *Note: Point calculation: Major = 2pts, Minor = 1pt*
@@ -113,16 +117,16 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 23. **WAF and HashiCorp Vault (Major - 2pts)**: Nginx with ModSecurity and Vault for secret management.
 
 ## Individual Contributions
-- **[login1]**: 
+- **sonakamu**: 
   - *Contributions:* Built the entire PixiJS rendering engine and handled local input latency mitigation.
   - *Challenges:* Synchronizing high-speed 60FPS local inputs with server state without causing visual stutter. Overcame this by implementing client-side prediction and server reconciliation.
-- **[login2]**: 
+- **ssawa**: 
   - *Contributions:* Developed the C++ headless AI and integrated it into the Node.js backend. Managed the core collision detection logic.
   - *Challenges:* The AI was initially too perfect and unbeatable. Solved this by introducing artificial "think delay" and a probability matrix for suboptimal moves to simulate human error.
-- **[login3]**: 
+- **kaisuzuk**: 
   - *Contributions:* Designed and developed the React SPA, custom UI components, and the analytics dashboard using chart libraries.
   - *Challenges:* Managing complex state across multiple real-time components (chat, friend list, tournament bracket). Utilized React Context and custom hooks to decouple state management from the UI.
-- **[login4]**: 
+- **yukusano**: 
   - *Contributions:* Architected the Docker infrastructure, NestJS backend, and implemented WAF/Vault security.
   - *Challenges:* Configuring ModSecurity to not block high-frequency WebSocket packets while maintaining strict protection for REST endpoints. Solved by writing custom SecRules to bypass WAF for Socket.IO traffic.
 
@@ -131,6 +135,5 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 - **PixiJS Documentation**: https://pixijs.com/
 - **Socket.IO Documentation**: https://socket.io/
 - **AI Usage**: 
-  - *Code Generation:* Used AI (GitHub Copilot / ChatGPT) to generate boilerplate CSS animations for the UI and to scaffold repetitive Prisma DTOs.
-  - *Algorithm Assistance:* Consulted AI for optimizing the Tetris AI evaluation function (calculating bumpiness and hole penalties).
+  - *Algorithm Assistance:* Consulted AI for optimizing and researching the Tetris AI evaluation function (calculating bumpiness and hole penalties).
   - *Debugging:* Used AI to help trace and resolve complex Docker networking and Vault initialization errors.

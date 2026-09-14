@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by [login1], [login2], [login3], [login4].*
+*This project has been created as part of the 42 curriculum by yukusano, sonakamu, ssawa, kaisuzuk.*
 
 # Project T (ft_transcendence)
 
@@ -23,12 +23,16 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    ```bash
    cp .env.example .env
    ```
-3. Docker Composeを使用してアプリケーションを起動します:
+3. npm installを実行します:
+   ```bash
+   make install
+   ```
+4. Docker Composeを使用してアプリケーションを起動します:
    ```bash
    make up
    # または docker-compose up --build
    ```
-4. アプリケーションにアクセスします:
+5. アプリケーションにアクセスします:
    - ブラウザを開き、`https://localhost` (または適切なドメイン/IP) にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
 
@@ -54,25 +58,25 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 *(詳細なエンティティ・リレーション図については `ER.md` を参照)*
 
 ## チーム情報 (Team Information)
-- **[login1] - Game Engine & Frontend Logic (Player 1)**: PixiJS描画、ゲーム状態同期、ローカル入力処理を担当。
-- **[login2] - AI & Multiplayer Logic (Player 2)**: C++ヘッドレスAIの統合、衝突判定、WebSocketリアルタイム同期を担当。
-- **[login3] - UI/UX & React Developer (Player 3)**: ネオン調SPA、ダッシュボードチャート、トーナメント表、レスポンシブデザインの設計・開発。
-- **[login4] - Backend, DevOps & Security (Player 4)**: Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redisなど、システムアーキテクチャ全般を管理。
+- **sonakamu - Game Engine & Frontend Logic (Player 1)**: PixiJS描画、ゲーム状態同期、ローカル入力処理を担当。
+- **ssawa - AI & Multiplayer Logic (Player 2)**: C++ヘッドレスAIの統合、衝突判定、WebSocketリアルタイム同期を担当。
+- **kaisuzuk - UI/UX & React Developer (Player 3)**: ネオン調SPA、ダッシュボードチャート、トーナメント表、レスポンシブデザインの設計・開発。
+- **yukusano - Backend, DevOps & Security (Player 4)**: Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redisなど、システムアーキテクチャ全般を管理。
 
 ## プロジェクト管理 (Project Management)
 - **組織:** アジャイルライクな並行開発アプローチを採用。ボトルネックを防ぐため、専門的な役割 (フロントエンドゲーム、フロントエンドUI、バックエンド/インフラ) に分かれて作業しました。
-- **タスク管理:** [GitHub Issues / Trello / Notion - ※指定してください] を使用してスプリントバックログを管理し、進捗を追跡しました。
-- **コミュニケーション:** 毎日のスタンドアップとリアルタイムのコラボレーションは [Discord / Slack - ※指定してください] で実施しました。コアゲームループに影響するPull Requestにはコードレビューを必須としました。
+- **タスク管理:** GitHubを使用してスプリントバックログを管理し、進捗を追跡しました。
+- **コミュニケーション:** 毎日のスタンドアップとリアルタイムのコラボレーションはDiscordで実施しました。
 
 ## 機能リスト (Features List)
-- **リアルタイム1v1対戦:** おじゃまブロック付きのサーバー主導テトリス (担当: [login1, login2, login4])。
-- **トーナメントシステム:** リアルタイム進行のシングルトーナメント表 (担当: [login3, login4])。
-- **AI対戦相手:** 難易度調整可能な賢いボットとの対戦 (担当: [login2])。
-- **観戦モード:** 進行中の試合と盤面をリアルタイム観戦 (担当: [login1, login4])。
-- **分析ダッシュボード:** APM, PPS, 勝率の視覚的グラフ (担当: [login3, login4])。
-- **公開API:** レート制限とAPIキー保護を備えた統計情報取得エンドポイント (担当: [login4])。
-- **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: [login3, login4])。
-- **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: [login4])。
+- **リアルタイム1v1対戦:** おじゃまブロック付きのサーバー主導テトリス (担当: sonakamu)。
+- **トーナメントシステム:** リアルタイム進行のシングルトーナメント表 (担当: sonakamu)。
+- **AI対戦相手:** 難易度調整可能な賢いボットとの対戦 (担当: ssawa)。
+- **観戦モード:** 進行中の試合と盤面をリアルタイム観戦 (担当: sonakamu)。
+- **分析ダッシュボード:** APM, PPS, 勝率の視覚的グラフ (担当: yukusano)。
+- **公開API:** レート制限とAPIキー保護を備えた統計情報取得エンドポイント (担当: yukusano)。
+- **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
+- **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
 
 ## モジュール (合計: 35 pts)
 *注: ポイント計算: メジャー = 2pts, マイナー = 1pt*
@@ -113,16 +117,16 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 23. **WAF と HashiCorp Vault (Major - 2pts)**: ModSecurityを搭載したNginxとシークレット管理用Vault。
 
 ## 個人の貢献 (Individual Contributions)
-- **[login1]**: 
+- **sonakamu**: 
   - *貢献:* PixiJSレンダリングエンジン全体を構築し、ローカル入力の遅延緩和処理を実装。
   - *課題:* 高速な60FPSのローカル入力とサーバー状態を、視覚的なカクつきなしに同期させること。クライアント側の予測（Client-side prediction）とサーバー和解（Server reconciliation）を実装して解決した。
-- **[login2]**: 
+- **ssawa**: 
   - *貢献:* C++ヘッドレスAIを開発し、Node.jsバックエンドに統合。コアとなる衝突判定ロジックを管理。
   - *課題:* 初期状態のAIが完璧すぎて勝てなかったこと。人為的な「思考遅延」と、人間らしいミスをシミュレートする非最適手の確率マトリクスを導入して解決した。
-- **[login3]**: 
+- **kaisuzuk**: 
   - *貢献:* React SPA、カスタムUIコンポーネント、およびチャートライブラリを使用した分析ダッシュボードの設計と開発。
   - *課題:* 複数のリアルタイムコンポーネント（チャット、フレンドリスト、トーナメント表）にまたがる複雑な状態管理。React Contextとカスタムフックを活用し、UIから状態管理を分離することで解決した。
-- **[login4]**: 
+- **yukusano**: 
   - *貢献:* Dockerインフラストラクチャ、NestJSバックエンドの設計、WAF/Vaultセキュリティの実装。
   - *課題:* RESTエンドポイントへの厳格な保護を維持しつつ、高頻度のWebSocketパケットをModSecurityがブロックしないように設定すること。Socket.IOトラフィックをWAFの検査から除外するカスタムSecRulesを記述して解決した。
 
@@ -131,6 +135,5 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 - **PixiJS ドキュメント**: https://pixijs.com/
 - **Socket.IO ドキュメント**: https://socket.io/
 - **AIの使用状況**: 
-  - *コード生成:* AI (GitHub Copilot / ChatGPT) を使用して、UIのボイラープレートCSSアニメーションの生成や、繰り返しになるPrisma DTOの足場作りを行った。
-  - *アルゴリズム支援:* テトリスAIの評価関数（平坦さや穴のペナルティ計算）を最適化するためにAIを活用した。
+  - *アルゴリズム支援:* テトリスAIの評価関数（平坦さや穴のペナルティ計算）を最適化するためにAIを活用し調査した。
   - *デバッグ:* 複雑なDockerネットワーキングやVaultの初期化エラーの追跡・解決にAIを利用した。
