@@ -105,4 +105,228 @@
     flex-direction: column;
     align-items: center;
   }
+
+  .tetris-campus-info {
+    display: none !important;
+  }
+}
+
+@keyframes fadeInDelay {
+  0%, 80% { opacity: 0; pointer-events: none; }
+  100% { opacity: 1; pointer-events: auto; }
+}
+
+@keyframes epicWinScale {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  10% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+  15% { transform: translate(-50%, -50%) scale(0.9); }
+  20% { transform: translate(-50%, -50%) scale(1.1); }
+  25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -300px) scale(0.5); opacity: 1; }
+}
+
+@keyframes epicWinFlash {
+  0%, 100% { color: #ffd700; text-shadow: 0 0 20px #ffd700, 0 0 40px #ff8c00, 4px 4px 0 #000; }
+  50% { color: #fff; text-shadow: 0 0 40px #fff, 0 0 80px #ffd700, 4px 4px 0 #000; }
+}
+
+@keyframes epicWinBg {
+  0% { background-color: rgba(255, 215, 0, 0); }
+  15% { background-color: rgba(255, 215, 0, 0.4); }
+  50% { background-color: rgba(0, 0, 0, 0.85); }
+  100% { background-color: rgba(0, 0, 0, 0.6); }
+}
+
+@keyframes epicWinParticles {
+  0% { box-shadow: 0 0 0 transparent; }
+  50% { box-shadow: 0 -50px 20px #ffd700, -50px 0 20px #ff8c00, 50px 0 20px #ffd700, 0 50px 20px #ff8c00; }
+  100% { box-shadow: 0 0 0 transparent; }
+}
+
+.epic-win-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: epicWinBg 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  pointer-events: none;
+}
+
+.epic-win-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 80px;
+  font-weight: bold;
+  text-align: center;
+  white-space: nowrap;
+  animation: 
+    epicWinScale 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards,
+    epicWinFlash 0.5s infinite alternate;
+}
+
+@media (max-width: 768px) {
+  @keyframes epicWinScaleMobile {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    10% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+    15% { transform: translate(-50%, -50%) scale(0.9); }
+    20% { transform: translate(-50%, -50%) scale(1.1); }
+    25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -250px) scale(0.6); opacity: 1; }
+  }
+  .epic-win-text {
+    font-size: 40px;
+    animation: 
+      epicWinScaleMobile 3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards,
+      epicWinFlash 0.5s infinite alternate;
+  }
+}
+
+/* Enhanced Animations */
+
+/* Hard Drop Shake */
+@keyframes boardShake {
+  0% { transform: translateY(0); }
+  20% { transform: translateY(12px); }
+  40% { transform: translateY(-6px); }
+  60% { transform: translateY(3px); }
+  80% { transform: translateY(-1px); }
+  100% { transform: translateY(0); }
+}
+.board-shake {
+  animation: boardShake 0.3s ease-out;
+}
+
+/* Danger Border */
+@keyframes dangerPulse {
+  0% { box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); border-color: rgba(255, 255, 255, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.9), inset 0 0 20px rgba(255, 0, 0, 0.5); border-color: rgba(255, 50, 50, 1); }
+  100% { box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); border-color: rgba(255, 255, 255, 0.5); }
+}
+.danger-border {
+  animation: dangerPulse 0.5s infinite;
+}
+
+/* Action Text Shared Font Style */
+.action-text-tetris, .action-text-tspin, .action-text-pc, .action-text-combo, .action-text-default {
+  font-family: 'Press Start 2P', monospace !important;
+  text-transform: uppercase;
+  -webkit-text-stroke: 1.5px black;
+  text-shadow: 4px 4px 0 #000;
+  line-height: 1.5;
+}
+
+/* Action Text Animations */
+@keyframes actionTetris {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  25% { transform: translate(-50%, -50%) scale(0.95); }
+  35% { transform: translate(-50%, -50%) scale(1); }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}
+.action-text-tetris {
+  animation: actionTetris 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  color: #00ffff;
+  font-size: 32px !important;
+}
+
+@keyframes actionTSpin {
+  0% { transform: translate(-50%, -50%) scale(0.5) rotate(-10deg); opacity: 0; }
+  20% { transform: translate(-50%, -50%) scale(1.1) rotate(5deg); opacity: 1; }
+  35% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.2) rotate(10deg); opacity: 0; }
+}
+.action-text-tspin {
+  animation: actionTSpin 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  color: #d8b4fe;
+  font-size: 28px !important;
+}
+
+@keyframes actionPC {
+  0% { transform: translate(-50%, -50%) scale(0) rotate(10deg); opacity: 0; }
+  20% { transform: translate(-50%, -50%) scale(1.3) rotate(-5deg); opacity: 1; text-shadow: 0 0 40px #fff; }
+  35% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.5) translateY(-20px); opacity: 0; }
+}
+.action-text-pc {
+  animation: actionPC 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+  color: #ffffff;
+  font-size: 32px !important;
+  -webkit-text-stroke: 1.5px #000;
+  text-shadow: 0 0 15px #00ffff, 0 0 25px #ff00ff, 0 0 35px #ffff00, 6px 6px 0px rgba(0,0,0,0.8);
+}
+
+@keyframes actionCombo {
+  0% { transform: translate(-50%, -50%) scale(0.2) rotate(-5deg); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.5) rotate(5deg); opacity: 1; color: #fff; }
+  30% { transform: translate(-50%, -50%) scale(0.9) rotate(-2deg); opacity: 1; }
+  45% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  85% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}
+.action-text-combo {
+  animation: actionCombo 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  color: #ff9900;
+  font-size: 36px;
+  text-shadow: 6px 6px 0px #000, 0 0 15px rgba(255,153,0,0.8);
+}
+
+@keyframes shakeLevel1 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(-2px, -2px) rotate(-1deg); }
+  50% { transform: translate(2px, 2px) rotate(1deg); }
+  75% { transform: translate(-2px, 2px) rotate(-1deg); }
+}
+
+@keyframes shakeLevel2 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(-4px, -4px) rotate(-3deg); }
+  50% { transform: translate(4px, -2px) rotate(3deg); }
+  75% { transform: translate(-4px, 4px) rotate(-3deg); }
+}
+
+@keyframes shakeLevel3 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20% { transform: translate(-8px, -8px) rotate(-6deg); }
+  40% { transform: translate(8px, -2px) rotate(6deg); }
+  60% { transform: translate(-8px, 8px) rotate(-6deg); }
+  80% { transform: translate(8px, 8px) rotate(6deg); }
+}
+
+.combo-shake-0 { display: inline-block; }
+.combo-shake-1 { display: inline-block; animation: shakeLevel1 0.2s infinite; color: #ff9900; }
+.combo-shake-2 { display: inline-block; animation: shakeLevel2 0.15s infinite; color: #ff4400; text-shadow: 6px 6px 0px #000, 0 0 20px rgba(255,68,0,0.9); }
+.combo-shake-3 { display: inline-block; animation: shakeLevel3 0.1s infinite; color: #ff0000; text-shadow: 6px 6px 0px #000, 0 0 30px rgba(255,0,0,1); }
+
+.action-text-default {
+  animation: actionTetris 1s ease-out forwards;
+  color: #fff;
+  font-size: 24px !important;
+}
+
+@keyframes flashWhite {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+.board-flash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: white;
+  pointer-events: none;
+  z-index: 10;
+  animation: flashWhite 0.3s ease-out forwards;
 }

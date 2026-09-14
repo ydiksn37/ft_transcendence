@@ -41,4 +41,24 @@ export class FtOauthGuard extends AuthGuard('42') {
       state: req.query.state,
     };
   }
+
+  handleRequest(
+    err: any,
+    user: any,
+    info: any,
+    context: ExecutionContext,
+    status?: any,
+  ) {
+    if (err) {
+      console.error('FtOauthGuard error:', err);
+    }
+    if (info) {
+      console.error('FtOauthGuard info:', info);
+    }
+    if (err || !user) {
+      console.error('FtOauthGuard user missing or err present');
+      throw err || new UnauthorizedException('42 Authentication Failed');
+    }
+    return user;
+  }
 }

@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { Cell } from '../utils/gameHelpers';
 
 export const useGameState = () => {
-  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS'>('MENU');
+  const [appState, setAppState] = useState<'MENU' | 'CONFIG' | 'PLAYING' | 'RECORDS' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'SPECTATING' | 'VS_SCREEN'>('MENU');
   const appStateRef = useRef(appState);
   useEffect(() => { appStateRef.current = appState; }, [appState]);
 
@@ -17,8 +17,9 @@ export const useGameState = () => {
   const [opponentScore, setOpponentScore] = useState(0);
   const [opponentNextPieceKeys, setOpponentNextPieceKeys] = useState<string[]>([]);
   const [opponentHoldMino, setOpponentHoldMino] = useState<string | null>(null);
-  const [opponents, setOpponents] = useState<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean }>>({});
-  const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
+  const [opponents, setOpponents] = useState<Record<string, { stage: Cell[][]; score: number; nextPieceKeys?: string[]; holdMino?: string | null; isGameOver?: boolean; username?: string | null; displayName?: string; playerIndex?: number }>>({});
+  const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
+  const [matchResult, setMatchResult] = useState<'WIN' | 'TOURNAMENT_WIN' | 'LOSE' | null>(null);
   const [pendingGarbage, setPendingGarbage] = useState<number[]>([]);
   const pendingGarbageRef = useRef<number[]>([]);
 
@@ -40,6 +41,8 @@ export const useGameState = () => {
 
   const [dropTime, setDropTime] = useState<number | null>(null);
   const [gameOver, setGameOver] = useState(false);
+  const gameOverRef = useRef(false);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   const [score, setScore] = useState(0);
 
   const [level, setLevel] = useState(1);
@@ -65,6 +68,7 @@ export const useGameState = () => {
     opponentNextPieceKeys, setOpponentNextPieceKeys,
     opponentHoldMino, setOpponentHoldMino,
     opponents, setOpponents,
+    myDisplayName, setMyDisplayName,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, setGameMode, gameModeRef,
@@ -73,7 +77,7 @@ export const useGameState = () => {
     finalTime, setFinalTime,
     countdown, setCountdown, countdownRef, countdownTimeoutsRef,
     dropTime, setDropTime,
-    gameOver, setGameOver,
+    gameOver, setGameOver, gameOverRef,
     score, setScore,
     level, setLevel,
     lines, setLines,

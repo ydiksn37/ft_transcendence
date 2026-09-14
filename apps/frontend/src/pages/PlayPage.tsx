@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CustomRoomsList } from '../components/UI/CustomRoomsList';
+import { VsScreen } from '../components/UI/VsScreen';
 import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
 import { useGameState } from '../hooks/useGameState';
@@ -15,7 +16,7 @@ import type { Cell } from '../utils/gameHelpers';
 import { soundManager } from '../utils/soundManager';
 import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
-import { isAiDifficulty } from '@transcendence/shared';
+import { isAiDifficulty, ClientEvent, TETROMINO_SHAPES, type GameState } from '@transcendence/shared';
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
@@ -35,6 +36,8 @@ const formatTime = (ms: number) => {
 const PlayPage = () => {
   const { mode } = useParams<{ mode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'CUSTOM_ROOMS' | 'VS_AI' }>();
   const location = useLocation();
+  const serverMatch = mode === 'ONLINE_1V1' || mode === 'CUSTOM_ROOMS';
+  const [serverState, setServerState] = useState<(GameState & { roomId?: string; started?: boolean; piecesPlaced?: number; attacksSent?: number }) | null>(null);
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialLevel = parseInt(queryParams.get('level') || '1', 10);
@@ -56,6 +59,7 @@ const PlayPage = () => {
     opponentNextPieceKeys, setOpponentNextPieceKeys,
     opponentHoldMino, setOpponentHoldMino,
     opponents, setOpponents,
+    myDisplayName, setMyDisplayName,
     matchResult, setMatchResult,
     pendingGarbage, setPendingGarbage, pendingGarbageRef,
     gameMode, gameModeRef, setGameMode,
@@ -64,7 +68,7 @@ const PlayPage = () => {
     finalTime, setFinalTime,
     countdown, setCountdown, countdownRef, countdownTimeoutsRef,
     dropTime, setDropTime,
-    gameOver, setGameOver,
+    gameOver, setGameOver, gameOverRef,
     score, setScore,
     level, setLevel,
     lines, setLines,
@@ -72,7 +76,7 @@ const PlayPage = () => {
     attackLines, setAttackLines
   } = useGameState();
 
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [player, updatePlayerPos, resetPlayer, playerRotate, playerHold, holdInfo, resetHold, nextPieceKeys, movePlayerHorizontal, setPlayer] = usePlayer();
 
@@ -116,7 +120,8 @@ const PlayPage = () => {
   const comboRef = useRef(-1);
   const levelPointsRef = useRef(0);
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [actionText, setActionText] = useState<string | null>(null);
+  const actionKeyRef = useRef(0);
+  const [actionText, setActionText] = useState<{ text: string; key: number } | null>(null);
 
   const lastProcessedEventIdRef = useRef(-1);
   const initializeRouteRef = useRef<(() => void) | null>(null);
@@ -155,38 +160,35 @@ const PlayPage = () => {
     let actionName = '';
     let baseScore = 0;
     
-    if (tSpinType === 't-spin') {
+    if (perfectClear) {
+      actionName = 'Perfect Clear';
+      if (lines === 1) baseScore = 800;
+      else if (lines === 2) baseScore = 1200;
+      else if (lines === 3) baseScore = 1800;
+      else if (lines === 4) baseScore = 2000;
+    } else if (tSpinType === 't-spin') {
       if (lines === 0) { actionName = 'T-Spin'; baseScore = 400; }
       else if (lines === 1) { actionName = 'T-Spin Single'; baseScore = 800; }
       else if (lines === 2) { actionName = 'T-Spin Double'; baseScore = 1200; }
       else if (lines === 3) { actionName = 'T-Spin Triple'; baseScore = 1600; }
     } else if (tSpinType === 'mini-t-spin') {
       if (lines === 0) { actionName = 'T-Spin Mini'; baseScore = 100; }
-      else if (lines === 1) { actionName = 'T-Spin Mini Single'; baseScore = 200; }
-      else if (lines === 2) { actionName = 'T-Spin Mini Double'; baseScore = 400; }
+      else if (lines === 1) { actionName = 'T-Spin Single'; baseScore = 200; }
+      else if (lines === 2) { actionName = 'T-Spin Double'; baseScore = 400; }
     } else {
-      if (lines === 1) { actionName = 'Single'; baseScore = 100; }
-      else if (lines === 2) { actionName = 'Double'; baseScore = 300; }
-      else if (lines === 3) { actionName = 'Triple'; baseScore = 500; }
+      if (lines === 1) { baseScore = 100; }
+      else if (lines === 2) { baseScore = 300; }
+      else if (lines === 3) { baseScore = 500; }
       else if (lines === 4) { actionName = 'Tetris'; baseScore = 800; }
     }
     
     if (isB2B && lines > 0) {
-      actionName = 'B2B ' + actionName;
+      if (!perfectClear) actionName = 'B2B ' + actionName;
       baseScore = Math.floor(baseScore * 1.5);
-    }
-    
-    if (perfectClear) {
-      actionName = 'Perfect Clear!' + (actionName ? '\n' + actionName : '');
-      if (lines === 1) baseScore += 800;
-      else if (lines === 2) baseScore += 1200;
-      else if (lines === 3) baseScore += 1800;
-      else if (lines === 4) baseScore += 2000;
     }
     
     let comboScore = 0;
     if (comboRef.current > 0) {
-      actionName += (actionName ? '\n' : '') + `${comboRef.current} Combo`;
       comboScore = 50 * comboRef.current * level;
     }
     
@@ -319,10 +321,12 @@ const PlayPage = () => {
            
            stageRef.current = newStage;
            setStage(newStage);
+
+
            
            remainingAttacks = [];
            
-           if (isPushedOut) {
+           if (isPushedOut || checkCollision(player, newStage, { x: 0, y: 0 })) {
              setGameOver(true);
              if (gameModeRef.current === 'ONLINE_1V1') {
                setMatchResult('LOSE');
@@ -336,20 +340,66 @@ const PlayPage = () => {
      }
 
     if (actionName && (isDifficult || comboRef.current > 0 || (tSpinType !== 'none' && lines === 0) || perfectClear)) {
-       // Clear old text immediately to restart the animation if the same text is set again
-       setActionText(null);
-       
        if (actionTimeoutRef.current) {
          clearTimeout(actionTimeoutRef.current);
        }
        
-       // Use a tiny timeout to ensure React flushes the null state and restarts the CSS animation
-       setTimeout(() => {
-         setActionText(actionName);
-         actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
-       }, 0);
+       // Increment key each time so React always remounts the element,
+       // even when the same action text repeats (e.g. consecutive Tetris).
+       actionKeyRef.current++;
+       setActionText({ text: actionName, key: actionKeyRef.current });
+       actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
     }
   }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
+
+  const lastProcessedServerEventIdRef = useRef(-1);
+
+  // Generate action text for server matches
+  useEffect(() => {
+    if (!serverMatch || !serverState?.lastLock) return;
+    const lock = serverState.lastLock;
+    if (lock.id === lastProcessedServerEventIdRef.current) return;
+    lastProcessedServerEventIdRef.current = lock.id;
+
+    const { lines, tSpinType, perfectClear } = lock;
+    const isDifficult = lines === 4 || tSpinType !== 'none';
+    
+    if (lines === 4) {
+      soundManager.playSe('tetris');
+    } else if (lines > 0) {
+      soundManager.playSe('clear');
+    }
+
+    let actionName = '';
+    
+    if (perfectClear) {
+      actionName = 'Perfect Clear';
+    } else if (tSpinType === 't-spin') {
+      if (lines === 0) actionName = 'T-Spin';
+      else if (lines === 1) actionName = 'T-Spin Single';
+      else if (lines === 2) actionName = 'T-Spin Double';
+      else if (lines === 3) actionName = 'T-Spin Triple';
+    } else if (tSpinType === 'mini-t-spin') {
+      if (lines === 0) actionName = 'T-Spin Mini';
+      else if (lines === 1) actionName = 'T-Spin Single';
+      else if (lines === 2) actionName = 'T-Spin Double';
+    } else {
+      if (lines === 4) actionName = 'Tetris';
+    }
+    
+    if (serverState.b2b > 0 && lines > 0 && isDifficult && !perfectClear) {
+      actionName = 'B2B ' + actionName;
+    }
+    
+    if (actionName) {
+       if (actionTimeoutRef.current) {
+         clearTimeout(actionTimeoutRef.current);
+       }
+       actionKeyRef.current++;
+       setActionText({ text: actionName, key: actionKeyRef.current });
+       actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
+    }
+  }, [serverMatch, serverState?.lastLock, serverState?.b2b]);
 
   // Sprint Record Submission Effect
   useEffect(() => {
@@ -431,7 +481,7 @@ const PlayPage = () => {
 
   // Start or clear lock timer based on ground collision
   useEffect(() => {
-    if (gameOver || player.collided || !dropTime) {
+    if (serverMatch || gameOver || player.collided || !dropTime) {
       clearLockTimer();
       return;
     }
@@ -472,7 +522,7 @@ const PlayPage = () => {
     } else {
       clearLockTimer();
     }
-  }, [player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
+  }, [serverMatch, player, stage, gameOver, dropTime, startLockTimer, clearLockTimer, lockPiece]);
 
 
 
@@ -532,11 +582,11 @@ const PlayPage = () => {
 
   // Automatically apply soft drop if softDrop key is held and the piece moves/rotates/spawns
   useEffect(() => {
-    if (gameOver || !dropTime) return;
+    if (serverMatch || gameOver || !dropTime) return;
     if (heldKeys.current.has(keyConfig.softDrop)) {
       softDrop();
     }
-  }, [player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
+  }, [serverMatch, player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
 
   /** Hard drop: instantly land the piece at ghost position (+2 pts/row) */
   const hardDrop = useCallback(() => {
@@ -605,6 +655,7 @@ const PlayPage = () => {
     comboRef.current = -1;
     b2bRef.current = false;
     levelPointsRef.current = 0;
+    actionKeyRef.current = 0;
     setActionText(null);
     if (nextMode !== 'ONLINE_1V1') {
       setAppState('PLAYING');
@@ -648,21 +699,41 @@ const PlayPage = () => {
     };
   }, [appState, gameOver, countdown]);
 
-  const { joinOnline, setupCustomRoomConnection, startVsAi } = useMultiplayer({
-    appState, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
+  const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying, isSpectatingRef } = useMultiplayer({
+    setServerState, setStartTime,
+    appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,
     setScore, setLevel, setLines, gameOver, setGameOver, setDropTime, startGame,
     stage, score, nextPieceKeys, holdInfo, socket, setSocket, socketRef, isWaiting, setIsWaiting, setConnectionError,
-    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents,
-    matchResult, setMatchResult, setPendingGarbage, pendingGarbageRef, token
+    setOpponentStage, setOpponentScore, setOpponentNextPieceKeys, setOpponentHoldMino, setOpponents, setMyDisplayName,
+    matchResult, setMatchResult,
+    setPendingGarbage, pendingGarbageRef, token
   });
 
-  const quitGame = useCallback(() => {
+  const quitGame = useCallback((leaveRoomEntirely: boolean = false) => {
     if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+      if (leaveRoomEntirely) {
+        // カスタムルームの場合: 部屋一覧に戻り、ルーム自体からも完全に離脱する
+        socketRef.current.emit('game:leave_custom_room');
+      } else {
+        // Return to room の場合: ゲームルームから離脱してロビーにとどまる
+        if (!gameOver && (appState === 'ONLINE_1V1' || appState === 'SPECTATING')) {
+          socketRef.current.emit('game:quit_game_room');
+        }
+      }
       setAppState('CUSTOM_ROOMS');
+    } else if (socketRef.current) {
+      // ONLINE_1V1など: game_over を送って切断
+      if (!gameOver && appState === 'ONLINE_1V1') {
+        socketRef.current.emit('game_over');
+      }
+      socketRef.current.disconnect();
+      setSocket(null);
+      navigate(`/lobby/${mode}`);
     } else {
       navigate(`/lobby/${mode}`);
     }
-  }, [mode, navigate, setAppState]);
+    setGameOver(true);
+  }, [mode, navigate, setAppState, socketRef, setSocket, gameOver, appState]);
 
   initializeRouteRef.current = () => {
     if (!mode) return;
@@ -687,29 +758,57 @@ const PlayPage = () => {
     };
   }, [mode, location.search, socketRef]);
 
+  // タブが再アクティブになった時の状態リフレッシュ
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) return; // 非アクティブ時は何もしない
+      
+      // カスタムルームの場合、サーバーから最新の状態を再取得
+      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
+        socketRef.current.emit('game:request_custom_room_state');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [mode, socketRef]);
+
 
   // ── DAS / ARR keyboard handling ─────────────────────────────────────────────────────
+  const sendInput = (event: string, count = 1) => {
+    if (appStateRef.current !== 'ONLINE_1V1' || gameOverRef.current || !serverState?.started || serverState.isGameOver) return;
+    if (serverState.pieceId === undefined || !serverState.roomId) return;
+    const target = { roomId: serverState.roomId, pieceId: serverState.pieceId };
+    for (let i = 0; i < count; ++i) socketRef.current?.emit(event, target);
+  };
+  const controls = serverMatch ? {
+    movePlayerHorizontal: (dir: number, _stage: Cell[][], instant: boolean) =>
+      sendInput(dir < 0 ? ClientEvent.MOVE_LEFT : ClientEvent.MOVE_RIGHT, instant ? 10 : 1),
+    softDrop: () => {
+      // Do not flood the server while grounded. The held-key timer uses the
+      // latest snapshot, so a successful sideways move re-enables dropping.
+      if (!serverState || serverState.activeMino.y >= serverState.ghostY) return;
+      sendInput(ClientEvent.SOFT_DROP, tuningRef.current.sdf === 0 ? 40 : Math.max(1, Math.min(40, tuningRef.current.sdf)));
+    },
+    hardDrop: () => sendInput(ClientEvent.HARD_DROP),
+    playerRotate: (_stage: Cell[][], dir: number) => sendInput(dir === 2 ? ClientEvent.ROTATE_180 : dir < 0 ? ClientEvent.ROTATE_CCW : ClientEvent.ROTATE_CW),
+    playerHold: () => sendInput(ClientEvent.HOLD),
+  } : { movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold };
   const { heldKeys } = useKeyboardControls({
     player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
     countdownRef, listeningActionRef, setKeyConfig, setListeningAction: setListeningAction as any,
-    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
+    ...controls, startGame,
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
   useTouchControls({
     stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
-    movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold,
-    startGame, quitGame: () => {
-      if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
-        setAppState('CUSTOM_ROOMS');
-      } else {
-        navigate(`/lobby/${mode}`);
-      }
-    }
+    ...controls,
+    startGame, quitGame
   });
 
   // Auto-drop (gravity)
-  useInterval(drop, dropTime);
+  useInterval(drop, serverMatch ? null : dropTime);
 
   // ── Render (original UI + score/level/lines added) ──────────────────────
 
@@ -717,22 +816,41 @@ const PlayPage = () => {
     return <CustomRoomsList socket={socket} setAppState={setAppState as any} onBack={() => navigate('/lobby/MULTI_PLAY')} />;
   }
 
+  if (appState === 'VS_SCREEN') {
+    const myId = socketRef.current?.id || null;
+    return <VsScreen opponents={opponents as any} mySocketId={myId} myUsername={myDisplayName || user?.username || null} isSpectating={isSpectatingRef.current} />;
+  }
+
   // Prevent flashing the wrong mode's board on first render before useEffect triggers
   if (appState === 'MENU') {
     return <div style={{ backgroundColor: '#111', width: '100vw', height: '100vh' }} />;
   }
 
+  const shownStage: Cell[][] = serverMatch
+    ? (serverState?.board.map(row => row.map(cell => [cell === 'GARBAGE' ? 'X' : cell ?? 0, cell === null ? 'clear' : 'merged'] as Cell)) ?? createStage(10))
+    : stage;
+  let shownPlayer = player;
+  if (serverMatch) {
+    const active = serverState?.activeMino;
+    const size = active?.type === 'I' ? 4 : active?.type === 'O' ? 2 : 3;
+    const matrix: (string | number)[][] = Array.from({ length: size }, () => Array(size).fill(0));
+    if (active && !serverState?.isGameOver)
+      for (const [r, c] of TETROMINO_SHAPES[active.type][active.rotation]) matrix[r][c] = active.type;
+    shownPlayer = { pos: { x: active?.x ?? 3, y: active?.y ?? 18 }, tetromino: matrix,
+      collided: false, rotationIndex: active?.rotation ?? 0, spawnCount: 0 };
+  }
   return (
     <TetrisUI
-      stage={stage}
-      player={player}
+      stage={shownStage}
+      player={shownPlayer}
+      ghostYOverride={serverMatch ? serverState?.ghostY : undefined}
       gameOver={gameOver}
       gameMode={gameMode}
-      score={score}
-      level={level}
-      lines={lines}
-      nextPieceKeys={nextPieceKeys}
-      holdInfo={holdInfo}
+      score={serverMatch ? serverState?.score ?? 0 : score}
+      level={serverMatch ? serverState?.level ?? 1 : level}
+      lines={serverMatch ? serverState?.lines ?? 0 : lines}
+      nextPieceKeys={serverMatch ? serverState?.nextMinos ?? [] : nextPieceKeys}
+      holdInfo={serverMatch ? { tetromino: serverState?.holdMino ?? null, hasHeld: !(serverState?.canHold ?? true) } : holdInfo}
       isWaiting={isWaiting}
       connectionError={connectionError}
       matchResult={matchResult}
@@ -741,13 +859,16 @@ const PlayPage = () => {
       opponentNextPieceKeys={opponentNextPieceKeys}
       opponentHoldMino={opponentHoldMino}
       opponents={opponents}
-      pendingGarbage={pendingGarbage}
+      pendingGarbage={serverMatch ? [serverState?.garbageQueue ?? 0] : pendingGarbage}
       actionText={actionText}
-      countdown={countdown}
+      combo={serverMatch ? serverState?.combo ?? 0 : Math.max(0, comboRef.current)}
+      lockEvent={serverMatch ? null : lockEvent}
+      serverPiecesPlaced={serverMatch ? (serverState?.piecesPlaced ?? 0) : undefined}
+      countdown={serverMatch ? (!serverState?.started && !isWaiting ? 'READY' : null) : countdown}
       finalTime={finalTime}
       elapsedTime={elapsedTime}
-      piecesPlaced={piecesPlaced}
-      attackLines={attackLines}
+      piecesPlaced={serverMatch ? serverState?.piecesPlaced ?? 0 : piecesPlaced}
+      attackLines={serverMatch ? serverState?.attacksSent ?? 0 : attackLines}
       socketRef={socketRef}
       setSocket={setSocket}
       setIsWaiting={setIsWaiting}
@@ -758,10 +879,12 @@ const PlayPage = () => {
       restartGame={() => startGame()}
       joinOnline={mode === 'VS_AI' ? () => startVsAi(aiDifficulty, aiActionDelayMs) : joinOnline}
       isCustomRoom={mode === 'CUSTOM_ROOMS'}
+      isVsAi={mode === 'VS_AI'}
       onlineRestartLabel={mode === 'VS_AI' ? 'REMATCH (ENTER)' : undefined}
-      onQuit={quitGame}
-
-      onHold={() => playerHold(stage[0].length, stage)}
+      quitGame={() => quitGame(false)}
+      onQuit={() => quitGame(true)}
+      onSpectate={customRoomIsPlaying ? () => socketRef.current?.emit('room:spectate', {}) : undefined}
+      onHold={() => controls.playerHold(stage[0].length, stage)}
     />
   );
 };

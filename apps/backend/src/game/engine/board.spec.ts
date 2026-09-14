@@ -17,7 +17,7 @@ describe('frontend-compatible board rules', () => {
       rotation: 2,
       kickIndex: 2,
     });
-    expect(tryRotate(board, 'O', 3, 0, 0, 'CW')).toBeNull();
+    expect(tryRotate(board, 'O', 3, 0, 0, 'CW')).toEqual({ x: 3, y: 0, rotation: 1, kickIndex: 0 });
   });
 
   it('requires three corners and classifies front corners like the frontend', () => {

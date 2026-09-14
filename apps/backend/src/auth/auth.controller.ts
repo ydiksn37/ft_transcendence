@@ -64,11 +64,23 @@ export class AuthController {
   @ApiOperation({ summary: '42 OAuthコールバック' })
   async ftCallback(@Req() req: Request, @Res() res: Response) {
     const oauthUser = req.user as any;
-    const result = await this.authService.loginOrRegisterOauth(oauthUser);
+    let result;
+    try {
+      result = await this.authService.loginOrRegisterOauth(oauthUser);
+    } catch (e) {
+      console.error('Error in loginOrRegisterOauth:', e);
+      throw e;
+    }
 
     const tokens = result;
 
-    let redirectUrl = `/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`;
+    let redirectUrl = '';
+    if ('require2FA' in tokens && tokens.require2FA) {
+      redirectUrl = `/auth/callback?require2FA=true&tempToken=${tokens.tempToken}&userId=${tokens.userId}`;
+    } else if ('accessToken' in tokens) {
+      redirectUrl = `/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`;
+    }
+
     if (req.query.state && typeof req.query.state === 'string') {
       redirectUrl += `&redirectTo=${encodeURIComponent(req.query.state)}`;
     }
@@ -93,5 +105,44 @@ export class AuthController {
   @ApiOperation({ summary: 'ログアウト（Refreshトークンを無効化）' })
   logout(@CurrentUser() user: any, @Body() body: { refreshToken?: string }) {
     return this.authService.logout(user.id, body.refreshToken);
+  }
+
+  // ── 2FA ──────────────────────────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/generate')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '2FAのQRコード生成' })
+  generate2FA(@CurrentUser() user: any) {
+    return this.authService.generateTwoFactorAuthSecret(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/turn-on')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '2FAを有効化する' })
+  turnOn2FA(@CurrentUser() user: any, @Body() body: { code: string }) {
+    return this.authService.turnOnTwoFactorAuth(user.id, body.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/turn-off')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '2FAを無効化する' })
+  turnOff2FA(@CurrentUser() user: any, @Body() body: { code: string }) {
+    return this.authService.turnOffTwoFactorAuth(user.id, body.code);
+  }
+
+  @Public()
+  @Post('2fa/authenticate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'ログイン時の2FAコード検証' })
+  authenticate2FA(
+    @Body() body: { userId: string; code: string; tempToken: string },
+  ) {
+    return this.authService.authenticate2FA(
+      body.userId,
+      body.code,
+      body.tempToken,
+    );
   }
 }

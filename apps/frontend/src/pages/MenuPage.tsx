@@ -465,7 +465,6 @@ const MenuPage = () => {
           <button className="mobile-menu-button" style={{ color: '#3498db', borderColor: '#3498db' }} onClick={() => handleMouseSelect(0)}>4-WIDE</button>
           <button className="mobile-menu-button" style={{ color: '#ff9800', borderColor: '#ff9800' }} onClick={() => handleMouseSelect(1)}>40 LINES</button>
           <button className="mobile-menu-button" style={{ color: '#4caf50', borderColor: '#4caf50' }} onClick={() => handleMouseSelect(2)}>MARATHON</button>
-          <button className="mobile-menu-button" style={{ color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleMouseSelect(3)}>MULTI PLAY</button>
           <button className="mobile-menu-button" style={{ color: '#9b59b6', borderColor: '#9b59b6' }} onClick={() => handleMouseSelect(4)}>CONFIG</button>
         </div>
       )}

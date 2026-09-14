@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Container, Graphics } from '@pixi/react';
 import * as PIXI from 'pixi.js';
 import Cell from './Cell';
-import type { Cell as CellType } from '../utils/gameHelpers';
+import { type Cell as CellType, checkCollision } from '../utils/gameHelpers';
 import type { Player } from '../hooks/usePlayer';
 
 type GameBoardProps = {
@@ -17,6 +17,7 @@ export const BOARD_PIXEL_HEIGHT = 22 * CELL_SIZE;
 
 const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine }) => {
   const width = stage.length > 0 ? stage[0].length * CELL_SIZE : 300;
+  const isOverlapping = stage.length > 0 ? checkCollision(player, stage, { x: 0, y: 0 }) : false;
 
   const drawBackground = useCallback((g: PIXI.Graphics) => {
     g.clear();
@@ -80,7 +81,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
       {/* 2. Ghost piece */}
       {player.tetromino.map((row, y) =>
         row.map((value, x) => {
-          if (value === 0 || player.collided || ghostY === player.pos.y) return null;
+          if (value === 0 || player.collided || isOverlapping || ghostY === player.pos.y) return null;
           return (
             <Cell
               key={`ghost-${y}-${x}`}
@@ -97,7 +98,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
       {/* 3. Active piece */}
       {player.tetromino.map((row, y) =>
         row.map((value, x) => {
-          if (value === 0 || player.collided) return null;
+          if (value === 0 || player.collided || isOverlapping) return null;
           return (
             <Cell
               key={`active-${y}-${x}`}

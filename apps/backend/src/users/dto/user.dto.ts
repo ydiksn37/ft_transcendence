@@ -34,6 +34,22 @@ export class SearchUsersDto {
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
   limit?: number;
+
+  @ApiPropertyOptional({
+    example: 'ONLINE',
+    enum: ['ALL', 'ONLINE', 'OFFLINE'],
+  })
+  @IsOptional()
+  @IsString()
+  status?: 'ALL' | 'ONLINE' | 'OFFLINE';
+
+  @ApiPropertyOptional({
+    example: 'WIN_RATE_DESC',
+    enum: ['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'],
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC';
 }
 
 export class BanUserDto {
@@ -48,4 +64,24 @@ export class BanUserDto {
   })
   @IsOptional()
   bannedUntil?: string;
+}
+
+export class SearchHistoryDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  page?: number;
+
+  @ApiPropertyOptional({ example: 20 })
+  @IsOptional()
+  limit?: number;
+
+  @ApiPropertyOptional({ example: 'ALL', enum: ['ALL', 'CLASSIC', 'MODERN'] })
+  @IsOptional()
+  @IsString()
+  mode?: 'ALL' | 'CLASSIC' | 'MODERN';
+
+  @ApiPropertyOptional({ example: 'ALL', enum: ['ALL', 'WIN', 'LOSE'] })
+  @IsOptional()
+  @IsString()
+  result?: 'ALL' | 'WIN' | 'LOSE';
 }

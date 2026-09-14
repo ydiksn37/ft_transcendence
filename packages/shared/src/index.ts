@@ -21,6 +21,8 @@ export interface ActiveMino {
 //  ゲーム状態（サーバー→クライアントへブロードキャスト）
 // ───────────────────────────────────────────────
 export interface GameState {
+  /** Server-owned active-piece identity; changes on spawn and Hold. */
+  pieceId?: number;
   board: Board;
   activeMino: ActiveMino;
   ghostY: number;            // ゴーストピースのY位置
@@ -36,6 +38,18 @@ export interface GameState {
   isGameOver: boolean;
   apm: number;               // Attacks Per Minute
   pps: number;               // Pieces Per Second
+  lastLock?: {
+    id: number;
+    lines: number;
+    tSpinType: 'none' | 't-spin' | 'mini-t-spin';
+    perfectClear: boolean;
+  };
+}
+
+/** Human multiplayer inputs target a specific room and active piece. */
+export interface GameInput {
+  roomId: string;
+  pieceId: number;
 }
 
 /** 相手の盤面情報（観戦者含む全員に配信） */

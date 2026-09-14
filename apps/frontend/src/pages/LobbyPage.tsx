@@ -96,6 +96,7 @@ export default function LobbyPage() {
 
       if (e.code === 'Enter') {
         if (mode === 'CONFIG') return;
+        if (mode === 'MULTI_PLAY' && selectedIndex === 0) return;
         
         if (selectedIndex === 0) {
           navigate(`/play/${mode}?level=${startLevel}`);

@@ -153,13 +153,17 @@ export function tryRotate(
   currentRotation: 0 | 1 | 2 | 3,
   direction: 'CW' | 'CCW' | '180',
 ): { x: number; y: number; rotation: 0 | 1 | 2 | 3; kickIndex: number } | null {
-  if (type === 'O') return null;
   let newRotation: 0 | 1 | 2 | 3;
   if (direction === 'CW')
     newRotation = ((currentRotation + 1) % 4) as 0 | 1 | 2 | 3;
   else if (direction === 'CCW')
     newRotation = ((currentRotation + 3) % 4) as 0 | 1 | 2 | 3;
   else newRotation = ((currentRotation + 2) % 4) as 0 | 1 | 2 | 3;
+
+  if (type === 'O') {
+    // O piece doesn't change shape or kick, but the rotation itself is successful
+    return { x, y, rotation: newRotation, kickIndex: 0 };
+  }
 
   const kickTable = type === 'I' ? WALL_KICKS_I : WALL_KICKS_NORMAL;
   const kickKey = `${currentRotation}->${newRotation}`;
