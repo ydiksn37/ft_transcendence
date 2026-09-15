@@ -7,7 +7,10 @@ FROM ai-toolchain AS ai-builder
 WORKDIR /app
 COPY apps/ai-agent ./apps/ai-agent
 RUN cmake -S apps/ai-agent -B build -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build --parallel --target ai_agent
+      >/tmp/ai-configure.log 2>&1 \
+    && cmake --build build --parallel --target ai_agent \
+      >/tmp/ai-build.log 2>&1 \
+    || { status=$?; cat /tmp/ai-configure.log /tmp/ai-build.log; exit $status; }
 
 # ─── 開発ステージ ─────────────────────────────
 FROM node:22-alpine AS development
@@ -26,7 +29,7 @@ RUN apk add --no-cache libstdc++
 
 # Prisma クライアントを生成
 COPY apps/backend/prisma ./apps/backend/prisma/
-RUN cd apps/backend && npx prisma generate
+RUN npm run db:generate --workspace=@transcendence/backend
 
 # ソースコード全体をコピー
 COPY . .

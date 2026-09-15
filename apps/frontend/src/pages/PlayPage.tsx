@@ -20,8 +20,9 @@ import { isAiDifficulty, ClientEvent, TETROMINO_SHAPES, type GameState } from '@
 
 /** Drop interval for a given level using standard Guideline formula */
 const levelDropTime = (level: number) => {
-  const base = Math.max(0, 0.8 - ((level - 1) * 0.007));
-  return Math.pow(base, level - 1) * 1000;
+  const speedLevel = Math.max(1, level);
+  const base = Math.max(0, 0.8 - ((speedLevel - 1) * 0.007));
+  return Math.pow(base, speedLevel - 1) * 1000;
 };
 
 const formatTime = (ms: number) => {
@@ -187,12 +188,13 @@ const PlayPage = () => {
       baseScore = Math.floor(baseScore * 1.5);
     }
     
+    const scoreLevel = Math.max(1, level);
     let comboScore = 0;
     if (comboRef.current > 0) {
-      comboScore = 50 * comboRef.current * level;
+      comboScore = 50 * comboRef.current * scoreLevel;
     }
     
-    const totalScore = (baseScore * level) + comboScore;
+    const totalScore = (baseScore * scoreLevel) + comboScore;
     
     if (totalScore > 0) {
        setScore(prev => prev + totalScore);
@@ -218,7 +220,11 @@ const PlayPage = () => {
     }
     levelPointsRef.current += levelPts;
 
-    const calculatedLevel = Math.max(1, Math.floor((1 + Math.sqrt(1 + 8 * (levelPointsRef.current / 5))) / 2));
+    const calculatedLevel = Math.max(
+      0,
+      Math.floor((1 + Math.sqrt(1 + 8 * (levelPointsRef.current / 5))) / 2)
+        - (initialLevel === 0 ? 1 : 0),
+    );
     
     setLevel(prevLevel => {
        if (calculatedLevel > prevLevel) {

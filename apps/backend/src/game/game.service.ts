@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AiDifficulty } from '@transcendence/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import type { GameMode } from '@prisma/client';
 
 @Injectable()
 export class GameService {
@@ -29,7 +30,7 @@ export class GameService {
     garbageSent1to2: number;
     garbageSent2to1: number;
     durationSeconds: number;
-    gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT';
+    gameMode: GameMode;
     tournamentMatchId?: string;
   }) {
     const result = await this.prisma.gameResult.create({

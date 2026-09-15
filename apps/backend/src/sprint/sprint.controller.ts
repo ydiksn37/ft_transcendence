@@ -19,6 +19,7 @@ import {
 // Assuming standard Passport JWT Guard setup in this project
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from '../auth/decorators/public.decorator';
+import type { AuthenticatedRequest } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Sprint (40 Lines)')
 @Controller('sprint')
@@ -30,7 +31,10 @@ export class SprintController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '40 Linesの記録を保存' })
   @ApiResponse({ status: 201, description: '記録が保存されました。' })
-  async saveRecord(@Body() dto: SaveSprintDto, @Request() req: any) {
+  async saveRecord(
+    @Body() dto: SaveSprintDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
     // req.user へのアクセスは、プロジェクトの AuthStrategy の payload 設計に依存します。
     // 一般的に req.user.id に userId が入ります。
     return this.sprintService.saveRecord(req.user.id, dto);
@@ -52,7 +56,7 @@ export class SprintController {
     status: 200,
     description: '個人のランキングデータを返します。',
   })
-  async getMyRecords(@Request() req: any) {
+  async getMyRecords(@Request() req: AuthenticatedRequest) {
     return this.sprintService.getMyRecords(req.user.id, 10);
   }
 }

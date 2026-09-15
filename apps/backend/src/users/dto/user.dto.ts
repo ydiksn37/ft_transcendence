@@ -8,7 +8,9 @@ import {
   IsNotEmpty,
   IsObject,
   IsOptional,
+  IsIn,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -196,14 +198,22 @@ export class SearchUsersDto {
   @ApiPropertyOptional({ example: 'player' })
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   q?: string;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
 
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
   limit?: number;
 
   @ApiPropertyOptional({
@@ -211,7 +221,7 @@ export class SearchUsersDto {
     enum: ['ALL', 'ONLINE', 'OFFLINE'],
   })
   @IsOptional()
-  @IsString()
+  @IsIn(['ALL', 'ONLINE', 'OFFLINE'])
   status?: 'ALL' | 'ONLINE' | 'OFFLINE';
 
   @ApiPropertyOptional({
@@ -219,7 +229,7 @@ export class SearchUsersDto {
     enum: ['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'],
   })
   @IsOptional()
-  @IsString()
+  @IsIn(['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'])
   sortBy?: 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC';
 }
 
@@ -278,19 +288,76 @@ export class AdminUsersQueryDto {
 export class SearchHistoryDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
 
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
   limit?: number;
 
-  @ApiPropertyOptional({ example: 'ALL', enum: ['ALL', 'CLASSIC', 'MODERN'] })
+  @ApiPropertyOptional({
+    example: 'ALL',
+    enum: ['ALL', 'VERSUS', 'AI', 'TOURNAMENT', 'LINES_40', 'MARATHON'],
+  })
   @IsOptional()
-  @IsString()
-  mode?: 'ALL' | 'CLASSIC' | 'MODERN';
+  @IsIn(['ALL', 'VERSUS', 'AI', 'TOURNAMENT', 'LINES_40', 'MARATHON'])
+  mode?: 'ALL' | 'VERSUS' | 'AI' | 'TOURNAMENT' | 'LINES_40' | 'MARATHON';
 
   @ApiPropertyOptional({ example: 'ALL', enum: ['ALL', 'WIN', 'LOSE'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['ALL', 'WIN', 'LOSE'])
   result?: 'ALL' | 'WIN' | 'LOSE';
+}
+
+export class FriendRequestDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  addresseeId?: string;
+
+  @ApiPropertyOptional({ example: '@player' })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(21)
+  username?: string;
+}
+
+export class RespondFriendRequestDto {
+  @ApiProperty()
+  @IsBoolean()
+  accept!: boolean;
+}
+
+export class RequestAccountDeletionDto {
+  @ApiPropertyOptional({
+    description: 'Password accounts must provide their current password',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  password?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required when two-factor authentication is enabled',
+  })
+  @IsOptional()
+  @Matches(/^\d{6}$/)
+  twoFactorCode?: string;
+}
+
+export class ConfirmAccountDeletionDto {
+  @ApiProperty({ example: 'DELETE MY ACCOUNT' })
+  @IsIn(['DELETE MY ACCOUNT'])
+  confirmation!: 'DELETE MY ACCOUNT';
+
+  @ApiProperty({ example: '123456' })
+  @Matches(/^\d{6}$/)
+  code!: string;
 }

@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateTournamentDto } from './dto/tournament.dto';
 
 @Injectable()
 export class TournamentService {
@@ -13,15 +14,13 @@ export class TournamentService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async createTournament(
-    creatorId: string,
-    data: {
-      name: string;
-      description?: string;
-      maxPlayers: 4 | 8 | 16;
-      registrationDeadline?: string;
-    },
-  ) {
+  async createTournament(creatorId: string, data: CreateTournamentDto) {
+    if (
+      data.registrationDeadline &&
+      new Date(data.registrationDeadline) <= new Date()
+    ) {
+      throw new BadRequestException('登録期限は未来の日時にしてください');
+    }
     return this.prisma.tournament.create({
       data: {
         name: data.name,

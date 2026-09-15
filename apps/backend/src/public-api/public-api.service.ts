@@ -1,17 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { GameMode, Rank, TournamentStatus } from '@prisma/client';
 
 @Injectable()
 export class PublicApiService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ── 1. グローバルランキング ───────────────────────────────
-  async getLeaderboard(page = 1, limit = 20, rankFilter?: string) {
+  async getLeaderboard(page = 1, limit = 20, rankFilter?: Rank) {
     const skip = (page - 1) * Math.min(limit, 100);
 
     const where = {
       deletedAt: null,
-      ...(rankFilter ? { stats: { rank: rankFilter as any } } : {}),
+      ...(rankFilter ? { stats: { rank: rankFilter } } : {}),
     };
 
     const [users, total] = await Promise.all([
@@ -97,7 +98,12 @@ export class PublicApiService {
   }
 
   // ── 4. 対戦履歴 ───────────────────────────────────────────
-  async getUserHistory(username: string, page = 1, limit = 20, mode?: string) {
+  async getUserHistory(
+    username: string,
+    page = 1,
+    limit = 20,
+    mode?: GameMode,
+  ) {
     const user = await this.prisma.user.findFirst({
       where: { username, deletedAt: null },
       select: { id: true },
@@ -107,7 +113,7 @@ export class PublicApiService {
     const skip = (page - 1) * Math.min(limit, 50);
     const where = {
       OR: [{ player1Id: user.id }, { player2Id: user.id }],
-      ...(mode ? { gameMode: mode as any } : {}),
+      ...(mode ? { gameMode: mode } : {}),
     };
 
     const [results, total] = await Promise.all([
@@ -151,9 +157,9 @@ export class PublicApiService {
   }
 
   // ── 5. トーナメント一覧 ───────────────────────────────────
-  async getTournaments(page = 1, limit = 20, status?: string) {
+  async getTournaments(page = 1, limit = 20, status?: TournamentStatus) {
     const skip = (page - 1) * Math.min(limit, 50);
-    const where = status ? { status: status as any } : {};
+    const where = status ? { status } : {};
 
     const [tournaments, total] = await Promise.all([
       this.prisma.tournament.findMany({

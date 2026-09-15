@@ -11,7 +11,7 @@
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "db:migrate": "turbo db:migrate",
-    "db:generate": "turbo db:generate",
+    "db:generate": "npm run db:generate --workspace=@transcendence/backend",
     "db:seed": "turbo db:seed",
     "test": "turbo test",
     "test:e2e": "turbo test:e2e",

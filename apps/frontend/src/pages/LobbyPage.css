@@ -259,7 +259,7 @@
 .ai-speed-tetromino-slider {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(24, 1fr);
+  grid-template-columns: repeat(20, 1fr);
   width: 100%;
   height: 20px;
   margin: 5px 0 4px;

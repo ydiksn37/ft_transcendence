@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +21,10 @@ export class ApiKeyService {
     rateLimit = 1000,
     expiresAt?: Date,
   ) {
+    if (expiresAt && expiresAt <= new Date()) {
+      throw new BadRequestException('expiresAtは未来の日時にしてください');
+    }
+
     // 安全なランダムキーを生成 (32バイト = 64文字の hex)
     const rawKey = crypto.randomBytes(32).toString('hex');
     const prefix = rawKey.substring(0, 8);

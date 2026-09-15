@@ -19,7 +19,7 @@ export default function LobbyPage() {
   const navigate = useNavigate();
   const { token, user, logout } = useAuth();
   
-  const [startLevel, setStartLevel] = useState(1);
+  const [startLevel, setStartLevel] = useState(0);
   const [aiSpeedPercent, setAiSpeedPercent] = useState(80);
   const [selectedAiDifficulty, setSelectedAiDifficulty] = useState<AiDifficulty | null>(null);
   const aiActionDelayMs = Math.round(
@@ -61,6 +61,12 @@ export default function LobbyPage() {
         if (e.code === 'Escape' || e.code === keyConfig.quitToMenu) {
           e.preventDefault();
           setSelectedAiDifficulty(null);
+        } else if (e.code === 'ArrowLeft') {
+          e.preventDefault();
+          setAiSpeedPercent(prev => Math.max(0, prev - 5));
+        } else if (e.code === 'ArrowRight') {
+          e.preventDefault();
+          setAiSpeedPercent(prev => Math.min(100, prev + 5));
         }
         return;
       }
@@ -89,7 +95,7 @@ export default function LobbyPage() {
           setSelectedIndex(prev => prev - 1);
         } else if (selectedIndex === 0 && mode === 'MARATHON') {
           e.preventDefault();
-          setStartLevel(prev => prev === 1 ? 1 : (prev === 5 ? 1 : prev - 5));
+          setStartLevel(prev => Math.max(0, prev - 5));
         }
       }
 
@@ -99,7 +105,7 @@ export default function LobbyPage() {
           setSelectedIndex(prev => prev + 1);
         } else if (selectedIndex === 0 && mode === 'MARATHON') {
           e.preventDefault();
-          setStartLevel(prev => prev === 1 ? 5 : Math.min(100, prev + 5));
+          setStartLevel(prev => Math.min(100, prev + 5));
         }
       }
 
@@ -235,10 +241,10 @@ export default function LobbyPage() {
         </h1>
 
         {mode === 'MARATHON' && (() => {
-          const index = startLevel === 1 ? 0 : startLevel / 5;
-          const blocksCount = 4 + index;
+          const index = startLevel / 5;
+          const blocksCount = index;
           const blockSize = isMobile ? 12 : 20;
-          const trackWidth = blockSize * 24;
+          const trackWidth = blockSize * 20;
           return (
             <div style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '16px', color: '#ccc' }}>STARTING LEVEL</span>
@@ -253,7 +259,7 @@ export default function LobbyPage() {
                   let newIndex = Math.round((x / trackWidth) * 20);
                   if (newIndex < 0) newIndex = 0;
                   if (newIndex > 20) newIndex = 20;
-                  setStartLevel(newIndex === 0 ? 1 : newIndex * 5);
+                  setStartLevel(newIndex * 5);
                 }}
                 onPointerMove={(e) => {
                   if (e.buttons > 0) {
@@ -262,7 +268,7 @@ export default function LobbyPage() {
                     let newIndex = Math.round((x / trackWidth) * 20);
                     if (newIndex < 0) newIndex = 0;
                     if (newIndex > 20) newIndex = 20;
-                    setStartLevel(newIndex === 0 ? 1 : newIndex * 5);
+                    setStartLevel(newIndex * 5);
                   }
                 }}
                 onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
@@ -456,7 +462,7 @@ export default function LobbyPage() {
               </div>
               <div className="ai-speed-tetromino-slider">
                 <div className="ai-speed-slider-track" aria-hidden="true" />
-                {Array.from({ length: 4 + aiSpeedPercent / 5 }).map((_, index) => (
+                {Array.from({ length: aiSpeedPercent / 5 }).map((_, index) => (
                   <div className="ai-speed-slider-block" key={index} aria-hidden="true" />
                 ))}
                 <input

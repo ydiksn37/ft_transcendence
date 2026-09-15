@@ -20,7 +20,7 @@ export default function Dashboard() {
 	const [stats, setStats] = useState<UserStats | null>(null);
 	const [username, setUsername] = useState<string>("");
 	const [games, setGames] = useState<GameRecordView[]>([]);
-	const [historyMode, setHistoryMode] = useState<'ALL' | 'CLASSIC' | 'MODERN'>('ALL');
+	const [historyMode, setHistoryMode] = useState<'ALL' | 'VERSUS' | 'AI' | 'TOURNAMENT' | 'LINES_40' | 'MARATHON'>('ALL');
 	const [historyResult, setHistoryResult] = useState<'ALL' | 'WIN' | 'LOSE'>('ALL');
 	const [loading, setLoading] = useState(true);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
@@ -207,8 +207,11 @@ export default function Dashboard() {
 							style={{ padding: '10px', backgroundColor: '#000', color: '#fff', border: '2px solid #333', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}
 						>
 							<option value="ALL">ALL MODES</option>
-							<option value="CLASSIC">CLASSIC</option>
-							<option value="MODERN">MODERN</option>
+							<option value="VERSUS">VERSUS</option>
+							<option value="AI">AI</option>
+							<option value="TOURNAMENT">TOURNAMENT</option>
+							<option value="LINES_40">40 LINES</option>
+							<option value="MARATHON">MARATHON</option>
 						</select>
 						<select 
 							value={historyResult} 

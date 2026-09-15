@@ -9,6 +9,7 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
 
 ### Prerequisites
 - **Docker** and **Docker Compose**
+- **Node.js 20 or later** and **npm 10 or later**
 - Web Browser (Latest stable version of Google Chrome recommended)
 - Port 80, 443, and 3000 available on your machine.
 
@@ -23,10 +24,15 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
    ```bash
    cp .env.example .env
    ```
-3. Run npm install:
+   Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and
+   `SMTP_FROM`; account deletion uses email confirmation and cannot be
+   requested without a working SMTP transport.
+3. Install dependencies and generate Prisma Client:
    ```bash
    make install
    ```
+   `make install` runs `prisma generate` from
+   `apps/backend/prisma/schema.prisma` automatically.
 4. Start the application using Docker Compose:
    ```bash
    make up
@@ -35,6 +41,19 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
 5. Access the application:
    - Open your browser and navigate to `https://localhost` (or the appropriate domain/IP).
    - *Note: Since we use self-signed certificates for HTTPS, you may need to bypass the browser security warning.*
+
+### Prisma Client generation
+
+Run the following command whenever `apps/backend/prisma/schema.prisma` changes or
+after switching to a branch with schema changes:
+
+```bash
+make generate
+```
+
+Backend builds and type checks also regenerate Prisma Client automatically. The
+backend Docker image uses the same npm script, and the development container
+regenerates the client before applying the schema and starting NestJS.
 
 ## Technical Stack
 - **Frontend Framework:** React (Vite) + TypeScript
@@ -111,7 +130,7 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 ### Data and Analytics
 20. **Data Export/Import (Minor - 1pt)**: Export and import user settings and stats via JSON.
 21. **Advanced Analytics Dashboard (Major - 2pts)**: Interactive charts and graphs for user performance.
-22. **GDPR Compliance (Minor - 1pt)**: Data deletion with confirmation capabilities.
+22. **GDPR Compliance (Minor - 1pt)**: Password/2FA reauthentication, an emailed confirmation code, permanent personal-data deletion, anonymized match retention, and a completion email.
 
 ### Cybersecurity
 23. **WAF and HashiCorp Vault (Major - 2pts)**: Nginx with ModSecurity and Vault for secret management.

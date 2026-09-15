@@ -21,6 +21,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { SprintModule } from './sprint/sprint.module';
 import { ChatModule } from './chat/chat.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ChatModule } from './chat/chat.module';
     // ── コアモジュール ────────────────────────────────────────
     PrismaModule,
     RedisModule,
+    MailModule,
 
     // ── 機能モジュール ────────────────────────────────────────
     AuthModule,

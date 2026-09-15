@@ -57,6 +57,7 @@ studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
 
 install: ## 依存パッケージをすべてインストールする
 	npm install
+	npm run db:generate
 	npm run build --workspace=@transcendence/shared
 
 # --- C++ AI ---
@@ -98,16 +99,21 @@ shared-build: ## 開発コンテナへmountする共有Socket型をビルドす�
 	npm run build --workspace=@transcendence/shared
 
 ai-build: ## C++ AIをReleaseモードで設定・ビルドする
-	cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
-	cmake --build $(AI_BUILD_DIR) --parallel
+	@mkdir -p $(AI_BUILD_DIR)
+	@cmake -S apps/ai-agent -B $(AI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release >$(AI_BUILD_DIR)/configure.log 2>&1 || { status=$$?; cat $(AI_BUILD_DIR)/configure.log; exit $$status; }
+	@cmake --build $(AI_BUILD_DIR) --parallel >$(AI_BUILD_DIR)/build.log 2>&1 || { status=$$?; cat $(AI_BUILD_DIR)/build.log; exit $$status; }
+	@echo "C++ AI build complete: $(AI_BUILD_DIR)"
 
 ai-web-toolchain: ## Web用C++コンパイライメージを初回だけ作成する
-	@docker image inspect $(AI_COMPILER_IMAGE) >/dev/null 2>&1 || \
-		docker compose --profile tools build ai-compiler
+	@mkdir -p $(AI_WEB_BUILD_DIR)
+	@if ! docker image inspect $(AI_COMPILER_IMAGE) >/dev/null 2>&1; then \
+		docker compose --profile tools build ai-compiler >$(AI_WEB_BUILD_DIR)/toolchain.log 2>&1 || { status=$$?; cat $(AI_WEB_BUILD_DIR)/toolchain.log; exit $$status; }; \
+	fi
 
 ai-web-build: ai-web-toolchain ## Web用C++ AIだけを再コンパイルする（イメージ再ビルドなし）
 	@mkdir -p $(AI_WEB_BUILD_DIR)
-	docker compose --profile tools run --rm --no-deps ai-compiler
+	@docker compose --profile tools run --rm --no-deps ai-compiler >$(AI_WEB_BUILD_DIR)/docker.log 2>&1 || { status=$$?; cat $(AI_WEB_BUILD_DIR)/docker.log; exit $$status; }
+	@echo "C++ web AI build complete: $(AI_WEB_BUILD_DIR)"
 
 ai-web-restart: ai-web-build ## Web用C++ AIを再コンパイルし、VS AI用常駐プロセスも更新する
 	docker compose restart backend
@@ -161,16 +167,19 @@ ai-versus: ai-build ## TSルールでC++ AI同士を対戦 (例: make ai-versus 
 CLI_BUILD_DIR := build/cli
 
 cli-build: ## C++端末版テトリスをReleaseモードでビルドする
-	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-	cmake --build $(CLI_BUILD_DIR) --parallel
+	@mkdir -p $(CLI_BUILD_DIR)
+	@cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF >$(CLI_BUILD_DIR)/configure.log 2>&1 || { status=$$?; cat $(CLI_BUILD_DIR)/configure.log; exit $$status; }
+	@cmake --build $(CLI_BUILD_DIR) --parallel >$(CLI_BUILD_DIR)/build.log 2>&1 || { status=$$?; cat $(CLI_BUILD_DIR)/build.log; exit $$status; }
+	@echo "C++ CLI build complete: $(CLI_BUILD_DIR)"
 
 cli: cli-build ## 端末版テトリスを起動する
 	./$(CLI_BUILD_DIR)/tetris_cli
 
 cli-test: ## C++端末版のルールテストを実行する
-	cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-	cmake --build $(CLI_BUILD_DIR) --parallel
-	ctest --test-dir $(CLI_BUILD_DIR) --output-on-failure
+	@mkdir -p $(CLI_BUILD_DIR)
+	@cmake -S cli -B $(CLI_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON >$(CLI_BUILD_DIR)/configure.log 2>&1 || { status=$$?; cat $(CLI_BUILD_DIR)/configure.log; exit $$status; }
+	@cmake --build $(CLI_BUILD_DIR) --parallel >$(CLI_BUILD_DIR)/build.log 2>&1 || { status=$$?; cat $(CLI_BUILD_DIR)/build.log; exit $$status; }
+	@ctest --test-dir $(CLI_BUILD_DIR) --output-on-failure
 
 # --- テスト ---
 test: ## 全ての単体テストを実行する

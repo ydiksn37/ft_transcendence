@@ -11,6 +11,9 @@ import {
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
+  ParseFilePipeBuilder,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -30,10 +33,15 @@ import {
   UpdateGameSettingsDto,
   UpdateUserRoleDto,
   AdminUsersQueryDto,
+  FriendRequestDto,
+  RespondFriendRequestDto,
+  RequestAccountDeletionDto,
+  ConfirmAccountDeletionDto,
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Users')
@@ -45,26 +53,42 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: '自分のプロフィール取得' })
-  getMe(@CurrentUser() user: any) {
+  getMe(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getMe(user.id);
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'プロフィール更新' })
-  updateMe(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
+  updateMe(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateUserDto) {
     return this.usersService.updateMe(user.id, dto);
   }
 
   @Patch('me/settings')
   @ApiOperation({ summary: 'ゲーム設定を更新する' })
-  updateSettings(@CurrentUser() user: any, @Body() dto: UpdateGameSettingsDto) {
+  updateSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateGameSettingsDto,
+  ) {
     return this.usersService.updateGameSettings(user.id, dto);
   }
 
+  @Post('me/deletion-request')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '本人確認後、アカウント削除確認コードをメール送信' })
+  requestAccountDeletion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RequestAccountDeletionDto,
+  ) {
+    return this.usersService.requestAccountDeletion(user.id, dto);
+  }
+
   @Delete('me')
-  @ApiOperation({ summary: 'アカウント削除（ソフトデリート）' })
-  deleteMe(@CurrentUser() user: any) {
-    return this.usersService.deleteMe(user.id);
+  @ApiOperation({ summary: '確認コードを検証してアカウントを完全削除' })
+  deleteMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ConfirmAccountDeletionDto,
+  ) {
+    return this.usersService.deleteMe(user.id, dto);
   }
 
   @Post('me/avatar')
@@ -92,11 +116,22 @@ export class UsersController {
     }),
   )
   uploadAvatar(
-    @CurrentUser() user: any,
-    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthenticatedUser,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /^image\/(jpeg|png|gif|webp)$/ })
+        .addMaxSizeValidator({ maxSize: 2 * 1024 * 1024 })
+        .build({ fileIsRequired: true }),
+    )
+    file: Express.Multer.File,
   ) {
     const avatarUrl = `/uploads/${file.filename}`;
-    return this.usersService.updateAvatar(user.id, avatarUrl);
+    return this.usersService.updateAvatar(user.id, avatarUrl, {
+      filename: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+    });
   }
 
   @Get('search')
@@ -107,15 +142,15 @@ export class UsersController {
 
   @Get('friends')
   @ApiOperation({ summary: 'フレンド一覧取得' })
-  getFriends(@CurrentUser() user: any) {
+  getFriends(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getFriends(user.id);
   }
 
   @Post('friends/request')
   @ApiOperation({ summary: 'フレンド申請を送る' })
   sendFriendRequest(
-    @CurrentUser() user: any,
-    @Body() body: { addresseeId?: string; username?: string },
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: FriendRequestDto,
   ) {
     return this.usersService.sendFriendRequest(user.id, body);
   }
@@ -123,58 +158,73 @@ export class UsersController {
   @Patch('friends/:id')
   @ApiOperation({ summary: 'フレンド申請を承認/拒否' })
   respondFriendRequest(
-    @CurrentUser() user: any,
-    @Param('id') id: string,
-    @Body() body: { accept: boolean },
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RespondFriendRequestDto,
   ) {
     return this.usersService.respondFriendRequest(user.id, id, body.accept);
   }
 
   @Delete('friends/:id')
   @ApiOperation({ summary: 'フレンドを削除' })
-  removeFriend(@CurrentUser() user: any, @Param('id') id: string) {
+  removeFriend(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.usersService.removeFriend(user.id, id);
   }
 
   @Post('block/:id')
   @ApiOperation({ summary: 'ユーザーをブロック' })
-  blockUser(@CurrentUser() user: any, @Param('id') id: string) {
+  blockUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.usersService.blockUser(user.id, id);
   }
 
   @Delete('block/:id')
   @ApiOperation({ summary: 'ブロックを解除' })
-  unblockUser(@CurrentUser() user: any, @Param('id') id: string) {
+  unblockUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.usersService.unblockUser(user.id, id);
   }
 
   @Get('me/stats')
   @ApiOperation({ summary: '自分のゲーム統計取得（APM/PPS/勝率等）' })
-  getMyStats(@CurrentUser() user: any) {
+  getMyStats(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getUserStats(user.id);
   }
 
   @Get('me/history')
   @ApiOperation({ summary: '自分の対戦履歴取得' })
-  getMyHistory(@CurrentUser() user: any, @Query() dto: SearchHistoryDto) {
+  getMyHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() dto: SearchHistoryDto,
+  ) {
     return this.usersService.getGameHistory(user.id, dto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'ユーザープロフィール取得' })
-  getUserById(@Param('id') id: string) {
+  getUserById(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.getUserById(id);
   }
 
   @Get(':id/stats')
   @ApiOperation({ summary: 'ゲーム統計取得（APM/PPS/勝率等）' })
-  getUserStats(@Param('id') id: string) {
+  getUserStats(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.getUserStats(id);
   }
 
   @Get(':id/history')
   @ApiOperation({ summary: '対戦履歴取得' })
-  getGameHistory(@Param('id') id: string, @Query() dto: SearchHistoryDto) {
+  getGameHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() dto: SearchHistoryDto,
+  ) {
     return this.usersService.getGameHistory(id, dto);
   }
 }

@@ -21,9 +21,24 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import {
+  AuthenticateTwoFactorDto,
+  LogoutDto,
+  TwoFactorCodeDto,
+} from './dto/auth-action.dto';
 import { FtOauthGuard, JwtAuthGuard } from './guards/auth.guard';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
+import type { AuthenticatedUser } from './decorators/current-user.decorator';
+
+interface OAuthUserProfile {
+  oauthId: string;
+  oauthProvider: string;
+  username: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+}
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -63,7 +78,7 @@ export class AuthController {
   @Get('42/callback')
   @ApiOperation({ summary: '42 OAuthコールバック' })
   async ftCallback(@Req() req: Request, @Res() res: Response) {
-    const oauthUser = req.user as any;
+    const oauthUser = req.user as OAuthUserProfile;
     let result;
     try {
       result = await this.authService.loginOrRegisterOauth(oauthUser);
@@ -103,7 +118,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'ログアウト（Refreshトークンを無効化）' })
-  logout(@CurrentUser() user: any, @Body() body: { refreshToken?: string }) {
+  logout(@CurrentUser() user: AuthenticatedUser, @Body() body: LogoutDto) {
     return this.authService.logout(user.id, body.refreshToken);
   }
 
@@ -112,7 +127,7 @@ export class AuthController {
   @Post('2fa/generate')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '2FAのQRコード生成' })
-  generate2FA(@CurrentUser() user: any) {
+  generate2FA(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.generateTwoFactorAuthSecret(user.id);
   }
 
@@ -120,7 +135,10 @@ export class AuthController {
   @Post('2fa/turn-on')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '2FAを有効化する' })
-  turnOn2FA(@CurrentUser() user: any, @Body() body: { code: string }) {
+  turnOn2FA(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: TwoFactorCodeDto,
+  ) {
     return this.authService.turnOnTwoFactorAuth(user.id, body.code);
   }
 
@@ -128,7 +146,10 @@ export class AuthController {
   @Post('2fa/turn-off')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '2FAを無効化する' })
-  turnOff2FA(@CurrentUser() user: any, @Body() body: { code: string }) {
+  turnOff2FA(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: TwoFactorCodeDto,
+  ) {
     return this.authService.turnOffTwoFactorAuth(user.id, body.code);
   }
 
@@ -136,9 +157,7 @@ export class AuthController {
   @Post('2fa/authenticate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'ログイン時の2FAコード検証' })
-  authenticate2FA(
-    @Body() body: { userId: string; code: string; tempToken: string },
-  ) {
+  authenticate2FA(@Body() body: AuthenticateTwoFactorDto) {
     return this.authService.authenticate2FA(
       body.userId,
       body.code,

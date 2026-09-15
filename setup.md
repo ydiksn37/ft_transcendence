@@ -20,7 +20,21 @@ cp .env.example .env
 ```bash
 make install
 ```
+`make install` は依存関係のインストール後、
+`apps/backend/prisma/schema.prisma` からPrisma Clientも自動生成します。
 *(※ `package.json` の `overrides` 設定により、React 18環境が強制されるようになっています)*
+
+### Prisma schemaを変更した場合
+
+schemaを編集したとき、またはschema変更を含むブランチへ切り替えたときは、
+型チェックやバックエンド起動の前に次を実行してください。
+
+```bash
+make generate
+```
+
+バックエンドのbuild・type-check・Docker起動時にも、同じ
+`apps/backend` の `db:generate` npm scriptが自動実行されます。
 
 ## 4. 開発環境の起動
 以下のコマンド一つで、インフラ環境（DB等）とアプリケーション（フロントエンド・バックエンド）の全コンテナが起動し、データベースのマイグレーションも自動で行われます。

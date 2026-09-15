@@ -242,21 +242,61 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = async () => {
-    const confirmMessage = "DANGER: Are you absolutely sure you want to delete your account?\nThis action cannot be undone.";
-    if (!window.confirm(confirmMessage)) return;
-    
+    const password = window.prompt(
+      'Enter your current password. Leave it blank for an OAuth-only account.'
+    );
+    if (password === null) return;
+
+    let twoFactorCode: string | undefined;
+    if (is2FAEnabled) {
+      const enteredCode = window.prompt('Enter your current 6-digit 2FA code.');
+      if (enteredCode === null) return;
+      twoFactorCode = enteredCode;
+    }
+
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/users/me', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+      const requestRes = await fetch('/api/users/me/deletion-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...(password ? { password } : {}),
+          ...(twoFactorCode ? { twoFactorCode } : {})
+        })
       });
-      if (res.ok) {
+      if (!requestRes.ok) {
+        const error = await requestRes.json().catch(() => null);
+        alert(error?.message || 'Failed to request account deletion.');
+        return;
+      }
+
+      const code = window.prompt(
+        'A 6-digit deletion code was sent to your email. Enter it here.'
+      );
+      if (code === null) return;
+      const confirmation = window.prompt(
+        'This permanently deletes your account and personal data. Type DELETE MY ACCOUNT to continue.'
+      );
+      if (confirmation === null) return;
+
+      const deleteRes = await fetch('/api/users/me', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ code, confirmation })
+      });
+      if (deleteRes.ok) {
         alert('Account successfully deleted.');
         logout();
         navigate('/');
       } else {
-        alert('Failed to delete account.');
+        const error = await deleteRes.json().catch(() => null);
+        alert(error?.message || 'Failed to delete account.');
       }
     } catch (e) {
       console.error(e);

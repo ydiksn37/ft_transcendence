@@ -8,6 +8,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { AnalyticsQueryDto } from './dto/analytics.dto';
+import type { AuthenticatedRequest } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Analytics')
 @Controller('users/me/analytics')
@@ -28,8 +30,10 @@ export class AnalyticsController {
     status: 200,
     description: '日次アナリティクスデータを返します。',
   })
-  async getMyAnalytics(@Request() req: any, @Query('days') days?: string) {
-    const parsedDays = days ? parseInt(days, 10) : 30;
-    return this.analyticsService.getMyAnalytics(req.user.id, parsedDays);
+  async getMyAnalytics(
+    @Request() req: AuthenticatedRequest,
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    return this.analyticsService.getMyAnalytics(req.user.id, query.days);
   }
 }

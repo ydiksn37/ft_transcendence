@@ -9,6 +9,7 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 
 ### 前提条件
 - **Docker** および **Docker Compose**
+- **Node.js 20以上** および **npm 10以上**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
 - マシン上でポート 80, 443, 3000 が利用可能であること。
 
@@ -23,10 +24,15 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    ```bash
    cp .env.example .env
    ```
-3. npm installを実行します:
+   `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM` を設定して
+   ください。アカウント削除はメール確認を必須とするため、SMTP未設定では
+   削除を申請できません。
+3. 依存関係をインストールし、Prisma Clientを生成します:
    ```bash
    make install
    ```
+   `make install` は `apps/backend/prisma/schema.prisma` から
+   `prisma generate` を自動実行します。
 4. Docker Composeを使用してアプリケーションを起動します:
    ```bash
    make up
@@ -35,6 +41,19 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 5. アプリケーションにアクセスします:
    - ブラウザを開き、`https://localhost` (または適切なドメイン/IP) にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
+
+### Prisma Clientの生成
+
+`apps/backend/prisma/schema.prisma` を変更したとき、またはschema変更を含む
+ブランチへ切り替えたときは、次を実行してください。
+
+```bash
+make generate
+```
+
+バックエンドのbuildとtype-checkでもPrisma Clientを自動生成します。Docker
+imageも同じnpm scriptを使用し、開発コンテナはschema適用とNestJS起動の前に
+Clientを再生成します。
 
 ## 技術スタック (Technical Stack)
 - **フロントエンドフレームワーク:** React (Vite) + TypeScript
@@ -111,7 +130,7 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 ### データと分析 (Data and Analytics)
 20. **データエクスポート/インポート (Minor - 1pt)**: ユーザー設定と統計のJSON入出力。
 21. **高度な分析ダッシュボード (Major - 2pts)**: ユーザーパフォーマンスのインタラクティブなチャートとグラフ。
-22. **GDPRコンプライアンス (Minor - 1pt)**: 確認機能を備えたデータ削除。
+22. **GDPRコンプライアンス (Minor - 1pt)**: パスワード/2FAでの再認証、メール確認コード、個人データの完全削除、対戦履歴の匿名保持、削除完了メール。
 
 ### サイバーセキュリティ (Cybersecurity)
 23. **WAF と HashiCorp Vault (Major - 2pts)**: ModSecurityを搭載したNginxとシークレット管理用Vault。

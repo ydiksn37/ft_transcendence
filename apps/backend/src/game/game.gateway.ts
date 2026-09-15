@@ -60,6 +60,7 @@ export class GameGateway
   private rooms = new Map<string, GameInstance>();
   private clientRoom = new Map<string, string>(); // socketId -> roomId
   private clientGameRoom = new Map<string, string>(); // socketId -> gameRoomId
+  private clientChatRoom = new Map<string, string>(); // socketId -> chat roomId
   private matchmakingQueue: Socket[] = [];
 
   // Custom Rooms
@@ -117,6 +118,7 @@ export class GameGateway
 
   async handleDisconnect(client: Socket) {
     this.logger.log(`切断: ${client.id}`);
+    this.clientChatRoom.delete(client.id);
 
     const userId = client.data.userId;
     if (userId) {
@@ -1485,13 +1487,29 @@ export class GameGateway
 
   // ── チャット ──────────────────────────────────────────────
   @SubscribeMessage('chat:join')
-  handleJoinChatRoom(
+  async handleJoinChatRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string },
   ) {
-    if (data.roomId) {
+    const userId = client.data?.userId;
+    if (typeof userId !== 'string') {
+      client.emit(ServerEvent.ERROR, { message: 'チャットには認証が必要です' });
+      return;
+    }
+
+    try {
+      await this.chatService.assertCanAccessRoom(data.roomId, userId);
+      const previousRoomId = this.clientChatRoom.get(client.id);
+      if (previousRoomId && previousRoomId !== data.roomId) {
+        client.leave(previousRoomId);
+      }
       client.join(data.roomId);
+      this.clientChatRoom.set(client.id, data.roomId);
       this.logger.log(`Client ${client.id} joined chat room ${data.roomId}`);
+    } catch {
+      client.emit(ServerEvent.ERROR, {
+        message: 'チャットルームへのアクセス権がありません',
+      });
     }
   }
 
@@ -1501,7 +1519,11 @@ export class GameGateway
     @MessageBody() data: { roomId: string; content: string },
   ) {
     if (!data.content?.trim()) return;
-    const userId = (client.data?.userId as string) || client.id;
+    const userId = client.data?.userId;
+    if (typeof userId !== 'string') {
+      client.emit(ServerEvent.ERROR, { message: 'チャットには認証が必要です' });
+      return;
+    }
 
     try {
       const savedMsg = await this.chatService.saveMessage(
@@ -1511,6 +1533,7 @@ export class GameGateway
       );
       const message = {
         id: savedMsg.id,
+        roomId: data.roomId,
         senderId: savedMsg.senderId,
         sender: savedMsg.sender,
         content: savedMsg.content,
@@ -1519,13 +1542,9 @@ export class GameGateway
       this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
     } catch (error) {
       this.logger.error('Failed to save message', error);
-      // Fallback
-      const message = {
-        senderId: userId,
-        content: data.content.trim().substring(0, 500),
-        timestamp: Date.now(),
-      };
-      this.server.to(data.roomId).emit(ServerEvent.CHAT_MESSAGE, message);
+      client.emit(ServerEvent.ERROR, {
+        message: 'メッセージを送信できませんでした',
+      });
     }
   }
 }

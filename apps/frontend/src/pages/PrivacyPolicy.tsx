@@ -47,6 +47,7 @@ export default function PrivacyPolicy() {
 
         <h2 style={{ color: '#4caf50', marginTop: '30px' }}>5. GDPR and Data Rights</h2>
         <p>If you are a resident of the European Economic Area (EEA), you have certain data protection rights. You have the right to access, update or to delete the information we have on you. You can do this directly within your account settings section, or by contacting us.</p>
+        <p>Account deletion requires identity verification and a time-limited code sent to your registered email address. Deletion permanently removes your profile, credentials, settings, social relationships, messages, API keys, statistics, achievements, solo records, and uploaded files. Match and tournament results are retained only as anonymized records with your account identifier removed. This cannot be undone.</p>
         
         <div style={{ marginTop: '50px', textAlign: 'center' }}>
           <button 

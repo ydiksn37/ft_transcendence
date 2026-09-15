@@ -1,4 +1,10 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -21,7 +27,15 @@ export class ChatService implements OnModuleInit {
 
   async getOrCreateDirectRoom(userId1: string, userId2: string) {
     if (userId1 === userId2)
-      throw new Error('Cannot create direct chat with yourself');
+      throw new BadRequestException('自分自身とのチャットは作成できません');
+
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId2, deletedAt: null },
+      select: { id: true },
+    });
+    if (!targetUser) {
+      throw new NotFoundException('対象ユーザーが見つかりません');
+    }
 
     const existingRooms = await this.prisma.chatRoom.findMany({
       where: { type: 'DIRECT' },
@@ -81,7 +95,30 @@ export class ChatService implements OnModuleInit {
     return rooms;
   }
 
-  async getMessages(roomId: string) {
+  async assertCanAccessRoom(roomId: string, userId: string) {
+    const room = await this.prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: {
+        id: true,
+        type: true,
+        memberships: {
+          where: { userId },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!room) throw new NotFoundException('チャットルームが見つかりません');
+    if (room.type !== 'GLOBAL' && room.memberships.length === 0) {
+      throw new ForbiddenException(
+        'このチャットルームへのアクセス権がありません',
+      );
+    }
+    return room;
+  }
+
+  async getMessages(roomId: string, userId: string) {
+    await this.assertCanAccessRoom(roomId, userId);
     return this.prisma.chatMessage.findMany({
       where: { roomId },
       include: {
@@ -99,6 +136,7 @@ export class ChatService implements OnModuleInit {
   }
 
   async saveMessage(roomId: string, senderId: string, content: string) {
+    await this.assertCanAccessRoom(roomId, senderId);
     return this.prisma.chatMessage.create({
       data: {
         roomId,

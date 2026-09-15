@@ -2,7 +2,7 @@
 
 この文書は、`subject.md`、`proceed.md`、README、および現在の実装を比較した監査結果に基づく残タスク一覧です。
 
-- 最終更新: 2026-09-14
+- 最終更新: 2026-09-15
 - 判定基準: `subject.md` version 21.1
 - 現在の厳格な静的評価: 約12ポイントを強く主張可能
 - 注意: 未完成のモジュールは部分点ではなく0点として扱われる
@@ -17,7 +17,32 @@
 - [x] フロントエンドの `durationDays` とバックエンドのBAN期間処理を一致させる
 - [x] 管理者向けユーザー情報レスポンスを許可リスト化
 - [x] 本人・公開プロフィールから `twoFactorSecret` を除外
-- [x] 上記に対する単体テストを追加（バックエンド66テスト成功）
+- [x] 上記に対する単体テストを追加（バックエンド111テスト成功）
+
+## 確認済みエラー履歴
+
+この表は、監査・修正作業中にコマンド出力または画面上で確認できたエラーを
+記録する。未解消のものは、対応する残タスクを完了するまで削除しない。
+
+| 状態 | 発生箇所・操作 | エラー / 症状 | 原因・対応 |
+| --- | --- | --- | --- |
+| 未解消 | `npm run build --workspace=@transcendence/frontend` | `AiPreviewPage.tsx(560,8): TS2741`。`TetrisUIProps` が要求する `combo` が渡されていない | `AiPreviewPage` から `TetrisUI` へ現在のREN値を渡し、frontend buildを再実行する。第27項にも登録 |
+| 未解消 | `node --test apps/frontend/tests/multiplayer.test.cjs` | Game over後の観戦状態について、期待値 `SPECTATING` と実装側の状態が一致しない | 観戦遷移と古いstateの破棄を修正する。第11項に登録済み |
+| 未解消 | Chrome 147、トップページ | PixiJSが `renderer.plugins.interaction has been deprecated, use renderer.events` をconsoleへ出力 | PC・タブレット・スマホの全viewportで再現。依存ライブラリと`BackgroundTetris`の利用方法を更新し、production buildでも再確認する |
+| 未解消 | Chrome 147、390x844 viewport | トップ画面のタイトル、幅360pxのボタン、背景盤面が右側でクリップされる | 390px幅に固定幅と配置計算が収まっていない。スマホ用の幅をviewport基準にして実機相当で再確認する |
+| 未解消 | Docker image build | npmがModerate 1件、High 12件、合計13件の脆弱性を報告 | `npm audit` で到達可能性を確認し、互換性を保って更新する。第1A項に登録済み |
+| 解消済み | Backend type-check | Prisma Clientがschemaより古く、`twoFactorSecret` 関連のTypeScriptエラーが8件発生 | build/type-check/Docker起動前に同一schemaから `prisma generate` するよう統一 |
+| 解消済み | Vite CSS読み込み | `[plugin:vite:css] [postcss] ENOENT: no such file or directory, open 'tailwindcss'` | 存在しないTailwind importへの依存を除去。現在のソースに `tailwindcss` 参照がないことを確認 |
+| 一時的・解消済み | Nodemailer依存追加 | npm registryへの接続が `EAI_AGAIN` で失敗 | sandbox外の許可済みnpm通信で再実行し、lockfile整合性を `npm ci --dry-run` で確認 |
+| 解消済み（原因未確定） | `make re` | 過去にビルド失敗。ディスク容量不足が原因の可能性あり | 空き容量確保後の2026-09-15に再実行して成功。空き213GB、全image build成功、全6コンテナ起動、nginx/PostgreSQL/Redis/Vaultのhealthcheck成功を確認。元の失敗ログがないため原因自体は未確定 |
+
+現在の既知のbuild阻害要因は、frontendの `AiPreviewPage.tsx` における
+`combo` prop不足である。GDPR変更に対するbackend build、全workspaceの
+type-check、backend Jest 111件は成功している。
+
+`make re` が生成するfrontend imageはdevelopment targetであり、Viteの
+production buildを実行していない。そのため、`make re` の成功は上記TS2741の
+解消を意味しない。production buildは別途修正・再検証が必要である。
 
 ## P0: 提出前に必ず修正する項目
 
@@ -26,19 +51,40 @@
 - [ ] `.env.example` のJWT、DB、Redis、OAuth、SMTP等の値をプレースホルダーへ置換
 - [ ] 実際に使用された可能性のある資格情報を失効・再発行
 - [ ] Git履歴に秘密情報が残っていないか確認
-- [ ] `.env` がGit管理対象外であることを再確認
+- [x] `.env` がGit管理対象外であることを再確認
 
 完了条件:
 
 - `.env.example` に実際の秘密情報がない
 - リポジトリ内の秘密情報検査で問題が出ない
 
-### 2. Prisma Clientの生成ずれを修正する
+### 1A. npm依存関係の脆弱性を解消する
 
-- [ ] `prisma generate` を実行し、schemaと生成済みClientを同期
-- [ ] `twoFactorSecret` に関する8件のTypeScriptエラーを解消
-- [ ] ローカルとDockerの両方で同じ生成手順を使用
-- [ ] 生成が必要なタイミングをMakefileまたはREADMEへ明記
+2026-09-15のDocker image再ビルド時に、npmから次の報告があった。
+
+- Moderate: 1件
+- High: 12件
+- 合計: 13件
+
+残タスク:
+
+- [ ] `npm audit` で直接依存・間接依存と影響範囲を特定
+- [ ] 互換性を維持できる範囲で依存関係とlockfileを更新
+- [ ] `npm audit fix --force` を無条件に使用せず、破壊的更新を個別確認
+- [ ] 修正後にtype-check、Jest、frontend build、backend Docker buildを再実行
+- [ ] 更新できない脆弱性は到達可能性、理由、緩和策をREADMEへ記録
+
+完了条件:
+
+- High/Criticalが0件、または到達不能であることを根拠付きで説明できる
+- 依存関係更新後も全テストとDocker buildが成功する
+
+### 2. Prisma Clientの生成ずれを修正する（完了）
+
+- [x] `prisma generate` を実行し、schemaと生成済みClientを同期
+- [x] `twoFactorSecret` に関する8件のTypeScriptエラーを解消
+- [x] ローカルとDockerの両方で同じ生成手順を使用
+- [x] 生成が必要なタイミングをMakefileおよびREADMEへ明記
 
 完了条件:
 
@@ -48,23 +94,24 @@ npm run type-check --workspace @transcendence/backend
 
 が成功すること。
 
-### 3. 残りのHTTP入力をDTO化する
+### 3. 残りのHTTP入力をDTO化する（完了）
 
-- [ ] フレンド申請の `addresseeId` / `username`
-- [ ] フレンド承認・拒否の `accept`
-- [ ] フレンド、ブロック、プロフィール、履歴URLのUUIDパラメーター
-- [ ] ユーザー検索の `page` / `limit` / `status` / `sortBy`
-- [ ] 対戦履歴検索の `page` / `limit` / `mode` / `result`
-- [ ] Tournament作成・参加・更新
-- [ ] Public APIキー作成・更新
-- [ ] Game resultおよびSprint record登録
-- [ ] その他、`@Body() body: any` またはインライン型を使っているコントローラー
+- [x] フレンド申請の `addresseeId` / `username`
+- [x] フレンド承認・拒否の `accept`
+- [x] フレンド、ブロック、プロフィール、履歴URLのUUIDパラメーター
+- [x] ユーザー検索の `page` / `limit` / `status` / `sortBy`
+- [x] 対戦履歴検索の `page` / `limit` / `mode` / `result`
+- [x] Tournament作成・一覧・参加・開始
+- [x] Public APIのquery/paramおよびAPIキー作成・失効
+- [x] Game resultおよびSprint record登録
+- [x] Auth、Chat、Analyticsを含む残りのHTTP入力
+- [x] HTTPコントローラーの認証済みユーザー型から `any` を除去
 
 完了条件:
 
-- HTTPコントローラーの入力に `any` がない
-- 数値範囲、enum、文字数、UUID、未知フィールドを検証している
-- 不正入力が400になり、500やPrismaエラーにならない
+- [x] HTTPコントローラーの入力に `any` がない
+- [x] 数値範囲、enum、文字数、UUID、未知フィールドを検証している
+- [x] 不正入力が400になり、500やPrismaエラーにならない
 
 ### 4. WebSocket payloadを検証する
 
@@ -75,12 +122,12 @@ npm run type-check --workspace @transcendence/backend
 - [ ] 盤面、next、garbage等にサイズ・型・値域制限を設ける
 - [ ] 不正イベントを切断またはエラー応答し、サーバーを停止させない
 
-### 5. チャットの認可を修正する
+### 5. チャットの認可を修正する（完了）
 
-- [ ] RESTでメッセージを取得する前にroom membershipを確認
-- [ ] WebSocketの `chat:join` でmembershipを確認
-- [ ] メッセージ保存時にも送信者のmembershipを再確認
-- [ ] 他人のDIRECT/GAMEルームを推測したIDで閲覧できないことをテスト
+- [x] RESTでメッセージを取得する前にroom membershipを確認
+- [x] WebSocketの `chat:join` でmembershipを確認
+- [x] メッセージ保存時にも送信者のmembershipを再確認
+- [x] 他人のDIRECT/GAMEルームを推測したIDで閲覧できないことをテスト
 
 ### 6. HTTPS・ポート・起動手順を一致させる
 
@@ -91,14 +138,14 @@ npm run type-check --workspace @transcendence/backend
 - [ ] 外部からbackend、DB、Redis、Vaultへ直接接続する必要がないポートを閉じる
 - [ ] 最新ChromeでMixed Contentが発生しないことを確認
 
-### 7. GDPR削除処理を完成させる
+### 7. GDPR削除処理を完成させる（完了）
 
-- [ ] UIの「永久削除」と実際のソフトデリートの矛盾を解消
-- [ ] 個人情報を削除または匿名化
-- [ ] 関連データの保持・削除方針を決定
-- [ ] 削除確認フローを実装
-- [ ] 削除完了メールを実装
-- [ ] 削除後にログイン・検索・プロフィール取得できないことをテスト
+- [x] UIの「永久削除」と実際のソフトデリートの矛盾を解消
+- [x] 個人情報を削除または匿名化
+- [x] 関連データの保持・削除方針を決定
+- [x] 削除確認フローを実装
+- [x] 削除完了メールを実装
+- [x] 削除後にログイン・検索・プロフィール取得できないことをテスト
 
 ### 8. Chromeで必須動作を確認する
 
@@ -106,8 +153,21 @@ npm run type-check --workspace @transcendence/backend
 - [ ] 複数ユーザーが同時利用できることを確認
 - [ ] 2人・3人対戦、再戦、切断、復帰を確認
 - [ ] 非アクティブタブから復帰した場合の描画・同期を確認
-- [ ] Privacy PolicyとTerms of Serviceへ未ログイン状態でも到達可能か確認
+- [x] Privacy PolicyとTerms of Serviceへ未ログイン状態でも到達可能か確認
 - [ ] PC・タブレット・スマートフォン相当の表示を確認
+
+2026-09-15 自動確認結果（Google Chrome 147.0.7727.116）:
+
+- HTTPS経由でトップ、Privacy Policy、Terms of ServiceがHTTP 200
+- 未ログインのヘッドレスChromeでPrivacy PolicyとTerms of ServiceのReact描画を確認
+- 1440x900、1024x768、390x844でトップページを描画・撮影
+- 1440x900と1024x768ではトップページに明らかなクリップなし
+- 390x844では右端のクリップがあるため、スマートフォン表示は未合格
+- 全3 viewportでPixiJSの非推奨warningが出るため、console 0件は未合格
+- keyboard controlsテストは成功
+- multiplayerテストは3件中2件成功、観戦遷移1件失敗
+- 複数ユーザー、2人・3人の実対戦、再戦、切断復帰、非アクティブタブ復帰は
+  認証済みの複数ブラウザ操作または人間による実機確認が必要
 
 ## P1: 14ポイントを確実にするための項目
 
@@ -266,11 +326,11 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 
 ### 26. 自動テスト
 
-- [ ] Backend type-checkを成功させる
-- [ ] Backend Jestを全件成功させる
-- [ ] Frontend type-checkを成功させる
+- [x] Backend type-checkを成功させる
+- [x] Backend Jestを全件成功させる
+- [x] Frontend type-checkを成功させる
 - [ ] Frontend multiplayer testsを全件成功させる
-- [ ] C++ CTestを全件成功させる
+- [x] C++ CTestを全件成功させる
 - [ ] HTTP/WebSocketの認証・認可E2Eを追加
 - [ ] 2人・3人・Tournament・Spectatorの統合テストを追加
 
@@ -278,6 +338,7 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 
 - [ ] Backend ESLintエラーを解消
 - [ ] Frontend lint warningを解消
+- [ ] `AiPreviewPage.tsx` から `TetrisUI` へ必須の `combo` propを渡し、TS2741を解消
 - [ ] Viteの `@theme` warningを解消
 - [ ] production用frontend/backend imageを用意
 - [ ] development serverに依存せずproduction構成で起動確認
@@ -303,14 +364,12 @@ docker compose config --quiet
 
 ## 推奨作業順
 
-1. Prisma Client生成ずれ
-2. フレンド・検索・履歴HTTP入力
-3. Tournament・Public API・Game result入力
-4. WebSocket payloadとチャット認可
-5. HTTPS・ポート・README起動手順
-6. Spectatorと再接続
-7. GDPR削除
-8. 14ポイント分のモジュールを実機で確定
-9. README・`proceed.md`・ER図の更新
-10. 後回し中の秘密情報失効・除去を提出前に必ず実施
-
+1. フレンド・検索・履歴HTTP入力
+2. Tournament・Public API・Game result入力
+3. WebSocket payloadとチャット認可
+4. HTTPS・ポート・README起動手順
+5. Spectatorと再接続
+6. GDPR削除
+7. 14ポイント分のモジュールを実機で確定
+8. README・`proceed.md`・ER図の更新
+9. 後回し中の秘密情報失効・除去を提出前に必ず実施

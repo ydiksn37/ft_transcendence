@@ -76,7 +76,7 @@ services:
       target: development
     container_name: transcendence_backend
     restart: unless-stopped
-    command: sh -c "npx prisma db push --accept-data-loss && npm run dev"
+    command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run dev"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
@@ -104,6 +104,7 @@ services:
       AI_AGENT_PATH: /opt/ai-agent-dev/ai_agent
     volumes:
       - ./apps/backend/src:/app/apps/backend/src:ro  # ホットリロード用
+      - ./apps/backend/prisma:/app/apps/backend/prisma:ro # schema変更時のClient再生成用
       - ./packages/shared/dist:/app/packages/shared/dist:ro # Socket共有型のホットリロード用
       - ./build/ai-agent-web:/opt/ai-agent-dev:ro   # C++ AIの開発用バイナリ
       - uploads_data:/app/uploads
@@ -136,7 +137,11 @@ services:
       - ./build/ai-agent-web:/build
     command: >-
       sh -c "cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release
-      -DBUILD_TESTING=OFF && cmake --build /build --parallel --target ai_agent"
+      -DBUILD_TESTING=OFF >/build/configure.log 2>&1 ||
+      { status=$$?; cat /build/configure.log; exit $$status; };
+      cmake --build /build --parallel --target ai_agent >/build/build.log 2>&1 ||
+      { status=$$?; cat /build/build.log; exit $$status; };
+      echo 'C++ web AI build complete: /build'"
     network_mode: none
 
   # ─────────────────────────────────────────

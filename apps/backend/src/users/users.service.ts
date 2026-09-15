@@ -4,16 +4,29 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
+import { unlink } from 'fs/promises';
+import { basename, join, resolve, sep } from 'path';
+import { authenticator } from 'otplib';
+import { RedisService } from '../redis/redis.service';
+import { MailService } from '../mail/mail.service';
 import {
   UpdateUserDto,
   SearchUsersDto,
   BanUserDto,
   SearchHistoryDto,
   UpdateGameSettingsDto,
+  RequestAccountDeletionDto,
+  ConfirmAccountDeletionDto,
 } from './dto/user.dto';
+
+const ACCOUNT_DELETION_TTL_SECONDS = 10 * 60;
+const ACCOUNT_DELETION_CONFIRMATION = 'DELETE MY ACCOUNT';
 
 const ADMIN_USER_SELECT = {
   id: true,
@@ -34,7 +47,11 @@ const ADMIN_USER_SELECT = {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly mail: MailService,
+  ) {}
 
   // ── 自分のプロフィール取得 ────────────────────────────────
   async getMe(userId: string) {
@@ -78,21 +95,165 @@ export class UsersService {
     });
   }
 
-  // ── アカウント削除（ソフトデリート） ───────────────────
-  async deleteMe(userId: string) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { deletedAt: new Date() },
+  // ── GDPRアカウント完全削除 ────────────────────────────────
+  async requestAccountDeletion(userId: string, dto: RequestAccountDeletionDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        passwordHash: true,
+        twoFactorEnabled: true,
+        twoFactorSecret: true,
+      },
     });
-    return { message: 'アカウントを削除しました' };
+    if (!user) throw new NotFoundException('ユーザーが見つかりません');
+
+    if (user.passwordHash) {
+      if (!dto.password) {
+        throw new UnauthorizedException('現在のパスワードが必要です');
+      }
+      if (!(await bcrypt.compare(dto.password, user.passwordHash))) {
+        throw new UnauthorizedException('パスワードが正しくありません');
+      }
+    }
+
+    if (user.twoFactorEnabled) {
+      if (!user.twoFactorSecret || !dto.twoFactorCode) {
+        throw new UnauthorizedException('2FAコードが必要です');
+      }
+      const valid = authenticator.verify({
+        token: dto.twoFactorCode,
+        secret: user.twoFactorSecret,
+      });
+      if (!valid) throw new UnauthorizedException('2FAコードが無効です');
+    }
+
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const codeHash = await bcrypt.hash(code, 10);
+    const redisKey = this.accountDeletionKey(userId);
+    await this.redis.setEx(redisKey, ACCOUNT_DELETION_TTL_SECONDS, codeHash);
+
+    try {
+      await this.mail.sendAccountDeletionCode(
+        user.email,
+        user.displayName,
+        code,
+        ACCOUNT_DELETION_TTL_SECONDS / 60,
+      );
+    } catch (error) {
+      await this.redis.del(redisKey);
+      throw error;
+    }
+
+    return {
+      message: '削除確認コードをメールで送信しました',
+      expiresInSeconds: ACCOUNT_DELETION_TTL_SECONDS,
+    };
+  }
+
+  async deleteMe(userId: string, dto: ConfirmAccountDeletionDto) {
+    if (dto.confirmation !== ACCOUNT_DELETION_CONFIRMATION) {
+      throw new BadRequestException('確認文言が一致しません');
+    }
+
+    const redisKey = this.accountDeletionKey(userId);
+    const codeHash = await this.redis.get(redisKey);
+    if (!codeHash || !(await bcrypt.compare(dto.code, codeHash))) {
+      throw new UnauthorizedException('削除確認コードが無効か期限切れです');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        email: true,
+        displayName: true,
+        fileUploads: { select: { storageUrl: true } },
+      },
+    });
+    if (!user) throw new NotFoundException('ユーザーが見つかりません');
+
+    // Match/tournament history is retained with user references set to NULL.
+    // Messages and all account-owned records are removed because their content
+    // can contain personal data. Remaining user relations cascade or SetNull
+    // according to schema.prisma.
+    await this.prisma.$transaction([
+      this.prisma.chatMessage.deleteMany({ where: { senderId: userId } }),
+      this.prisma.fileUpload.deleteMany({ where: { uploaderId: userId } }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
+    await this.redis.del(redisKey);
+
+    const localFiles = user.fileUploads
+      .map((upload) => upload.storageUrl)
+      .map((url) => this.localUploadPath(url))
+      .filter((path): path is string => path !== null);
+    const deletionResults = await Promise.allSettled(
+      [...new Set(localFiles)].map((path) => unlink(path)),
+    );
+    if (deletionResults.some((result) => result.status === 'rejected')) {
+      this.logger.warn(
+        'アカウント削除後に一部のアップロードファイルを削除できませんでした',
+      );
+    }
+
+    try {
+      await this.mail.sendAccountDeleted(user.email, user.displayName);
+    } catch (error) {
+      this.logger.error(
+        'アカウント削除完了メールを送信できませんでした',
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+
+    return { message: 'アカウントと個人データを完全に削除しました' };
+  }
+
+  private accountDeletionKey(userId: string): string {
+    return `account-deletion:${userId}`;
+  }
+
+  private localUploadPath(storageUrl: string | null): string | null {
+    if (!storageUrl || !storageUrl.startsWith('/uploads/')) return null;
+
+    const uploadRoot = resolve(
+      process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads'),
+    );
+    const candidate = resolve(uploadRoot, basename(storageUrl));
+    if (!candidate.startsWith(`${uploadRoot}${sep}`)) return null;
+    return candidate;
   }
 
   // ── アバター更新 ───────────────────────────────────────────
-  async updateAvatar(userId: string, avatarUrl: string) {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl },
-    });
+  async updateAvatar(
+    userId: string,
+    avatarUrl: string,
+    file: {
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      sizeBytes: number;
+    },
+  ) {
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl },
+      }),
+      this.prisma.fileUpload.create({
+        data: {
+          uploaderId: userId,
+          filename: file.filename,
+          originalName: file.originalName,
+          mimeType: file.mimeType,
+          sizeBytes: BigInt(file.sizeBytes),
+          storageUrl: avatarUrl,
+          purpose: 'AVATAR',
+          isPublic: true,
+        },
+      }),
+    ]);
     return { avatarUrl: user.avatarUrl };
   }
 
@@ -260,6 +421,14 @@ export class UsersService {
       throw new BadRequestException('addresseeIdまたはusernameが必要です');
     }
 
+    const addressee = await this.prisma.user.findUnique({
+      where: { id: addresseeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!addressee) {
+      throw new NotFoundException('指定されたユーザーが見つかりません');
+    }
+
     if (requesterId === addresseeId) {
       throw new BadRequestException('自分にフレンド申請はできません');
     }
@@ -369,6 +538,12 @@ export class UsersService {
   async blockUser(blockerId: string, blockedId: string) {
     if (blockerId === blockedId)
       throw new BadRequestException('自分をブロックできません');
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: blockedId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('ユーザーが見つかりません');
 
     const existing = await this.prisma.block.findUnique({
       where: { blockerId_blockedId: { blockerId, blockedId } },

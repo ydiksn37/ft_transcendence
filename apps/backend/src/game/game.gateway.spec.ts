@@ -8,13 +8,21 @@ import { PrismaService } from '../prisma/prisma.service';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
+  let chatService: {
+    assertCanAccessRoom: jest.Mock;
+    saveMessage: jest.Mock;
+  };
 
   beforeEach(async () => {
+    chatService = {
+      assertCanAccessRoom: jest.fn(),
+      saveMessage: jest.fn(),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GameGateway,
         { provide: GameService, useValue: {} },
-        { provide: ChatService, useValue: {} },
+        { provide: ChatService, useValue: chatService },
         { provide: AiAgentService, useValue: {} },
         { provide: JwtService, useValue: { verify: jest.fn() } },
         { provide: PrismaService, useValue: {} },
@@ -73,5 +81,66 @@ describe('GameGateway', () => {
     const client: any = { id: 'a', to: jest.fn() };
     gateway.handleBoardUpdate(client, { stage: [], score: 999 });
     expect(client.to).not.toHaveBeenCalled();
+  });
+
+  it('does not join a chat room when the user is not a member', async () => {
+    chatService.assertCanAccessRoom.mockRejectedValue(new Error('forbidden'));
+    const client: any = {
+      id: 'socket-1',
+      data: { userId: 'user-1' },
+      join: jest.fn(),
+      leave: jest.fn(),
+      emit: jest.fn(),
+    };
+
+    await gateway.handleJoinChatRoom(client, { roomId: 'private-room' });
+
+    expect(client.join).not.toHaveBeenCalled();
+    expect(client.emit).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ message: expect.any(String) }),
+    );
+  });
+
+  it('does not save or broadcast chat messages from an unauthenticated socket', async () => {
+    const emit = jest.fn();
+    const broadcast = jest.fn();
+    gateway.server = { to: jest.fn(() => ({ emit: broadcast })) } as any;
+    const client: any = { id: 'socket-1', data: {}, emit };
+
+    await gateway.handleChatMessage(client, {
+      roomId: 'global-room',
+      content: 'hello',
+    });
+
+    expect(chatService.saveMessage).not.toHaveBeenCalled();
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ message: expect.any(String) }),
+    );
+  });
+
+  it('does not broadcast a message when room authorization fails', async () => {
+    chatService.saveMessage.mockRejectedValue(new Error('forbidden'));
+    (gateway as any).logger.error = jest.fn();
+    const broadcast = jest.fn();
+    gateway.server = { to: jest.fn(() => ({ emit: broadcast })) } as any;
+    const client: any = {
+      id: 'socket-1',
+      data: { userId: 'intruder' },
+      emit: jest.fn(),
+    };
+
+    await gateway.handleChatMessage(client, {
+      roomId: 'private-room',
+      content: 'secret',
+    });
+
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(client.emit).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ message: expect.any(String) }),
+    );
   });
 });

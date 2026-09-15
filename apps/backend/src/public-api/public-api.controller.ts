@@ -7,8 +7,6 @@ import {
   Query,
   Body,
   UseGuards,
-  DefaultValuePipe,
-  ParseIntPipe,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -24,7 +22,16 @@ import { PublicApiService } from './public-api.service';
 import { ApiKeyService } from './api-key.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import {
+  ApiKeyIdParamDto,
+  CreateApiKeyDto,
+  LeaderboardQueryDto,
+  TournamentQueryDto,
+  UserHistoryQueryDto,
+  UsernameParamDto,
+} from './dto/public-api.dto';
 
 // ── Public API コントローラー (APIキー認証) ───────────────────────
 @ApiTags('Public API')
@@ -49,12 +56,12 @@ export class PublicApiController {
     required: false,
     enum: ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER'],
   })
-  getLeaderboard(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('rank') rank?: string,
-  ) {
-    return this.publicApiService.getLeaderboard(page, limit, rank);
+  getLeaderboard(@Query() query: LeaderboardQueryDto) {
+    return this.publicApiService.getLeaderboard(
+      query.page,
+      query.limit,
+      query.rank,
+    );
   }
 
   /** エンドポイント 2: ユーザープロフィール */
@@ -63,8 +70,8 @@ export class PublicApiController {
     summary: '[Public] ユーザープロフィール取得',
     description: 'ユーザー名からプロフィールを取得。機密情報は除外。',
   })
-  async getUserByUsername(@Param('username') username: string) {
-    const user = await this.publicApiService.getUserByUsername(username);
+  async getUserByUsername(@Param() params: UsernameParamDto) {
+    const user = await this.publicApiService.getUserByUsername(params.username);
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
     return user;
   }
@@ -75,8 +82,8 @@ export class PublicApiController {
     summary: '[Public] ユーザー統計取得',
     description: 'APM・PPS・勝率・ランク等の統計情報。',
   })
-  async getUserStats(@Param('username') username: string) {
-    const stats = await this.publicApiService.getUserStats(username);
+  async getUserStats(@Param() params: UsernameParamDto) {
+    const stats = await this.publicApiService.getUserStats(params.username);
     if (!stats) throw new NotFoundException('ユーザーが見つかりません');
     return stats;
   }
@@ -96,16 +103,14 @@ export class PublicApiController {
     enum: ['VERSUS', 'AI', 'TOURNAMENT'],
   })
   async getUserHistory(
-    @Param('username') username: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('mode') mode?: string,
+    @Param() params: UsernameParamDto,
+    @Query() query: UserHistoryQueryDto,
   ) {
     const result = await this.publicApiService.getUserHistory(
-      username,
-      page,
-      limit,
-      mode,
+      params.username,
+      query.page,
+      query.limit,
+      query.mode,
     );
     if (!result) throw new NotFoundException('ユーザーが見つかりません');
     return result;
@@ -122,12 +127,12 @@ export class PublicApiController {
     required: false,
     enum: ['REGISTRATION', 'IN_PROGRESS', 'COMPLETED'],
   })
-  getTournaments(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('status') status?: string,
-  ) {
-    return this.publicApiService.getTournaments(page, limit, status);
+  getTournaments(@Query() query: TournamentQueryDto) {
+    return this.publicApiService.getTournaments(
+      query.page,
+      query.limit,
+      query.status,
+    );
   }
 }
 
@@ -142,8 +147,8 @@ export class ApiKeyController {
   @Post()
   @ApiOperation({ summary: 'APIキーを新規発行' })
   createApiKey(
-    @CurrentUser() user: any,
-    @Body() body: { label: string; rateLimit?: number; expiresAt?: string },
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: CreateApiKeyDto,
   ) {
     return this.apiKeyService.createApiKey(
       user.id,
@@ -155,13 +160,16 @@ export class ApiKeyController {
 
   @Get()
   @ApiOperation({ summary: '自分のAPIキー一覧取得（キー本体は非表示）' })
-  listApiKeys(@CurrentUser() user: any) {
+  listApiKeys(@CurrentUser() user: AuthenticatedUser) {
     return this.apiKeyService.listApiKeys(user.id);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'APIキーを無効化' })
-  revokeApiKey(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.apiKeyService.revokeApiKey(user.id, id);
+  revokeApiKey(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: ApiKeyIdParamDto,
+  ) {
+    return this.apiKeyService.revokeApiKey(user.id, params.id);
   }
 }
