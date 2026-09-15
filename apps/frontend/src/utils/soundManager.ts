@@ -1,69 +1,129 @@
 class SoundManager {
   private ctx: AudioContext | null = null;
   private bgmAudio: HTMLAudioElement | null = null;
+  private pendingBgmUrl: string | null = null;
+  private waitingForInteraction = false;
+  private interactionReceived = false;
   public seVolume: number = 0.5;
   public bgmVolume: number = 0.5;
 
-  private init() {
+  private init(): AudioContext | null {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
+    return this.ctx;
+  }
+
+  private hasUserActivation() {
+    if (this.interactionReceived) return true;
+    const activation = (navigator as Navigator & {
+      userActivation?: { hasBeenActive: boolean };
+    }).userActivation;
+    return activation?.hasBeenActive === true;
+  }
+
+  private removeInteractionListeners() {
+    if (!this.waitingForInteraction) return;
+    window.removeEventListener('pointerdown', this.handleUserInteraction, true);
+    window.removeEventListener('keydown', this.handleUserInteraction, true);
+    window.removeEventListener('touchstart', this.handleUserInteraction, true);
+    this.waitingForInteraction = false;
+  }
+
+  private handleUserInteraction = () => {
+    this.interactionReceived = true;
+    this.removeInteractionListeners();
+
+    if (this.ctx?.state === 'suspended') {
+      void this.ctx.resume().catch(() => undefined);
+    }
+
+    const pendingBgmUrl = this.pendingBgmUrl;
+    if (pendingBgmUrl) {
+      this.pendingBgmUrl = null;
+      this.startBgm(pendingBgmUrl);
+    }
+  };
+
+  private waitForUserInteraction() {
+    if (this.waitingForInteraction) return;
+    this.waitingForInteraction = true;
+    window.addEventListener('pointerdown', this.handleUserInteraction, true);
+    window.addEventListener('keydown', this.handleUserInteraction, true);
+    window.addEventListener('touchstart', this.handleUserInteraction, true);
+  }
+
+  private withRunningContext(play: (ctx: AudioContext) => void) {
+    if (!this.hasUserActivation()) {
+      this.waitForUserInteraction();
+      return;
+    }
+
+    const ctx = this.init();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      void ctx.resume()
+        .then(() => play(ctx))
+        .catch(() => this.waitForUserInteraction());
+      return;
+    }
+    play(ctx);
   }
 
   // Plays a simple beep
   private playTone(freq: number, type: OscillatorType, duration: number, volMultiplier: number = 1) {
-    if (!this.ctx) this.init();
-    if (!this.ctx) return;
     if (this.seVolume === 0) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    this.withRunningContext((ctx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
-    // Simple envelope to avoid clicks
-    gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(this.seVolume * volMultiplier * 0.5, this.ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+      // Simple envelope to avoid clicks
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(this.seVolume * volMultiplier * 0.5, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    });
   }
 
   // Plays an arpeggio (sequence of notes)
   private playArpeggio(freqs: number[], type: OscillatorType, stepDuration: number, volMultiplier: number = 1) {
-    if (!this.ctx) this.init();
-    if (!this.ctx) return;
     if (this.seVolume === 0) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    this.withRunningContext((ctx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-    osc.type = type;
-    osc.frequency.setValueAtTime(freqs[0], this.ctx.currentTime);
-    
-    let time = this.ctx.currentTime;
-    for (let i = 1; i < freqs.length; i++) {
-      time += stepDuration;
-      osc.frequency.setValueAtTime(freqs[i], time);
-    }
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqs[0], ctx.currentTime);
 
-    const totalDuration = freqs.length * stepDuration;
+      let time = ctx.currentTime;
+      for (let i = 1; i < freqs.length; i++) {
+        time += stepDuration;
+        osc.frequency.setValueAtTime(freqs[i], time);
+      }
 
-    gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(this.seVolume * volMultiplier * 0.5, this.ctx.currentTime + 0.01);
-    gain.gain.setValueAtTime(this.seVolume * volMultiplier * 0.5, this.ctx.currentTime + totalDuration - 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + totalDuration);
+      const totalDuration = freqs.length * stepDuration;
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(this.seVolume * volMultiplier * 0.5, ctx.currentTime + 0.01);
+      gain.gain.setValueAtTime(this.seVolume * volMultiplier * 0.5, ctx.currentTime + totalDuration - 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + totalDuration);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + totalDuration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + totalDuration);
+    });
   }
 
   public playSe(type: 'move' | 'rotate' | 'drop' | 'clear' | 'tetris' | 'gameover' | 'test' | 'hold') {
@@ -108,7 +168,16 @@ class SoundManager {
 
   public playBgm(url: string = '/sounds/bgm.mp3') {
     if (this.bgmVolume === 0) return;
-    
+
+    if (!this.hasUserActivation()) {
+      this.pendingBgmUrl = url;
+      this.waitForUserInteraction();
+      return;
+    }
+    this.startBgm(url);
+  }
+
+  private startBgm(url: string) {
     if (!this.bgmAudio) {
       this.bgmAudio = new Audio(url);
       this.bgmAudio.loop = true;
@@ -118,12 +187,17 @@ class SoundManager {
     
     this.bgmAudio.volume = this.bgmVolume;
     this.bgmAudio.play().catch(err => {
-      // Browsers may block auto-play until user interaction
-      console.warn('BGM auto-play prevented. Needs user interaction first.', err);
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        this.pendingBgmUrl = url;
+        this.waitForUserInteraction();
+        return;
+      }
+      console.error('BGM playback failed.', err);
     });
   }
 
   public stopBgm() {
+    this.pendingBgmUrl = null;
     if (this.bgmAudio) {
       this.bgmAudio.pause();
       this.bgmAudio.currentTime = 0;

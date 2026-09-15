@@ -492,7 +492,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   key={stageKey}
                   width={stage.length > 0 ? stage[0].length * 30 : 300} 
                   height={1200} 
-                  options={{ backgroundAlpha: 0 }}
+                  options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}
                   onMount={(app) => {
                     const canvas = app.view as HTMLCanvasElement;
                     const onLost = (e: Event) => e.preventDefault();
@@ -712,7 +712,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                             key={stageKey}
                             width={300} 
                             height={1200} 
-                            options={{ backgroundAlpha: 0 }}
+                            options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}
                             onMount={(app) => {
                               const canvas = app.view as HTMLCanvasElement;
                               const onLost = (e: Event) => e.preventDefault();

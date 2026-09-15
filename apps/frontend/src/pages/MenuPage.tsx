@@ -387,7 +387,7 @@ const MenuPage = () => {
 
       <div className="menu-page-board-wrapper">
         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-          <Stage width={1230} height={1200} options={{ backgroundAlpha: 0 }}>
+          <Stage width={1230} height={1200} options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}>
             <GameBoard
               stage={stage}
               player={transitionMode ? { ...player, tetromino: [] } : player}
