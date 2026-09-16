@@ -6,6 +6,49 @@ import type { AiDifficulty, GameState } from '@transcendence/shared';
 import { setRandomSeed } from '../utils/tetrominos';
 import { createStage, type Cell } from '../utils/gameHelpers';
 
+const GUEST_SESSION_ID_KEY = 'tetris.guestSessionId';
+const GUEST_RECONNECT_TOKEN_KEY = 'tetris.guestReconnectToken';
+
+type SessionReadyPayload = {
+  guestSessionId?: string;
+  reconnectToken?: string;
+  displayName?: string;
+  resumed: boolean;
+  reconnectGraceMs?: number;
+};
+
+const getGuestSessionAuth = () => {
+  if (typeof window === 'undefined') return {};
+  const guestSessionId = window.sessionStorage.getItem(GUEST_SESSION_ID_KEY);
+  const reconnectToken = window.sessionStorage.getItem(
+    GUEST_RECONNECT_TOKEN_KEY,
+  );
+  return guestSessionId && reconnectToken
+    ? { guestSessionId, reconnectToken }
+    : {};
+};
+
+const rememberGuestSession = (
+  connection: Socket,
+  session: SessionReadyPayload,
+) => {
+  if (!session.guestSessionId || !session.reconnectToken) return;
+  window.sessionStorage.setItem(
+    GUEST_SESSION_ID_KEY,
+    session.guestSessionId,
+  );
+  window.sessionStorage.setItem(
+    GUEST_RECONNECT_TOKEN_KEY,
+    session.reconnectToken,
+  );
+  connection.auth = {
+    ...(typeof connection.auth === 'object' ? connection.auth : {}),
+    guestGameSession: true,
+    guestSessionId: session.guestSessionId,
+    reconnectToken: session.reconnectToken,
+  };
+};
+
 type UseMultiplayerProps = {
   setServerState: (state: GameState | null) => void;
   setStartTime: (time: number | null) => void;
@@ -61,16 +104,21 @@ export const useMultiplayer = ({
 }: UseMultiplayerProps) => {
 
   const socketOptions = useMemo(
-    () => token
-      ? { forceNew: true as const, auth: { token } }
-      : { forceNew: true as const },
+    () => ({
+      forceNew: true as const,
+      auth: {
+        guestGameSession: true,
+        ...getGuestSessionAuth(),
+        ...(token ? { token } : {}),
+      },
+    }),
     [token],
   );
 
   const [customRoomIsPlaying, setCustomRoomIsPlaying] = useState(false);
   const activeRoom = useRef<string | null>(null);
   const isSpectatingRef = useRef(false);
-  const beginServerMatch = (data: { roomId: string; users?: Record<string, { username: string | null }>; players?: string[]; displayNames?: Record<string, string> }) => {
+  const beginServerMatch = (data: { roomId: string; users?: Record<string, { username: string | null }>; players?: string[]; displayNames?: Record<string, string>; started?: boolean }) => {
     activeRoom.current = data.roomId;
     isSpectatingRef.current = false;
     setServerState(null);
@@ -106,12 +154,13 @@ export const useMultiplayer = ({
     setOpponents(initialOpponents);
     setOpponentStage(null);
     gameOverRef.current = false;
-    appStateRef.current = 'VS_SCREEN';
+    const nextAppState = data.started ? 'ONLINE_1V1' : 'VS_SCREEN';
+    appStateRef.current = nextAppState;
     setGameOver(false);
     setMatchResult(null);
     setIsWaiting(false);
     setGameMode('ONLINE_1V1');
-    setAppState('VS_SCREEN');
+    setAppState(nextAppState);
     // READY can already have a board/Next; input waits for server start.
     setDropTime(null);
   };
@@ -130,6 +179,34 @@ export const useMultiplayer = ({
           setAppState(nextState);
         }
       }
+    });
+    connection.on('player:reconnected', (data: {
+      oldPlayerId: string;
+      newPlayerId: string;
+      displayName?: string;
+    }) => {
+      setOpponents((previous) => {
+        const oldOpponent = previous[data.oldPlayerId];
+        if (!oldOpponent) return previous;
+        const next = { ...previous };
+        delete next[data.oldPlayerId];
+        next[data.newPlayerId] = {
+          ...oldOpponent,
+          displayName: data.displayName ?? oldOpponent.displayName,
+        };
+        return next;
+      });
+    });
+  };
+
+  const listenForSession = (
+    connection: Socket,
+    onFreshSession?: () => void,
+  ) => {
+    connection.on('session:ready', (session: SessionReadyPayload) => {
+      rememberGuestSession(connection, session);
+      setConnectionError(null);
+      if (!session.resumed) onFreshSession?.();
     });
   };
 
@@ -164,10 +241,8 @@ export const useMultiplayer = ({
     setSocket(newSocket);
     socketRef.current = newSocket;
 
-    newSocket.on('connect', () => {
-      setConnectionError(null);
-      newSocket.emit('match:join_queue');
-    });
+    newSocket.on('connect', () => setConnectionError(null));
+    listenForSession(newSocket, () => newSocket.emit('match:join_queue'));
 
     newSocket.on('connect_error', () => {
       setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
@@ -244,8 +319,7 @@ export const useMultiplayer = ({
     newSocket.on('disconnect', (reason: string) => {
       if (reason === 'io client disconnect') return;
       if (!gameOverRef.current) {
-        setMatchResult(prev => prev === null ? 'WIN' : prev);
-        setGameOver(true);
+        setConnectionError('CONNECTION LOST. RECONNECTING...');
         setDropTime(null);
       }
     });
@@ -283,6 +357,7 @@ export const useMultiplayer = ({
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => setConnectionError(null));
+    listenForSession(newSocket);
     newSocket.on('connect_error', () => {
       setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
     });
@@ -406,9 +481,8 @@ export const useMultiplayer = ({
 
     newSocket.on('disconnect', (reason: string) => {
       if (reason === 'io client disconnect') return;
-      if (!gameOver) {
-        setMatchResult(prev => prev === null ? 'WIN' : prev);
-        setGameOver(true);
+      if (!gameOverRef.current) {
+        setConnectionError('CONNECTION LOST. RECONNECTING...');
         setDropTime(null);
       }
     });
@@ -452,10 +526,10 @@ export const useMultiplayer = ({
     setSocket(newSocket);
     socketRef.current = newSocket;
 
-    newSocket.on('connect', () => {
-      setConnectionError(null);
-      newSocket.emit('game:start_vs_ai', { difficulty, actionDelayMs });
-    });
+    newSocket.on('connect', () => setConnectionError(null));
+    listenForSession(newSocket, () =>
+      newSocket.emit('game:start_vs_ai', { difficulty, actionDelayMs }),
+    );
 
     newSocket.on('connect_error', () => {
       setConnectionError('GAME SERVER IS UNAVAILABLE. RETRYING...');
@@ -510,9 +584,8 @@ export const useMultiplayer = ({
 
     newSocket.on('disconnect', (reason: string) => {
       if (reason === 'io client disconnect') return;
-      if (!gameOver) {
-        setMatchResult(prev => prev === null ? 'WIN' : prev);
-        setGameOver(true);
+      if (!gameOverRef.current) {
+        setConnectionError('CONNECTION LOST. RECONNECTING...');
         setDropTime(null);
       }
     });

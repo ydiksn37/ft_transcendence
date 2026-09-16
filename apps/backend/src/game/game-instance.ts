@@ -1,4 +1,4 @@
-import { Server } from 'socket.io';
+import { Namespace, Server } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import {
   GameState,
@@ -95,7 +95,7 @@ export class GameInstance {
   private static nextPieceId = 0;
   private readonly logger = new Logger(GameInstance.name);
   readonly roomId: string;
-  private server: Server;
+  private server: Server | Namespace;
   private bag: BagGenerator;
   private players: Map<string, PlayerState> = new Map();
   private spectators: Set<string> = new Set();
@@ -133,7 +133,7 @@ export class GameInstance {
 
   constructor(
     roomId: string,
-    server: Server,
+    server: Server | Namespace,
     private readonly seed: number,
     onGameOver?: (
       roomId: string,
@@ -207,6 +207,35 @@ export class GameInstance {
   removeSpectator(socketId: string): void {
     this.spectators.delete(socketId);
   }
+
+  /** Move an existing player/spectator to a newly connected Socket.IO id. */
+  rebindSocket(oldSocketId: string, newSocketId: string): boolean {
+    if (oldSocketId === newSocketId) return this.players.has(oldSocketId);
+    if (this.players.has(newSocketId)) return false;
+
+    const player = this.players.get(oldSocketId);
+    if (player) {
+      // A pending lock callback captures the old id. Gravity will schedule a
+      // fresh lock after reconnect, so cancel the stale callback here.
+      this.clearLockTimer(oldSocketId);
+      this.players.delete(oldSocketId);
+      player.socketId = newSocketId;
+      this.players.set(newSocketId, player);
+
+      const bag = this.playerBags.get(oldSocketId);
+      if (bag) {
+        this.playerBags.delete(oldSocketId);
+        this.playerBags.set(newSocketId, bag);
+      }
+    }
+
+    if (this.spectators.delete(oldSocketId)) {
+      this.spectators.add(newSocketId);
+    }
+
+    return !!player;
+  }
+
   broadcastSnapshot(): void {
     this.players.forEach((player, id) => this.broadcastState(id, player));
   }
@@ -805,8 +834,8 @@ export class GameInstance {
     player.score = score;
   }
 
-  public handleClientGameOver(socketId: string): void {
-    this.handleGameOver(socketId);
+  public handleClientGameOver(socketId: string): Promise<void> {
+    return this.handleGameOver(socketId);
   }
 
   private clearLockTimer(socketId: string): void {
@@ -1576,5 +1605,9 @@ export class GameInstance {
 
   get isStarted(): boolean {
     return this.isRunning;
+  }
+
+  get gameSeed(): number {
+    return this.seed;
   }
 }

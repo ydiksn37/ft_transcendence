@@ -36,6 +36,17 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('rebinds a player state to a new socket without resetting the match', () => {
+    const game = new GameInstance('reconnect_room', server, 42);
+    game.addPlayer('old-socket', null);
+    const original = game.getPlayers().get('old-socket');
+
+    expect(game.rebindSocket('old-socket', 'new-socket')).toBe(true);
+    expect(game.getPlayers().has('old-socket')).toBe(false);
+    expect(game.getPlayers().get('new-socket')).toBe(original);
+    expect(original?.socketId).toBe('new-socket');
+  });
+
   it('publishes READY with all Next queues and starts without consuming another piece', () => {
     const game = new GameInstance('ready_room', server, 42);
     for (const id of ['a', 'b', 'c', 'd']) game.addPlayer(id, null);

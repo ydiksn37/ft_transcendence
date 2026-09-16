@@ -9,9 +9,10 @@ import {
   MessageBody,
   OnGatewayInit,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { resolve } from 'node:path';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import {
   ClientEvent,
@@ -38,6 +39,7 @@ interface CustomRoom {
   players: {
     socket: Socket;
     userId: string | null;
+    guestSessionId?: string | null;
     username: string | null;
     wins: number;
   }[];
@@ -45,6 +47,21 @@ interface CustomRoom {
   isTournamentActive?: boolean;
   tournament?: Tournament;
 }
+
+interface GuestSession {
+  id: string;
+  userId: string | null;
+  tokenHash: Buffer;
+  displayName: string;
+  socketId: string | null;
+  previousSocketId: string | null;
+  roomId: string | null;
+  gameRoomId: string | null;
+  expiresAt: number | null;
+  expiryTimer: NodeJS.Timeout | null;
+}
+
+const GUEST_RECONNECT_GRACE_MS = 15_000;
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -54,7 +71,7 @@ export class GameGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
-  server: Server;
+  server: Namespace;
 
   private readonly logger = new Logger(GameGateway.name);
   private rooms = new Map<string, GameInstance>();
@@ -62,6 +79,8 @@ export class GameGateway
   private clientGameRoom = new Map<string, string>(); // socketId -> gameRoomId
   private clientChatRoom = new Map<string, string>(); // socketId -> chat roomId
   private matchmakingQueue: Socket[] = [];
+  private guestSessions = new Map<string, GuestSession>();
+  private socketGuestSession = new Map<string, string>();
 
   // Custom Rooms
   private customRooms = new Map<string, CustomRoom>();
@@ -80,10 +99,12 @@ export class GameGateway
 
   async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token;
+    let authenticatedUserId: string | null = null;
     if (typeof token === 'string' && token.length > 0) {
       try {
         const payload = this.jwtService.verify<{ sub: string }>(token);
         if (typeof payload.sub === 'string') {
+          authenticatedUserId = payload.sub;
           client.data.userId = payload.sub;
 
           const user = await this.prisma.user
@@ -113,6 +134,23 @@ export class GameGateway
         this.logger.warn(`無効なWebSocketトークン: ${client.id}`);
       }
     }
+
+    const isGuestGameSession = client.handshake.auth?.guestGameSession === true;
+    if (isGuestGameSession) {
+      const { session, reconnectToken, resumed } =
+        this.connectGuestSession(client, authenticatedUserId);
+      setTimeout(() => {
+        if (!client.connected) return;
+        client.emit('session:ready', {
+          guestSessionId: session.id,
+          reconnectToken,
+          displayName: session.displayName,
+          resumed,
+          reconnectGraceMs: GUEST_RECONNECT_GRACE_MS,
+        });
+        if (resumed) this.emitRestoredGuestState(client, session);
+      }, 0);
+    }
     this.logger.log(`接続: ${client.id}`);
   }
 
@@ -137,10 +175,353 @@ export class GameGateway
       (s) => s.id !== client.id,
     );
 
-    // ゲーム中だった場合
-    const roomId = this.clientRoom.get(client.id);
-    const gameRoomId = this.clientGameRoom.get(client.id);
+    const guestSessionId = this.socketGuestSession.get(client.id);
+    const guestSession = guestSessionId
+      ? this.guestSessions.get(guestSessionId)
+      : undefined;
+    const roomId = this.clientRoom.get(client.id) ?? null;
+    const gameRoomId = this.clientGameRoom.get(client.id) ?? null;
+    if (
+      guestSession &&
+      guestSession.socketId === client.id &&
+      this.canRestoreGuest(client.id, roomId, gameRoomId)
+    ) {
+      this.reserveGuestReconnect(
+        guestSession,
+        client,
+        roomId,
+        gameRoomId,
+      );
+      return;
+    }
 
+    this.finalizeDisconnectedSocket(client, roomId, gameRoomId);
+    if (guestSession && guestSession.socketId === client.id) {
+      this.deleteGuestSession(guestSession.id);
+    }
+  }
+
+  private hashGuestToken(token: string): Buffer {
+    return createHash('sha256').update(token).digest();
+  }
+
+  private guestTokenMatches(session: GuestSession, token: unknown): boolean {
+    if (typeof token !== 'string' || token.length < 32 || token.length > 256)
+      return false;
+    const candidate = this.hashGuestToken(token);
+    return (
+      candidate.length === session.tokenHash.length &&
+      timingSafeEqual(candidate, session.tokenHash)
+    );
+  }
+
+  private createGuestSession(
+    client: Socket,
+    userId: string | null,
+  ): {
+    session: GuestSession;
+    reconnectToken: string;
+  } {
+    const id = `guest:${randomUUID()}`;
+    const reconnectToken = randomBytes(32).toString('base64url');
+    const displayName =
+      (client.data.username as string | undefined) ??
+      (userId
+        ? `PLAYER-${id.slice(-8).toUpperCase()}`
+        : `GUEST-${id.slice(-8).toUpperCase()}`);
+    const session: GuestSession = {
+      id,
+      userId,
+      tokenHash: this.hashGuestToken(reconnectToken),
+      displayName,
+      socketId: client.id,
+      previousSocketId: null,
+      roomId: null,
+      gameRoomId: null,
+      expiresAt: null,
+      expiryTimer: null,
+    };
+    this.guestSessions.set(id, session);
+    this.socketGuestSession.set(client.id, id);
+    client.data.guestSessionId = id;
+    client.data.username = displayName;
+    return { session, reconnectToken };
+  }
+
+  private connectGuestSession(
+    client: Socket,
+    userId: string | null,
+  ): {
+    session: GuestSession;
+    reconnectToken: string;
+    resumed: boolean;
+  } {
+    const requestedId = client.handshake.auth?.guestSessionId;
+    const requestedToken = client.handshake.auth?.reconnectToken;
+    const existing =
+      typeof requestedId === 'string'
+        ? this.guestSessions.get(requestedId)
+        : undefined;
+    const canClaim =
+      !!existing &&
+      existing.userId === userId &&
+      existing.socketId === null &&
+      existing.expiresAt !== null &&
+      existing.expiresAt > Date.now() &&
+      this.guestTokenMatches(existing, requestedToken);
+
+    if (!existing || !canClaim) {
+      const created = this.createGuestSession(client, userId);
+      return { ...created, resumed: false };
+    }
+
+    if (existing.expiryTimer) clearTimeout(existing.expiryTimer);
+    existing.expiryTimer = null;
+    existing.expiresAt = null;
+    existing.socketId = client.id;
+    this.socketGuestSession.set(client.id, existing.id);
+    client.data.guestSessionId = existing.id;
+    if (userId && typeof client.data.username === 'string') {
+      existing.displayName = client.data.username;
+    }
+    client.data.username = existing.displayName;
+
+    const reconnectToken = randomBytes(32).toString('base64url');
+    existing.tokenHash = this.hashGuestToken(reconnectToken);
+    const resumed = this.restoreGuestSocket(existing, client);
+    return { session: existing, reconnectToken, resumed };
+  }
+
+  private canRestoreGuest(
+    socketId: string,
+    roomId: string | null,
+    gameRoomId: string | null,
+  ): boolean {
+    if (roomId && this.customRooms.has(roomId)) return true;
+    const instance = this.rooms.get(gameRoomId ?? roomId ?? '');
+    // VS AI still uses browser-owned state for the human side, so it cannot
+    // yet restore a complete authoritative snapshot safely.
+    if (instance?.isAiMatch) return false;
+    const player = instance?.getPlayers().get(socketId);
+    return !!player && !player.isGameOver;
+  }
+
+  private reserveGuestReconnect(
+    session: GuestSession,
+    client: Socket,
+    roomId: string | null,
+    gameRoomId: string | null,
+  ): void {
+    session.socketId = null;
+    session.previousSocketId = client.id;
+    session.roomId = roomId;
+    session.gameRoomId = gameRoomId;
+    session.expiresAt = Date.now() + GUEST_RECONNECT_GRACE_MS;
+    if (session.expiryTimer) clearTimeout(session.expiryTimer);
+    session.expiryTimer = setTimeout(() => {
+      const current = this.guestSessions.get(session.id);
+      if (!current || current.socketId !== null) return;
+      this.finalizeDisconnectedSocket(client, roomId, gameRoomId);
+      this.deleteGuestSession(session.id);
+    }, GUEST_RECONNECT_GRACE_MS);
+
+    const targetRoomId = gameRoomId ?? roomId;
+    if (targetRoomId) {
+      this.server.to(targetRoomId).emit('player:disconnected', {
+        playerId: client.id,
+        reconnectGraceMs: GUEST_RECONNECT_GRACE_MS,
+      });
+    }
+  }
+
+  private restoreGuestSocket(session: GuestSession, client: Socket): boolean {
+    const oldSocketId = session.previousSocketId;
+    if (!oldSocketId) return false;
+
+    const roomId = session.roomId;
+    const gameRoomId = session.gameRoomId;
+    let restored = false;
+
+    if (roomId && (this.customRooms.has(roomId) || this.rooms.has(roomId))) {
+      this.clientRoom.delete(oldSocketId);
+      this.clientRoom.set(client.id, roomId);
+      client.join(roomId);
+      restored = true;
+    }
+    if (gameRoomId && this.rooms.has(gameRoomId)) {
+      this.clientGameRoom.delete(oldSocketId);
+      this.clientGameRoom.set(client.id, gameRoomId);
+      client.join(gameRoomId);
+      restored = true;
+    }
+
+    const instance = this.rooms.get(gameRoomId ?? roomId ?? '');
+    if (instance?.rebindSocket(oldSocketId, client.id)) restored = true;
+
+    const customRoom = roomId ? this.customRooms.get(roomId) : undefined;
+    if (customRoom) {
+      const player = customRoom.players.find(
+        (candidate) => candidate.socket.id === oldSocketId,
+      );
+      if (player) player.socket = client;
+      if (customRoom.ownerSocketId === oldSocketId)
+        customRoom.ownerSocketId = client.id;
+      if (customRoom.tournament)
+        this.replaceTournamentSocketId(
+          customRoom.tournament,
+          oldSocketId,
+          client.id,
+        );
+      const players = customRoom.players.map((roomPlayer) => ({
+        socketId: roomPlayer.socket.id,
+        userId: roomPlayer.userId,
+        username: roomPlayer.username,
+        wins: roomPlayer.wins,
+      }));
+      customRoom.players.forEach((roomPlayer) => {
+        if (roomPlayer.socket.connected) {
+          roomPlayer.socket.emit('custom_room_players_updated', { players });
+          if (customRoom.tournament) {
+            roomPlayer.socket.emit('tournament_state', {
+              tournament: customRoom.tournament,
+            });
+          }
+        }
+      });
+    }
+
+    this.socketGuestSession.delete(oldSocketId);
+    session.previousSocketId = null;
+    session.roomId = roomId;
+    session.gameRoomId = gameRoomId;
+
+    if (restored) {
+      const targetRoomId = gameRoomId ?? roomId;
+      if (targetRoomId) {
+        this.server.to(targetRoomId).emit('player:reconnected', {
+          oldPlayerId: oldSocketId,
+          newPlayerId: client.id,
+          displayName: session.displayName,
+        });
+      }
+    }
+    return restored;
+  }
+
+  private replaceTournamentSocketId(
+    tournament: Tournament,
+    oldSocketId: string,
+    newSocketId: string,
+  ): void {
+    if (tournament.playerNames[oldSocketId]) {
+      tournament.playerNames[newSocketId] =
+        tournament.playerNames[oldSocketId];
+      delete tournament.playerNames[oldSocketId];
+    }
+    tournament.matches.forEach((match) => {
+      match.playerIds = match.playerIds.map((id) =>
+        id === oldSocketId ? newSocketId : id,
+      );
+      if (match.winnerId === oldSocketId) match.winnerId = newSocketId;
+    });
+  }
+
+  private emitRestoredGuestState(client: Socket, session: GuestSession): void {
+    const roomId = session.roomId;
+    const gameRoomId = session.gameRoomId;
+    const customRoom = roomId ? this.customRooms.get(roomId) : undefined;
+    if (customRoom) this.emitCustomRoomState(customRoom, client);
+
+    const instance = this.rooms.get(gameRoomId ?? roomId ?? '');
+    if (!instance) return;
+    const players = [...instance.getPlayers().keys()];
+    const displayNames = this.getDisplayNames(players, customRoom);
+    if (instance.getPlayers().has(client.id)) {
+      client.emit(ServerEvent.MATCH_FOUND, {
+        roomId: instance.roomId,
+        seed: instance.gameSeed,
+        players,
+        displayNames,
+        reconnected: true,
+        started: instance.isStarted,
+        vsAi: instance.isAiMatch,
+      });
+    } else {
+      client.emit('spectating', {
+        roomId: instance.roomId,
+        players,
+        displayNames,
+        isStarted: instance.isStarted,
+      });
+    }
+    instance.broadcastSnapshot();
+  }
+
+  private getDisplayNames(
+    playerIds: string[],
+    customRoom?: CustomRoom,
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+    playerIds.forEach((socketId, index) => {
+      const customPlayer = customRoom?.players.find(
+        (player) => player.socket.id === socketId,
+      );
+      const socket = this.server.sockets.get(socketId);
+      result[socketId] =
+        customPlayer?.username ??
+        (socket?.data?.username as string | undefined) ??
+        `Player ${index + 1}`;
+    });
+    return result;
+  }
+
+  private emitCustomRoomState(room: CustomRoom, client: Socket): void {
+    client.emit('custom_room_state', {
+      inRoom: true,
+      roomId: room.roomId,
+      name: room.name,
+      isOwner: room.ownerSocketId === client.id,
+      players: room.players.map((player) => ({
+        socketId: player.socket.id,
+        userId: player.userId,
+        username: player.username,
+        wins: player.wins,
+      })),
+      isPlaying: room.isPlaying,
+      tournament: room.tournament,
+    });
+  }
+
+  private deleteGuestSession(sessionId: string): void {
+    const session = this.guestSessions.get(sessionId);
+    if (!session) return;
+    if (session.expiryTimer) clearTimeout(session.expiryTimer);
+    if (session.socketId) this.socketGuestSession.delete(session.socketId);
+    if (session.previousSocketId)
+      this.socketGuestSession.delete(session.previousSocketId);
+    this.guestSessions.delete(sessionId);
+  }
+
+  private isSocketConnectedOrRecovering(socketId: string): boolean {
+    const socket = this.server.sockets.get(socketId);
+    if (socket?.connected) return true;
+    const sessionId = this.socketGuestSession.get(socketId);
+    const session = sessionId ? this.guestSessions.get(sessionId) : undefined;
+    return (
+      !!session &&
+      session.socketId === null &&
+      session.previousSocketId === socketId &&
+      (session.expiresAt ?? 0) > Date.now()
+    );
+  }
+
+  private finalizeDisconnectedSocket(
+    client: Socket,
+    roomId: string | null,
+    gameRoomId: string | null,
+  ): void {
+
+    // ゲーム中だった場合
     if (gameRoomId) {
       const room = this.rooms.get(gameRoomId);
       if (room) {
@@ -167,13 +548,23 @@ export class GameGateway
           );
         }
         // Check if any other player is still connected and in the room
-        const hasActivePlayers = activeRoom.players.some(p => p.socket.id !== client.id && !p.socket.disconnected && this.clientRoom.get(p.socket.id) === roomId);
+        const hasActivePlayers = activeRoom.players.some(
+          (p) =>
+            p.socket.id !== client.id &&
+            this.isSocketConnectedOrRecovering(p.socket.id) &&
+            this.clientRoom.get(p.socket.id) === roomId,
+        );
 
         if (!hasActivePlayers) {
           this.customRooms.delete(roomId);
         } else {
           if (activeRoom.ownerSocketId === client.id) {
-            const nextOwner = activeRoom.players.find(p => p.socket.id !== client.id && !p.socket.disconnected && this.clientRoom.get(p.socket.id) === roomId);
+            const nextOwner = activeRoom.players.find(
+              (p) =>
+                p.socket.id !== client.id &&
+                this.isSocketConnectedOrRecovering(p.socket.id) &&
+                this.clientRoom.get(p.socket.id) === roomId,
+            );
             if (nextOwner) {
               activeRoom.ownerSocketId = nextOwner.socket.id;
             }
@@ -201,8 +592,8 @@ export class GameGateway
       }
       this.clientRoom.delete(client.id);
     }
-
-    // カスタムルームのクリーンアップは上記で処理されるため省略
+    if (gameRoomId) this.clientGameRoom.delete(client.id);
+    this.socketGuestSession.delete(client.id);
   }
 
   private getCustomRoomsList() {
@@ -366,6 +757,8 @@ export class GameGateway
         {
           socket: client,
           userId: (client.data?.userId as string) || null,
+          guestSessionId:
+            (client.data?.guestSessionId as string | undefined) ?? null,
           username: (client.data?.username as string) || 'Player 1',
           wins: 0,
         },
@@ -488,13 +881,23 @@ export class GameGateway
         room.players = room.players.filter((p) => p.socket.id !== client.id);
       }
       
-      const hasActivePlayers = room.players.some(p => p.socket.id !== client.id && !p.socket.disconnected && this.clientRoom.get(p.socket.id) === roomId);
+      const hasActivePlayers = room.players.some(
+        (p) =>
+          p.socket.id !== client.id &&
+          this.isSocketConnectedOrRecovering(p.socket.id) &&
+          this.clientRoom.get(p.socket.id) === roomId,
+      );
 
       if (!hasActivePlayers) {
         this.customRooms.delete(roomId);
       } else {
         if (room.ownerSocketId === client.id) {
-          const nextOwner = room.players.find(p => p.socket.id !== client.id && !p.socket.disconnected && this.clientRoom.get(p.socket.id) === roomId);
+          const nextOwner = room.players.find(
+            (p) =>
+              p.socket.id !== client.id &&
+              this.isSocketConnectedOrRecovering(p.socket.id) &&
+              this.clientRoom.get(p.socket.id) === roomId,
+          );
           if (nextOwner) {
             room.ownerSocketId = nextOwner.socket.id;
           }
@@ -569,12 +972,19 @@ export class GameGateway
     console.log(`[handleJoinCustomRoom] Client ${client.id} joining ${data.roomId}. isTournamentActive: ${room.isTournamentActive}`);
     if (room.isTournamentActive) {
       const userId = (client.data?.userId as string) ?? null;
+      const guestSessionId =
+        (client.data?.guestSessionId as string | undefined) ?? null;
       
       // Find a player with the same userId.
       // If anonymous (null), require them to be disconnected to prevent hijacking other anonymous players.
       // If authenticated, allow hijacking their own slot to avoid race conditions on page reload.
       const existingPlayerIndex = room.players.findIndex(p => {
-        if (userId === null) return p.userId === null && p.socket.disconnected;
+        if (userId === null)
+          return (
+            guestSessionId !== null &&
+            p.guestSessionId === guestSessionId &&
+            p.socket.disconnected
+          );
         return p.userId === userId;
       });
       
@@ -604,7 +1014,13 @@ export class GameGateway
       
       if (room.ownerSocketId === oldSocketId) {
         room.ownerSocketId = client.id;
-      } else if (!room.players.find(p => p.socket.id === room.ownerSocketId && !p.socket.disconnected)) {
+      } else if (
+        !room.players.find(
+          (p) =>
+            p.socket.id === room.ownerSocketId &&
+            this.isSocketConnectedOrRecovering(p.socket.id),
+        )
+      ) {
         room.ownerSocketId = client.id;
       }
     } else {
@@ -615,6 +1031,8 @@ export class GameGateway
       room.players.push({
         socket: client,
         userId: (client.data?.userId as string) ?? null,
+        guestSessionId:
+          (client.data?.guestSessionId as string | undefined) ?? null,
         username: (client.data?.username as string) ?? `Player ${lowest}`,
         wins: 0,
       });
@@ -1338,7 +1756,9 @@ export class GameGateway
   }
 
   @SubscribeMessage('game_over')
-  handleGameOverEvent(@ConnectedSocket() client: Socket) {
+  async handleGameOverEvent(
+    @ConnectedSocket() client: Socket,
+  ): Promise<{ ok: true }> {
     // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
     const gameRoomId = this.clientGameRoom.get(client.id);
     const roomId = this.clientRoom.get(client.id);
@@ -1349,9 +1769,14 @@ export class GameGateway
 
     if (instance) {
       if (instance.isAiMatch) {
-        instance.handleClientGameOver(client.id);
+        await instance.handleClientGameOver(client.id);
+      } else {
+        // This event is an explicit forfeit (ESC/back), not a transport
+        // disconnect. A player may always concede their own match.
+        await instance.handleGameOver(client.id);
       }
     }
+    return { ok: true };
   }
 
   /**

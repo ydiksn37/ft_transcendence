@@ -728,13 +728,24 @@ const PlayPage = () => {
       }
       setAppState('CUSTOM_ROOMS');
     } else if (socketRef.current) {
-      // ONLINE_1V1など: game_over を送って切断
+      const activeSocket = socketRef.current;
+      const finishQuit = () => {
+        activeSocket.disconnect();
+        if (socketRef.current === activeSocket) socketRef.current = null;
+        setSocket(null);
+        navigate(`/lobby/${mode}`);
+      };
+
+      // Wait for the server to commit the intentional forfeit before closing
+      // the transport. Otherwise a reload-style disconnect can win the race
+      // and incorrectly start the reconnect grace period.
       if (!gameOver && appState === 'ONLINE_1V1') {
-        socketRef.current.emit('game_over');
+        setGameOver(true);
+        setDropTime(null);
+        activeSocket.timeout(1500).emit('game_over', {}, finishQuit);
+        return;
       }
-      socketRef.current.disconnect();
-      setSocket(null);
-      navigate(`/lobby/${mode}`);
+      finishQuit();
     } else {
       navigate(`/lobby/${mode}`);
     }
