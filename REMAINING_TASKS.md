@@ -46,7 +46,7 @@ production buildを実行していない。そのため、`make re` の成功は
 
 ## P0: 提出前に必ず修正する項目
 
-### 1. 秘密情報を失効・除去する（後回し指定中）
+### 1. 秘密情報を失効・除去する（後回し）
 
 - [ ] `.env.example` のJWT、DB、Redis、OAuth、SMTP等の値をプレースホルダーへ置換
 - [ ] 実際に使用された可能性のある資格情報を失効・再発行
@@ -58,7 +58,7 @@ production buildを実行していない。そのため、`make re` の成功は
 - `.env.example` に実際の秘密情報がない
 - リポジトリ内の秘密情報検査で問題が出ない
 
-### 1A. npm依存関係の脆弱性を解消する
+#### 1A. npm依存関係の脆弱性を解消する
 
 2026-09-15のDocker image再ビルド時に、npmから次の報告があった。
 
@@ -113,7 +113,7 @@ npm run type-check --workspace @transcendence/backend
 - [x] 数値範囲、enum、文字数、UUID、未知フィールドを検証している
 - [x] 不正入力が400になり、500やPrismaエラーにならない
 
-### 4. WebSocket payloadを検証する
+### 4. WebSocket payloadを検証する（後回し）
 
 - [ ] ゲーム入力イベントをスキーマまたはDTOで検証
 - [ ] ルーム作成・参加・再戦イベントを検証
@@ -129,7 +129,7 @@ npm run type-check --workspace @transcendence/backend
 - [x] メッセージ保存時にも送信者のmembershipを再確認
 - [x] 他人のDIRECT/GAMEルームを推測したIDで閲覧できないことをテスト
 
-### 6. HTTPS・ポート・起動手順を一致させる
+### 6. HTTPS・ポート・起動手順を一致させる（後回し）
 
 - [ ] READMEの `https://localhost`、80/443記述をComposeの8080/8443と一致させる
 - [ ] HTTPからHTTPSへのリダイレクト先へ正しいHTTPSポートを含める
@@ -182,7 +182,7 @@ npm run type-check --workspace @transcendence/backend
 - User interaction
 - Standard user management
 
-### 10. リモート対戦の再接続を実装する
+### 10. リモート対戦の再接続を実装する（後回し）
 
 - [ ] 一時切断で即敗北にしない猶予時間を追加
 - [ ] user IDまたは再接続tokenで元のPlayerStateへ復帰
@@ -210,7 +210,7 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 
 が全件成功すること。
 
-### 12. Tournament実装を一本化する
+### 12. Tournament実装を一本化する（後回し）
 
 - [ ] DBベースのTournamentとインメモリCustom Room Tournamentの責務を整理
 - [ ] bracket進行とGameResultをDBへ接続
@@ -289,7 +289,7 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 - [ ] 10個以上の再利用可能なUI componentを明示
 - [ ] Vite build warningを解消
 
-### 22. スマートフォン対応
+### 22. スマートフォン対応（後回し）
 
 - [ ] モバイルでも必須機能へアクセスできる設計にする
 - [ ] 現在非表示のMultiplayerを要件上許容できるか確認
