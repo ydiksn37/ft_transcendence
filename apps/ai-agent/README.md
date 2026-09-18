@@ -403,6 +403,7 @@ The supplied `template/` diagrams additionally support these tested setups:
 | `2021y01m13d_193730018.jpg` (LST) | L/S overhang preparation above an existing foundation |
 | `2021y01m13d_194205019.jpg` (ST) | Existing S donation route, now covered by a surface fixture |
 | `2020y09m22d_001127777.jpg` (STSD) | J plus O/S/L roof; first TSD with supplied Next/Hold, followed by a geometrically verified second TSD |
+| `2020y10m03d_131813351.jpg` (CC) | L plus S/Z roof; vertical TSD clearing nonadjacent rows, followed by a supplied, reachable L repair |
 
 All of these include horizontal mirrors and real SRS reachability checks.
 They are bounded local setups, not perpetual stacking controllers: surrounding
@@ -411,6 +412,26 @@ assume a second T in the queue or commit the agent to waiting for one. Its
 second attack is checked to validate the residual cavity, not awarded as
 guaranteed future attack. Partial/unlabelled Fumen screenshots do not establish
 support for their unseen pages; the catalog alone cannot fill in those steps.
+
+CC and STSD use the same bounded construction verifier. It accepts already
+placed complete donor pieces, advances the real Next/Hold state for missing
+pieces, checks collision and SRS reachability for each placement, and rejects
+premature line clears. CC has no chained-attack bonus: its temporary post-clear
+cavity must be repairable with an actual Next/Hold piece, not an assumed future
+bag. The extra repair reduces its setup reward. Tests cover both roof alternatives and
+their mirrors, unavailable supply, unrelated holes, and replay of Expert's
+actual operation sequence through the game rules.
+
+Implementation status must distinguish construction from attack recognition.
+The requested SF Attack, Purple Rain, Hamburg/Hamburger, Yoshihiro/aerial
+Yoshihiro, Shachiku Train and Yoshida entries do not yet have dedicated,
+image-derived construction fixtures. Stairs, parapet and one STMB-Cave family
+have local donor construction support, not every variation in their pages.
+MT, Pot, Single Double, ST Cannon, Double Dagger, Chidori, Imperial Cross,
+DT/DT2 and Escalator currently use shared reachable attack-sequence detection;
+their catalog entries alone do not implement their full construction recipes.
+The provided names identify the requested families, but a screenshot of one
+Fumen page does not supply the hidden construction pages.
 
 ### Expert weight tuning
 

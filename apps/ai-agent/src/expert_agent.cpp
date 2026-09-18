@@ -1128,10 +1128,10 @@ std::optional<ExpertTSpinSequencePlan> findTSpinSequence(
   return best;
 }
 
-// O/S/L-roof STSD from template/2020y09m22d_001127777.jpg. Verify both
-// rotations, but only reward preparation for the first, supplied T. The
-// second attack is a geometric continuation, never an invented Next piece.
-std::optional<ExpertDonationPlan> findStsdSetup(
+// Local construction diagrams, including vertical T entries. Only the first
+// supplied T is rewarded. An optional second attack validates the residual
+// cavity, but is never treated as an invented Next piece.
+std::optional<ExpertDonationPlan> findFixedDonationSetup(
     const Board& board, std::optional<PieceType> hold,
     const std::vector<PieceType>& next, std::size_t nextIndex) {
   if (nextIndex >= next.size()) return std::nullopt;
@@ -1140,8 +1140,33 @@ std::optional<ExpertDonationPlan> findStsdSetup(
   const auto heights = columnHeights(board);
   const int height = *std::max_element(heights.begin(), heights.end());
   if (height < 3 || height > 10) return std::nullopt;
+  struct Setup {
+    std::string_view name;
+    ActivePiece body;
+    ActivePiece roof;
+    ActivePiece target;
+    std::optional<ActivePiece> second;
+    std::array<int, 2> clearRows;
+    std::optional<ActivePiece> cleanup = std::nullopt;
+  };
+  using P = PieceType;
+  // STSD: template/2020y09m22d_001127777.jpg.
+  // CC: template/2020y10m03d_131813351.jpg. The vertical T clears
+  // nonadjacent rows; a supplied post-clear L repairs the overhang cavity.
+  const std::array<Setup, 5> setups{{
+      {"STSD-O", {P::J, -1, 1, 1}, {P::O, 2, -2, 0},
+       {P::T, 1, 1, 3}, ActivePiece{P::T, 0, 1, 2}, {1, 2}},
+      {"STSD-S", {P::J, -1, 1, 1}, {P::S, 1, -2, 1},
+       {P::T, 1, 1, 3}, ActivePiece{P::T, 0, 1, 2}, {1, 2}},
+      {"STSD-L", {P::J, -1, 1, 1}, {P::L, 2, -1, 3},
+       {P::T, 1, 1, 3}, ActivePiece{P::T, 0, 1, 2}, {1, 2}},
+      {"CC-S", {P::L, 0, -1, 2}, {P::S, 2, -3, 1},
+       {P::T, 2, 0, 3}, std::nullopt, {0, 2}, ActivePiece{P::L, 1, -1, 1}},
+      {"CC-Z", {P::L, 0, -1, 2}, {P::Z, 3, -2, 0},
+       {P::T, 2, 0, 3}, std::nullopt, {0, 2}, ActivePiece{P::L, 1, -1, 1}},
+  }};
   for (bool mirror : {false, true}) {
-    for (int y = kBoardRows - height - 1; y + 3 < kBoardRows; ++y) {
+    for (int y = kBoardRows - height - 1; y + 2 < kBoardRows; ++y) {
       for (int x = 0; x <= 6; ++x) {
         const auto transform = [&](ActivePiece piece) {
           piece.x += x;
@@ -1152,30 +1177,31 @@ std::optional<ExpertDonationPlan> findStsdSetup(
           }
           return piece;
         };
-        const auto target = transform({PieceType::T, 1, 1, 3});
-        const auto second = transform({PieceType::T, 0, 1, 2});
+        for (const auto& setup : setups) {
+        const auto target = transform(setup.target);
         if (!isValidPosition(board, target)) continue;
         bool rowsReady = true;
-        // J and the first T complete exactly three columns in these rows.
-        // Reject ordinary terrain before board copies or SRS searches.
-        for (int row = y + 1; row <= y + 2 && rowsReady; ++row)
+        // Reject terrain whose clear rows cannot be filled by these pieces
+        // before copying boards or running the more expensive SRS verifier.
+        for (int offset : setup.clearRows) {
+          unsigned filled = 0;
+          for (const auto& piece : {setup.body, setup.roof, setup.target})
+            for (const auto cell : getMinoCells(piece))
+              if (cell.row == offset && x + cell.col >= 0 && x + cell.col < 10)
+                filled |= 1U << (x + cell.col);
           for (int col = 0; col < 10; ++col) {
-            if (col >= x && col <= x + 2) continue;
-            if (!occupied(board, row, mirror ? 9 - col : col)) {
+            if (!(filled & (1U << col)) &&
+                !occupied(board, y + offset, mirror ? 9 - col : col)) {
               rowsReady = false; break;
             }
           }
+          if (!rowsReady) break;
+        }
         if (!rowsReady) continue;
-        for (const auto& roof : std::array<std::pair<std::string_view, ActivePiece>, 3>{{
-                 {"STSD-O", {PieceType::O, 2, -2, 0}},
-                 {"STSD-S", {PieceType::S, 1, -2, 1}},
-                 {"STSD-L", {PieceType::L, 2, -2, 3}},
-             }}) {
         std::vector<ActivePiece> missing;
         Board complete = board;
         bool fits = true;
-        for (auto donor : {transform({PieceType::J, -1, 1, 1}),
-                           transform(roof.second)}) {
+        for (auto donor : {transform(setup.body), transform(setup.roof)}) {
           int present = 0;
           for (const Point cell : getMinoCells(donor)) {
             if (cell.row < 0 || cell.row >= kBoardRows || cell.col < 0 || cell.col >= 10) {
@@ -1192,11 +1218,21 @@ std::optional<ExpertDonationPlan> findStsdSetup(
         }
         if (!fits || !isValidPosition(complete, target)) continue;
         const auto firstClear = clearLines(lockMino(complete, target));
-        if (firstClear.linesCleared != 2 || !isValidPosition(firstClear.board, second)) continue;
-        const auto secondClear = clearLines(lockMino(firstClear.board, second));
-        if (secondClear.linesCleared != 2 || !cleanDonationResidual(secondClear.board) ||
-            !canReachTSpinClear(complete, target, 2) ||
-            !canReachTSpinClear(firstClear.board, second, 2)) continue;
+        if (firstClear.linesCleared != 2 || !canReachTSpinClear(complete, target, 2)) continue;
+        if (setup.second) {
+          const auto second = transform(*setup.second);
+          if (!isValidPosition(firstClear.board, second)) continue;
+          const auto secondClear = clearLines(lockMino(firstClear.board, second));
+          if (secondClear.linesCleared != 2 || !cleanDonationResidual(secondClear.board) ||
+              !canReachTSpinClear(firstClear.board, second, 2)) continue;
+        } else if (!setup.cleanup && !cleanDonationResidual(firstClear.board)) continue;
+        std::optional<ActivePiece> cleanup;
+        if (setup.cleanup) {
+          cleanup = transform(*setup.cleanup);
+          if (!isValidPosition(firstClear.board, *cleanup) ||
+              !cleanDonationResidual(clearLines(lockMino(firstClear.board, *cleanup)).board) ||
+              !canReachTarget(firstClear.board, *cleanup)) continue;
+        }
         std::vector<ActivePiece> path;
         const auto solve = [&](auto&& self, const Board& current,
                                std::optional<PieceType> held, std::size_t index,
@@ -1204,8 +1240,17 @@ std::optional<ExpertDonationPlan> findStsdSetup(
           if (index >= next.size()) return false;
           const auto attempt = [&](PieceType active, std::optional<PieceType> afterHold,
                                    std::size_t afterIndex) {
-            if (remaining == 0)
-              return active == PieceType::T && canReachTSpinClear(current, target, 2);
+            if (remaining == 0) {
+              if (active != PieceType::T || !canReachTSpinClear(current, target, 2)) return false;
+              if (!cleanup) return true;
+              // CC leaves one temporary cavity. Only value it if an actual
+              // next playable piece (or legal Hold swap) can repair it.
+              if (afterIndex >= next.size()) return false;
+              return next[afterIndex] == cleanup->type ||
+                     (afterHold && *afterHold == cleanup->type) ||
+                     (!afterHold && afterIndex + 1 < next.size() &&
+                      next[afterIndex + 1] == cleanup->type);
+            }
             for (std::size_t i = 0; i < missing.size(); ++i) {
               const auto& donor = missing[i];
               if (!(remaining & (1U << i)) || donor.type != active ||
@@ -1223,7 +1268,7 @@ std::optional<ExpertDonationPlan> findStsdSetup(
           return index + 1 < next.size() && attempt(next[index + 1], next[index], index + 2);
         };
         if (solve(solve, board, hold, nextIndex, (1U << missing.size()) - 1U))
-          return ExpertDonationPlan{roof.first, target, path};
+          return ExpertDonationPlan{setup.name, target, path, cleanup};
         }
       }
     }
@@ -1359,7 +1404,7 @@ std::optional<ExpertDonationPlan> findDonationTemplate(
       }
     }
   }
-  return best ? best : findStsdSetup(board, hold, next, nextIndex);
+  return best ? best : findFixedDonationSetup(board, hold, next, nextIndex);
 }
 
 BoardFeatures evaluateBoardForExpert(const Board& board,
@@ -1449,8 +1494,8 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
   patternFeatures.chainedTSpinPatterns = strongTSpinSequence
       ? static_cast<int>(tSpinSequence->attacks.size()) - 1
       : 0;
-  // This exception is supply- and route-dependent. The verified TSD must
-  // reopen EVERY covered cell; a template elsewhere never excuses side holes.
+  // This exception is supply- and route-dependent. The verified continuation
+  // (including any supplied post-clear repair) must reopen EVERY covered cell.
   const int unownedHoleCells =
       (donation || safeTSpinSequence)
           ? 0
@@ -1458,7 +1503,15 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
   if (donation) {
     patternFeatures.unfillableCavityCells = 0;
     if (preferredAttackLane >= 0) {
-      for (int row = donation->target.y + 1; row <= donation->target.y + 2; ++row) {
+      Board completed = board;
+      for (const auto& piece : donation->setup) completed = lockMino(completed, piece);
+      completed = lockMino(completed, donation->target);
+      // Vertical CC entries clear nonadjacent rows. Credit lane cells only
+      // in rows that the verified setup really clears, not a fixed TSD mask.
+      for (int row = std::max(0, donation->target.y);
+           row <= std::min(kBoardRows - 1, donation->target.y + 2); ++row) {
+        if (std::any_of(completed.cells()[row].begin(), completed.cells()[row].end(),
+                        [](Cell cell) { return cell == Cell::Empty; })) continue;
         const auto cell = board.cells()[row][preferredAttackLane];
         if (cell != Cell::Empty && cell != Cell::Garbage)
           --patternFeatures.attackLaneOccupiedCells;
@@ -1718,7 +1771,8 @@ BoardFeatures evaluateBoardForExpert(const Board& board,
       deferredRoofValue +
       chainedTSpinValue +
       (donation
-           ? setupPriority * weights.donationTemplateReward / (1 + donation->setup.size())
+           ? setupPriority * weights.donationTemplateReward /
+                 (1 + donation->setup.size() + (donation->cleanup ? 1 : 0))
            : 0.0) +
       setupSafety * preparatorySetupValue +
       wellValue +

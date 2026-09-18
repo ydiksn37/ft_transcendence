@@ -2092,7 +2092,8 @@ void testExpertBuildsStsdFromTwoDonors() {
   for (bool mirror : {false, true}) {
     tetris::Board board;
     for (int row = 36; row < 40; ++row)
-      for (int col = (row == 36 && roof != P::O) ? 4 : 3; col < 10; ++col)
+      for (int col = ((row == 36 && roof != P::O) ||
+                      (row == 37 && roof == P::L)) ? 4 : 3; col < 10; ++col)
         board.set(row, mirror ? 9 - col : col, tetris::Cell::J);
     const P actualRoof = !mirror ? roof : roof == P::S ? P::Z : roof == P::L ? P::J : P::O;
     const auto plan = tetris::findExpertDonationTemplate(
@@ -2128,6 +2129,85 @@ void testExpertBuildsStsdFromTwoDonors() {
     expect(tetris::findExpertDonationTemplate(prepared, std::nullopt, {actualRoof, P::T}).has_value(),
            "Expert's actual first move must retain a supplied template continuation");
   }
+  }
+}
+
+void testExpertBuildsCcDonations() {
+  using P = tetris::PieceType;
+  // Gray cells from template/2020y10m03d_131813351.jpg, before L and roof.
+  for (const P roof : {P::S, P::Z}) {
+    for (bool mirror : {false, true}) {
+      const auto reflect = [mirror](P type) {
+        if (!mirror) return type;
+        return type == P::L ? P::J : type == P::S ? P::Z : P::S;
+      };
+      tetris::Board board;
+      const std::array<std::string_view, 3> rows{
+          "####....##", "####....##", "#######.##"};
+      for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 10; ++col)
+          if (rows[row][col] == '#')
+            board.set(37 + row, mirror ? 9 - col : col, tetris::Cell::J);
+      const std::vector<P> supply{reflect(P::L), reflect(roof), P::T, reflect(P::L)};
+      const auto plan = tetris::findExpertDonationTemplate(board, std::nullopt, supply);
+      expect(plan && plan->name.substr(0, 3) == "CC-" && plan->setup.size() == 2,
+             "CC must plan L plus S/Z roof, including horizontal mirrors");
+      auto ready = board;
+      for (const auto& donor : plan->setup) {
+        expect(tetris::isValidPosition(ready, donor) &&
+                   tetris::calcGhostY(ready, donor) == donor.y,
+               "CC donors must be grounded and collision-free");
+        ready = tetris::lockMino(ready, donor);
+        expect(tetris::clearLines(ready).linesCleared == 0,
+               "CC setup must not prematurely clear its foundation");
+      }
+      const auto clear = tetris::clearLines(tetris::lockMino(ready, plan->target));
+      expect(clear.linesCleared == 2 && plan->cleanup.has_value(),
+             "CC must clear two nonadjacent rows and retain its verified repair");
+      expect(tetris::isValidPosition(clear.board, *plan->cleanup) &&
+                 tetris::evaluateExpertBoard(tetris::clearLines(
+                     tetris::lockMino(clear.board, *plan->cleanup)).board).holes == 0,
+             "CC's supplied post-clear repair must reopen all covered cells");
+      tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
+      const auto fired = agent.decide(ready, P::T, {}, std::nullopt, false);
+      expect(fired && fired->linesCleared == 2, "Expert must fire the completed CC");
+      tetris::ActivePiece active{P::T, 3, tetris::kSpawnY, 0};
+      int kick = -1;
+      for (const auto action : fired->actions) {
+        if (action == tetris::Action::MoveLeft) { --active.x; kick = -1; }
+        else if (action == tetris::Action::MoveRight) { ++active.x; kick = -1; }
+        else if (action == tetris::Action::SoftDrop) { ++active.y; kick = -1; }
+        else if (action == tetris::Action::HardDrop) {
+          const int y = tetris::calcGhostY(ready, active);
+          if (y != active.y) kick = -1;
+          active.y = y;
+        } else {
+          expect(action != tetris::Action::Hold, "CC replay has Hold disabled");
+          const auto direction = action == tetris::Action::RotateClockwise
+              ? tetris::RotationDirection::Clockwise
+              : action == tetris::Action::RotateCounterClockwise
+                  ? tetris::RotationDirection::CounterClockwise
+                  : tetris::RotationDirection::Rotate180;
+          const auto rotated = tetris::tryRotate(ready, active, direction, &kick);
+          expect(rotated.has_value(), "CC rotations must replay legally");
+          active = *rotated;
+        }
+        expect(tetris::isValidPosition(ready, active), "CC route must be collision-free");
+      }
+      expect(active == fired->placement &&
+                 tetris::detectTSpin(ready, active, kick >= 0, kick, 2) == tetris::TSpin::Full,
+             "CC must be a real Full TSD after replaying the actual operations");
+      expect(!tetris::findExpertDonationTemplate(board, std::nullopt, {P::T}),
+             "CC must not invent its L and roof from unavailable supply");
+      expect(!tetris::findExpertDonationTemplate(board, std::nullopt,
+                 {reflect(P::L), reflect(roof), P::T}),
+             "CC must not assume an unseen post-clear repair piece");
+      // The surviving middle row must not hide an unrelated cavity.
+      board.set(38, mirror ? 9 : 0, tetris::Cell::Empty);
+      board.set(36, mirror ? 9 : 0, tetris::Cell::J);
+      expect(!tetris::findExpertDonationTemplate(board, std::nullopt, supply),
+             "a CC elsewhere must not excuse unrelated buried holes");
+    }
   }
 }
 
@@ -2914,6 +2994,7 @@ int main() {
     testExpertPricesOrdinaryClearsAndRen();
     testExpertBuildsSurfaceStackingTemplates();
     testExpertBuildsStsdFromTwoDonors();
+    testExpertBuildsCcDonations();
     testExpertSpendsTForRecoveryAndPerfectClear();
     testExpertPricesReplacementTScarcity();
     testExpertPricesSafeTSpinSingleOpportunityCost();

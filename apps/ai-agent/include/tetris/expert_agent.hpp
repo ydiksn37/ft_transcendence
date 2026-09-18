@@ -266,6 +266,8 @@ struct ExpertDonationPlan {
   std::string_view name;
   ActivePiece target;
   std::vector<ActivePiece> setup;
+  // Optional, supplied non-T repair after the target clear (post-clear coordinates).
+  std::optional<ActivePiece> cleanup = std::nullopt;
 };
 
 // Two verified attacks stored in firing order. The first T-Spin may clear
@@ -295,7 +297,8 @@ struct ExpertTSpinSequencePlan {
     const ExpertTSpinSequencePlan& plan);
 
 // Next starts with the next playable piece (include Active when inspecting a
-// pre-decision board). Only up to three setup placements plus T are considered.
+// pre-decision board). Up to three setup placements plus T are considered;
+// CC additionally requires a supplied, reachable one-piece post-clear repair.
 [[nodiscard]] std::optional<ExpertDonationPlan> findExpertDonationTemplate(
     const Board& board, std::optional<PieceType> hold,
     const std::vector<PieceType>& next, std::size_t nextIndex = 0);
