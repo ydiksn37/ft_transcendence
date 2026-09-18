@@ -67,7 +67,7 @@ export default function AdvancedSearch() {
   };
 
   const handleUserClick = (id: string) => {
-    navigate(`/profile/${id}`); // Assuming you have a generic profile view, or use chat/friend actions.
+    navigate(`/profile/${id}`);
   };
 
   const inputStyle = {

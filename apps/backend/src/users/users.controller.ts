@@ -248,26 +248,31 @@ export class AdminUsersController {
   @Roles('ADMIN')
   @ApiOperation({ summary: '[ADMIN] ユーザーロール変更' })
   adminUpdateRole(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserRoleDto,
   ) {
-    return this.usersService.adminUpdateRole(id, dto.role);
+    return this.usersService.adminUpdateRole(user.id, id, dto.role);
   }
 
   @Post(':id/ban')
   @Roles('ADMIN', 'MODERATOR')
   @ApiOperation({ summary: '[ADMIN/MOD] ユーザーBAN' })
   adminBanUser(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: BanUserDto,
   ) {
-    return this.usersService.adminBanUser(id, dto);
+    return this.usersService.adminBanUser(user.id, id, dto);
   }
 
   @Delete(':id/ban')
   @Roles('ADMIN', 'MODERATOR')
   @ApiOperation({ summary: '[ADMIN/MOD] BAN解除' })
-  adminUnbanUser(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usersService.adminUnbanUser(id);
+  adminUnbanUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usersService.adminUnbanUser(user.id, id);
   }
 }

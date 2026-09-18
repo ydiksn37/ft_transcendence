@@ -7,6 +7,7 @@ import Chat from "@/pages/Chat"
 import Friends from "@/pages/Friends"
 import AdvancedSearch from "@/pages/AdvancedSearch"
 import Profile from "@/pages/Profile"
+import PublicProfile from "@/pages/PublicProfile"
 import Settings from "@/pages/Settings"
 import AdminPanel from "@/pages/AdminPanel"
 import JoinPage from "@/pages/JoinPage"
@@ -30,6 +31,7 @@ export default function App() {
 
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
+      <Route path="/profile/:id" element={<PublicProfile />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/admin" element={<AdminPanel />} />
 

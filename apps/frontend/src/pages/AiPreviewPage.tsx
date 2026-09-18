@@ -565,6 +565,7 @@ export default function AiPreviewPage() {
         score={gameState?.score ?? 0}
         level={gameState?.level ?? 1}
         lines={gameState?.lines ?? 0}
+        combo={gameState?.combo ?? -1}
         nextPieceKeys={gameState?.nextMinos ?? []}
         holdInfo={{
           tetromino: gameState?.holdMino ?? null,

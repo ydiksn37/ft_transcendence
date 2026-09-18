@@ -135,6 +135,25 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 ### Cybersecurity
 23. **WAF and HashiCorp Vault (Major - 2pts)**: Nginx with ModSecurity and Vault for secret management.
 
+### Administrative permission policy
+
+| Operation | ADMIN | MODERATOR | USER / GUEST |
+| --- | --- | --- | --- |
+| List users in the admin API | Yes | Yes | No |
+| Change another user's role | Yes | No | No |
+| Ban / unban USER or GUEST | Yes | Yes | No |
+| Ban / unban ADMIN or MODERATOR | Yes | No | No |
+| Change own role or own ban state | No | No | No |
+
+Mutations recheck the actor's current database role and ban/deletion state.
+Authorization and writes run in a serializable transaction; serialization
+conflicts retry up to three attempts, then return HTTP 409. The last usable
+(not deleted or currently banned) administrator cannot be demoted, banned,
+or deleted through the account-deletion flow. Promote another administrator
+before deleting that account. User management create/edit/delete endpoints
+and persistent administrative audit logs are not yet implemented; this table
+describes the existing role/BAN endpoints, not a completed advanced-permissions module.
+
 ## Individual Contributions
 - **sonakamu**: 
   - *Contributions:* Built the entire PixiJS rendering engine and handled local input latency mitigation.

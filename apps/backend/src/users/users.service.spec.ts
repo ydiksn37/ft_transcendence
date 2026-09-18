@@ -2,6 +2,7 @@ import {
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -80,8 +81,11 @@ describe('UsersService admin operations', () => {
 
   it('converts durationDays to an absolute BAN expiry', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-14T00:00:00.000Z'));
+    prisma.user.findUnique.mockResolvedValueOnce({ role: 'ADMIN', bannedUntil: null })
+      .mockResolvedValueOnce({ role: 'USER' });
+    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
 
-    await service.adminBanUser('target-user', {
+    await service.adminBanUser('admin-user', 'target-user', {
       reason: 'Violation of terms',
       durationDays: 7,
     });
@@ -99,7 +103,7 @@ describe('UsersService admin operations', () => {
 
   it('rejects ambiguous or expired BAN periods', async () => {
     await expect(
-      service.adminBanUser('target-user', {
+      service.adminBanUser('admin-user', 'target-user', {
         reason: 'reason',
         durationDays: 7,
         bannedUntil: '2099-01-01T00:00:00.000Z',
@@ -107,7 +111,7 @@ describe('UsersService admin operations', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     await expect(
-      service.adminBanUser('target-user', {
+      service.adminBanUser('admin-user', 'target-user', {
         reason: 'reason',
         bannedUntil: '2000-01-01T00:00:00.000Z',
       }),
@@ -187,6 +191,7 @@ describe('UsersService admin operations', () => {
   });
 
   it('permanently deletes personal data and sends completion email', async () => {
+    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
     redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
     prisma.user.findUnique.mockResolvedValue({
       email: 'player@example.com',
@@ -215,6 +220,22 @@ describe('UsersService admin operations', () => {
       'Player',
     );
     expect(result.message).toContain('完全に削除');
+  });
+
+  it('refuses GDPR deletion of the last usable administrator without deleting personal data', async () => {
+    redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'ADMIN', email: 'admin@example.com', displayName: 'Admin', fileUploads: [],
+    });
+    prisma.user.count.mockResolvedValue(0);
+    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
+    await expect(service.deleteMe('last-admin', {
+      confirmation: 'DELETE MY ACCOUNT', code: '123456',
+    })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.chatMessage.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.fileUpload.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+    expect(mail.sendAccountDeleted).not.toHaveBeenCalled();
   });
 
   it('does not expose a deleted user through search or profile lookup', async () => {

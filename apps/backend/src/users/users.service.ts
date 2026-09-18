@@ -5,9 +5,10 @@ import {
   ForbiddenException,
   Logger,
   UnauthorizedException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { unlink } from 'fs/promises';
@@ -178,11 +179,17 @@ export class UsersService {
     // Messages and all account-owned records are removed because their content
     // can contain personal data. Remaining user relations cascade or SetNull
     // according to schema.prisma.
-    await this.prisma.$transaction([
-      this.prisma.chatMessage.deleteMany({ where: { senderId: userId } }),
-      this.prisma.fileUpload.deleteMany({ where: { uploaderId: userId } }),
-      this.prisma.user.delete({ where: { id: userId } }),
-    ]);
+    await this.withSerializableUserWrite(async (tx) => {
+      const current = await tx.user.findUnique({
+        where: { id: userId, deletedAt: null },
+        select: { role: true },
+      });
+      if (!current) throw new NotFoundException('ユーザーが見つかりません');
+      if (current.role === 'ADMIN') await this.requireAnotherAdmin(tx, userId);
+      await tx.chatMessage.deleteMany({ where: { senderId: userId } });
+      await tx.fileUpload.deleteMany({ where: { uploaderId: userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
     await this.redis.del(redisKey);
 
     const localFiles = user.fileUploads
@@ -589,16 +596,12 @@ export class UsersService {
   }
 
   // ── [ADMIN] ロール変更 ────────────────────────────────────
-  async adminUpdateRole(targetId: string, role: Role) {
-    return this.prisma.user.update({
-      where: { id: targetId },
-      data: { role },
-      select: ADMIN_USER_SELECT,
-    });
+  async adminUpdateRole(actorId: string, targetId: string, role: Role) {
+    return this.updateManagedUser(actorId, targetId, { role }, true);
   }
 
   // ── [ADMIN/MOD] BAN ────────────────────────────────────────
-  async adminBanUser(targetId: string, dto: BanUserDto) {
+  async adminBanUser(actorId: string, targetId: string, dto: BanUserDto) {
     if (dto.durationDays !== undefined && dto.bannedUntil !== undefined) {
       throw new BadRequestException(
         'durationDaysとbannedUntilは同時に指定できません',
@@ -619,23 +622,108 @@ export class UsersService {
       bannedUntil = new Date('9999-12-31T23:59:59.999Z');
     }
 
-    return this.prisma.user.update({
-      where: { id: targetId },
-      data: {
-        bannedUntil,
-        banReason: dto.reason,
-      },
-      select: ADMIN_USER_SELECT,
+    return this.updateManagedUser(actorId, targetId, {
+      bannedUntil,
+      banReason: dto.reason,
     });
   }
 
   // ── [ADMIN] BAN解除 ────────────────────────────────────────
-  async adminUnbanUser(targetId: string) {
-    return this.prisma.user.update({
-      where: { id: targetId },
-      data: { bannedUntil: null, banReason: null },
-      select: ADMIN_USER_SELECT,
+  async adminUnbanUser(actorId: string, targetId: string) {
+    return this.updateManagedUser(actorId, targetId, {
+      bannedUntil: null,
+      banReason: null,
     });
+  }
+
+  private async updateManagedUser(
+    actorId: string,
+    targetId: string,
+    data: { role?: Role; bannedUntil?: Date | null; banReason?: string | null },
+    adminOnly = false,
+  ) {
+    if (actorId === targetId) {
+      throw new ForbiddenException('自分自身の権限・BAN状態は変更できません');
+    }
+    // Read authorization and mutate atomically. Serializable prevents two
+    // administrators concurrently demoting/banning each other from leaving
+    // no usable administrator. A conflict retries with fresh authorization.
+    return this.withSerializableUserWrite(async (tx) => {
+      const actor = await tx.user.findUnique({
+        where: { id: actorId, deletedAt: null },
+        select: { role: true, bannedUntil: true },
+      });
+      const now = new Date();
+      if (
+        !actor ||
+        (actor.bannedUntil && actor.bannedUntil > now) ||
+        (actor.role !== 'ADMIN' && (adminOnly || actor.role !== 'MODERATOR'))
+      ) {
+        throw new ForbiddenException('管理操作の権限がありません');
+      }
+      const target = await tx.user.findUnique({
+        where: { id: targetId, deletedAt: null },
+        select: { role: true },
+      });
+      if (!target) throw new NotFoundException('ユーザーが見つかりません');
+      if (
+        actor.role === 'MODERATOR' &&
+        (target.role === 'ADMIN' || target.role === 'MODERATOR')
+      ) {
+        throw new ForbiddenException('同格以上のユーザーは操作できません');
+      }
+      if (
+        target.role === 'ADMIN' &&
+        ((data.role !== undefined && data.role !== 'ADMIN') || data.bannedUntil)
+      ) {
+        await this.requireAnotherAdmin(tx, targetId);
+      }
+      return tx.user.update({
+        where: { id: targetId },
+        data,
+        select: ADMIN_USER_SELECT,
+      });
+    });
+  }
+
+  private async requireAnotherAdmin(
+    tx: Prisma.TransactionClient,
+    targetId: string,
+  ) {
+    const remaining = await tx.user.count({
+      where: {
+        id: { not: targetId },
+        role: 'ADMIN',
+        deletedAt: null,
+        OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }],
+      },
+    });
+    if (remaining === 0)
+      throw new ForbiddenException('最後の有効な管理者は変更・削除できません');
+  }
+
+  private async withSerializableUserWrite<T>(
+    change: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(change, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        ) {
+          if (attempt < 2) continue;
+          throw new ConflictException(
+            '管理状態が変更されました。再試行してください',
+          );
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('管理状態が変更されました。再試行してください');
   }
 
   // ── ユーザー情報サニタイズ ────────────────────────────────

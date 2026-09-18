@@ -1,6 +1,6 @@
-/* ネオンデザイントークン — Tailwind v4 @theme で utility として使える */
-@theme {
-  /* --- ネオンカラー（text-neon-cyan / bg-neon-cyan / border-neon-cyan で使える） --- */
+/* ネオンデザイントークン — 通常のCSSから var() で参照する */
+:root {
+  /* ネオンカラー */
   --color-neon-cyan:    #00f5ff;
   --color-neon-magenta: #ff00aa;
   --color-neon-green:   #39ff14;
@@ -12,7 +12,7 @@
   --color-surface: #0d0e14;
   --color-surface-2: #16171d;
 
-  /* --- グロー影（shadow-glow-cyan などで使える） --- */
+  /* グロー影 */
   --shadow-glow-cyan:    0 0 16px rgba(0, 245, 255, 0.35);
   --shadow-glow-magenta: 0 0 16px rgba(255, 0, 170, 0.35);
   --shadow-glow-green:   0 0 16px rgba(57, 255, 20, 0.35);

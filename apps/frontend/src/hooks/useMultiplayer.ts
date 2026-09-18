@@ -166,7 +166,7 @@ export const useMultiplayer = ({
   };
   const listenToServer = (connection: Socket) => {
     connection.on('game:state', (state: GameState & { roomId: string; started: boolean }) => {
-      if (state.roomId !== activeRoom.current || appStateRef.current === 'SPECTATING') return;
+      if (state.roomId !== activeRoom.current || isSpectatingRef.current) return;
       setServerState(state);
       setDropTime(state.started && !state.isGameOver ? 1000 : null);
     });
@@ -452,7 +452,9 @@ export const useMultiplayer = ({
       setGameOver(false);
       gameOverRef.current = false;
       
-      if (data.isStarted) {
+      // Only an explicit READY state needs the versus screen. Older
+      // spectating events omit this field and have no future game:start.
+      if (data.isStarted !== false) {
         appStateRef.current = 'SPECTATING';
         setAppState('SPECTATING');
       } else {

@@ -70,3 +70,34 @@ test('spectating after game over drops old players and ignores their delayed upd
   assert.equal(h.state.AppState, 'SPECTATING');
   assert.equal(h.state.GameOver, false);
 });
+
+test('spectator READY waits for its own start and never accepts a player snapshot', () => {
+  const h = mount();
+  h.emit('spectating', { roomId: 'new', isStarted: false, players: ['a', 'b'],
+    displayNames: { a: 'A', b: 'B', oldPlayer: 'Old' } });
+  assert.equal(h.state.AppState, 'VS_SCREEN');
+  assert.deepEqual(Object.keys(h.state.Opponents), ['a', 'b']);
+  h.emit('game:state', { roomId: 'new', started: true });
+  assert.equal(h.state.ServerState, null);
+  h.emit('game:start', { roomId: 'old' });
+  assert.equal(h.state.AppState, 'VS_SCREEN');
+  h.emit('game:start', { roomId: 'new' });
+  assert.equal(h.state.AppState, 'SPECTATING');
+  assert.equal(h.state.DropTime, null);
+  assert.equal(h.localStarts(), 0);
+});
+
+test('switching running tournament matches replaces boards rather than appending them', () => {
+  const h = mount();
+  for (const [roomId, players] of [['first', ['a', 'b']], ['second', ['c', 'd']]]) {
+    h.emit('spectating', { roomId, isStarted: true, players,
+      displayNames: Object.fromEntries(['a', 'b', 'c', 'd'].map(id => [id, id])) });
+    for (const playerId of players)
+      h.emit('opponent_board_update', { roomId, playerId, stage: [], score: 0 });
+  }
+  h.emit('opponent_board_update', { roomId: 'first', playerId: 'a', stage: [], score: 100 });
+  h.emit('game:over', { roomId: 'first', loserId: 'me', winnerId: 'a' });
+  assert.deepEqual(Object.keys(h.state.Opponents), ['c', 'd']);
+  assert.equal(h.state.GameOver, false);
+  assert.equal(h.state.AppState, 'SPECTATING');
+});
