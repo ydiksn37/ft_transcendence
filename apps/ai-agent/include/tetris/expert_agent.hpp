@@ -13,22 +13,61 @@
 
 namespace tetris {
 
+enum class ExpertMidgameTemplateKind {
+  StackingPattern,
+  AttackSequence,
+  Technique,
+};
+
+struct ExpertMidgameTemplate {
+  int sourcePage = 0;
+  std::string_view name;
+  ExpertMidgameTemplateKind kind = ExpertMidgameTemplateKind::Technique;
+  // Comma-separated notation from the source index (for example
+  // "TSD,TST"). Empty for stacking patterns and techniques whose page does
+  // not declare a fixed firing sequence.
+  std::string_view attackSequence;
+};
+
+inline constexpr std::size_t kExpertMidgameTemplateCount = 71;
+
+// Complete catalog from the source midgame-template index. Geometry and move
+// verification are handled by the Expert evaluator; this metadata prevents
+// individual named families from silently disappearing during refactors.
+[[nodiscard]] const std::array<ExpertMidgameTemplate,
+                               kExpertMidgameTemplateCount>&
+expertMidgameTemplateCatalog() noexcept;
+
 struct ExpertPatternFeatures {
   // The completed-pattern feature is weighted by the number of lines that
   // would actually clear after inserting the T piece (zero, one, or two).
   int completedTSpinDoubleLines = 0;
   int completedTSpinDoublePatterns = 0;
+  // A geometric 100/000/101 roof (or mirror), even before surrounding rows
+  // are complete enough to clear. Its cavity is reserved for T only.
+  int roofedTSpinDoublePatterns = 0;
+  // Fewest empty cells outside the T cavity in its two future clear rows.
+  // -1 means that no roofed TSD exists. Seven-bag supply can service a small
+  // debt later even when those rows are not complete at roof construction.
+  int roofedTSpinDoubleFillDebt = -1;
   int preTSpinDoublePatterns = 0;
+  // A 000/101 foundation whose two future clear rows are otherwise filled.
+  // Only its roof remains to be built before a real TSD can be fired.
+  int actionablePreTSpinDoublePatterns = 0;
   int completedTSpinTriplePatterns = 0;
+  // Number of verified continuations after the first attack in a replayable
+  // T-Spin sequence. This covers the finite two-to-four attack recipes in the
+  // midgame catalog without rewarding an SRS-blocked visual cavity.
+  int chainedTSpinPatterns = 0;
   int ownedTSpinHoleCells = 0;
   std::vector<ActivePiece> reachableTSpinSlots;
   std::array<int, 5> wellDistance{};
-  // 0-indexed divider column. Columns 3/6 represent 3-6 or 6-3 stacking;
-  // columns 4/5 represent 4-5 or 5-4 stacking.
+  // 0-indexed divider column. Columns 1..8 represent every non-edge split
+  // from 8-1 through 1-8 stacking.
   int structuredWellColumn = -1;
   int structuredWellDepth = 0;
   int structuredSideRoughness = 0;
-  // Best developing 6-3/5-4 divider, including a one-row valley before it
+  // Best developing non-edge divider, including a one-row valley before it
   // becomes a completed four-row Tetris Well.
   int attackLaneColumn = -1;
   int attackLaneDepth = 0;
@@ -37,14 +76,29 @@ struct ExpertPatternFeatures {
   // Squared excess of each immediate Well neighbour above its own block's
   // other columns. Two rows of headroom are allowed for a TSD roof.
   int attackLaneShoulderExcess = 0;
+  // Absolute height difference between the two cells immediately beside the
+  // planned Well. A difference of at most one is a reusable TSD foundation.
+  int attackLaneShoulderDelta = 0;
   int attackLaneOccupiedCells = 0;
-  // The one central surface valley which the stack is allowed to develop
+  // Depth beyond four rows of an unroofed 000/101 foundation in the selected
+  // attack lane. Growing both sides further can make the lid unreachable.
+  int unroofedTSpinDoubleBurialDepth = 0;
+  // The one selected surface valley which the stack is allowed to develop
   // into an I-piece Well. Other simultaneous valleys are competing Wells.
   int primaryOpenWellColumn = -1;
   int openWellCount = 0;
   int openWellDepthSum = 0;
   int openWellPieceDemand = 0;
   int competingWellUnits = 0;
+  // Adjacent low columns evade ordinary one-column Well detection because
+  // each low column sees the other as a neighbour. Count those wide trenches
+  // separately before they require several scarce pieces to repair. A
+  // recognized TSD construction column is exempted by the extractor.
+  int twoWideTrenchCount = 0;
+  int twoWideTrenchDepthSum = 0;
+  // Squared depth beyond three rows of multi-column surface depressions.
+  // Includes edge basins; each column is counted only once.
+  int wideDepressionUnits = 0;
   int garbageRecoveryShaftDepth = 0;
   // Empty cells below the surface which no collision-free grounded placement
   // of any of the seven pieces in any TS/SRS orientation can occupy.
@@ -94,8 +148,15 @@ struct ExpertWeights {
   double flatSideExcessRoughnessPenalty = 150.0;
   double attackLaneObstructionPenalty = 2000.0;
   double attackLaneShoulderPenalty = 220.0;
+  double attackLaneShoulderImbalancePenalty = 700.0;
+  double balancedAttackLaneReward = 600.0;
   double competingWellPenalty = 15.0;
   double newCompetingWellPenalty = 40.0;
+  // A depth-two trench costs less than a verified TSD setup reward. The
+  // quadratic static term still makes long two-column shafts prohibitive.
+  double twoWideTrenchPenalty = 300.0;
+  double newTwoWideTrenchPenalty = 900.0;
+  double wideDepressionPenalty = 100.0;
   double secondWellCreationPenalty = 1000000.0;
   double multipleWellResolutionReward = 6000.0;
   double multipleWellDelayPenalty = 600.0;
@@ -110,10 +171,12 @@ struct ExpertWeights {
   double completedTSpinDoubleBreakPenalty = 6000.0;
   double preTSpinDoubleReward = 900.0;
   double preTSpinDoubleBreakPenalty = 4000.0;
+  double unroofedTSpinDoubleBurialPenalty = 1500.0;
   double readyTSpinTripleReward = 4500.0;
   double completedTSpinTripleBreakPenalty = 6000.0;
   double donationUnlockReward = 3200.0;
   double donationTemplateReward = 1800.0;
+  double chainedTSpinTemplateReward = 4200.0;
   double wellDistance0Penalty = 10.0;
   double wellDistance1Penalty = 5.0;
   double wellDistance2Reward = 10.0;
@@ -145,6 +208,7 @@ struct ExpertWeights {
   double tetrisReward = 1800.0;
   double tetrisCashoutReward = 3000.0;
   double inefficientThreeLinePenalty = 5000.0;
+  double inefficientSmallClearPenalty = 2500.0;
   double perfectClearReward = 4200.0;
   double backToBackContinuationReward = 813.0628762324335;
   double backToBackStartReward = 180.0;
@@ -158,7 +222,10 @@ struct ExpertBoardEvaluation {
   double value = 0.0;
   int maximumHeight = 0;
   int reachableTSpinDoublePatterns = 0;
+  int roofedTSpinDoublePatterns = 0;
+  int roofedTSpinDoubleFillDebt = -1;
   int preTSpinDoublePatterns = 0;
+  int actionablePreTSpinDoublePatterns = 0;
   int aggregateHeight = 0;
   int holes = 0;
   int unownedHoleCells = 0;
@@ -168,6 +235,7 @@ struct ExpertBoardEvaluation {
   int attackLaneColumn = -1;
   int attackLaneDepth = 0;
   int attackLaneOccupiedCells = 0;
+  int unroofedTSpinDoubleBurialDepth = 0;
   int attackLaneSideRoughness = 0;
   int attackLaneSideExcessRoughness = 0;
   int structuredWellDepth = 0;
@@ -176,12 +244,20 @@ struct ExpertBoardEvaluation {
   int openWellDepthSum = 0;
   int openWellPieceDemand = 0;
   int competingWellUnits = 0;
+  int twoWideTrenchCount = 0;
+  int twoWideTrenchDepthSum = 0;
   bool cleanForTSpinSetup = false;
   bool safeToPreserveTSpinSetup = false;
+  // No verified T-Spin continuation remains while the stack already has
+  // damage that should be repaired before constructing another setup.
+  bool tSpinSetupRecoveryMode = false;
   int reachableTSpinTriplePatterns = 0;
+  int chainedTSpinPatterns = 0;
   std::vector<ActivePiece> reachableTSpinSlots;
   int donationSetupPieces = -1;
   int attackLaneShoulderExcess = 0;
+  int attackLaneShoulderDelta = 0;
+  int wideDepressionUnits = 0;
 };
 
 // A named local shape with a verified continuation, not merely a silhouette.
@@ -192,11 +268,44 @@ struct ExpertDonationPlan {
   std::vector<ActivePiece> setup;
 };
 
+// Two verified attacks stored in firing order. The first T-Spin may clear
+// one, two, or three lines; the exposed continuation must be a TSD.
+struct ExpertTSpinChainPlan {
+  std::string_view name;
+  ActivePiece first;
+  ActivePiece second;
+  int firstLines = 0;
+};
+
+struct ExpertTSpinSequenceAttack {
+  ActivePiece placement;
+  int lines = 0;
+  TSpin spin = TSpin::Full;
+};
+
+struct ExpertTSpinSequencePlan {
+  std::vector<ExpertTSpinSequenceAttack> attacks;
+  int attackUnits = 0;
+};
+
+// Returns every source-catalog attack recipe compatible with the replayed
+// TS/SRS result. FIN and ISO require a Full two-line spin; NEO requires a Mini
+// two-line spin. Different constructions with the same result may all match.
+[[nodiscard]] std::vector<std::string_view> matchExpertMidgameTemplates(
+    const ExpertTSpinSequencePlan& plan);
+
 // Next starts with the next playable piece (include Active when inspecting a
-// pre-decision board). Only up to two setup placements plus T are considered.
+// pre-decision board). Only up to three setup placements plus T are considered.
 [[nodiscard]] std::optional<ExpertDonationPlan> findExpertDonationTemplate(
     const Board& board, std::optional<PieceType> hold,
     const std::vector<PieceType>& next, std::size_t nextIndex = 0);
+[[nodiscard]] std::optional<ExpertTSpinChainPlan> findExpertTSpinChain(
+    const Board& board);
+// Finds the strongest fully replayable consecutive T-Spin sequence, including
+// TSS/TSD/TST and Mini starts. Four attacks cover every finite sequence in the
+// source catalog; repeating xN templates are represented by reaching the cap.
+[[nodiscard]] std::optional<ExpertTSpinSequencePlan>
+findExpertTSpinSequence(const Board& board, std::size_t maximumAttacks = 4);
 
 // Exposed for deterministic feature tests and benchmark diagnostics. The
 // agent itself uses the same extractor in its board evaluation.

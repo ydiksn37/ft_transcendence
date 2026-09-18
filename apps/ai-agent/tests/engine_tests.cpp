@@ -24,6 +24,19 @@ void expect(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
 
+std::string visibleBoardAscii(const tetris::Board& board) {
+  std::string result;
+  for (int row = visibleRow(0); row < tetris::kBoardRows; ++row) {
+    result.push_back('\n');
+    for (int col = 0; col < tetris::kBoardCols; ++col) {
+      result.push_back(board.cells()[row][col] == tetris::Cell::Empty
+                           ? '.'
+                           : '#');
+    }
+  }
+  return result;
+}
+
 tetris::Board makeTetrisWell() {
   tetris::Board board;
   for (int row = visibleRow(16); row < tetris::kBoardRows; ++row) {
@@ -460,12 +473,22 @@ void testExpertTSpinDoublePatternFeatures() {
   expect(readyFeatures.completedTSpinDoublePatterns == 1 &&
              readyFeatures.completedTSpinDoubleLines == 2,
          "completed TSD pattern must be weighted by its two real clears");
+  expect(readyFeatures.roofedTSpinDoublePatterns == 1,
+         "a completed TSD must reserve its roofed cavity for T");
+  expect(readyFeatures.roofedTSpinDoubleFillDebt == 0,
+         "a completed TSD must have no surrounding-row fill debt");
   expect(readyFeatures.preTSpinDoublePatterns >= 1,
          "completed TSD must retain its preceding setup feature");
+  expect(readyFeatures.actionablePreTSpinDoublePatterns >= 1,
+         "a TSD foundation with both clear rows filled must be actionable");
+  expect(readyFeatures.unroofedTSpinDoubleBurialDepth == 0,
+         "a completed TSD roof must never count as a buried foundation");
   expect(readyFeatures.unfillableCavityCells == 0,
          "a cavity fillable by a reachable SRS TSD must not be rejected");
   expect(tetris::evaluateExpertBoard(ready).unownedHoleCells == 0,
          "the single covered cell in a reachable TSD must remain intentional");
+  expect(!tetris::evaluateExpertBoard(ready).tSpinSetupRecoveryMode,
+         "a reachable TSD must remain in attack mode");
 
   tetris::Board blocked = ready;
   for (int col = 2; col <= 6; ++col) {
@@ -495,6 +518,84 @@ void testExpertTSpinDoublePatternFeatures() {
   expect(fakeFeatures.preTSpinDoublePatterns >= 1 &&
              fakeFeatures.completedTSpinDoubleLines == 0,
          "an unfilled TSD shape must not receive completed-pattern reward");
+  expect(fakeFeatures.roofedTSpinDoublePatterns == 1,
+         "a roofed TSD must reserve its cavity before both rows are complete");
+  expect(fakeFeatures.roofedTSpinDoubleFillDebt == 14,
+         "an early roof must expose how many surrounding cells remain");
+  expect(fakeFeatures.actionablePreTSpinDoublePatterns == 0,
+         "a bare 000/101 silhouette must not reserve the T piece");
+  expect(!tetris::evaluateExpertBoard(fakeReady).tSpinSetupRecoveryMode,
+         "a clean roofed TSD under construction must not be abandoned");
+
+  tetris::Board failedSetup;
+  failedSetup.set(visibleRow(17), 0, tetris::Cell::J);
+  failedSetup.set(visibleRow(19), 0, tetris::Cell::J);
+  const auto failedEvaluation = tetris::evaluateExpertBoard(failedSetup);
+  expect(failedEvaluation.unownedHoleCells > 0 &&
+             failedEvaluation.reachableTSpinDoublePatterns == 0 &&
+             failedEvaluation.reachableTSpinTriplePatterns == 0 &&
+             failedEvaluation.tSpinSetupRecoveryMode,
+         "an unreachable damaged setup must switch from attack to cleanup");
+}
+
+void testExpertDoesNotBuryUnroofedTSpinDoubleFoundation() {
+  const auto makeWell = [](int depth) {
+    tetris::Board board;
+    for (int row = tetris::kBoardRows - depth;
+         row < tetris::kBoardRows; ++row) {
+      for (int col = 0; col < tetris::kBoardCols; ++col) {
+        if (col != 4) board.set(row, col, tetris::Cell::J);
+      }
+    }
+    return board;
+  };
+  const auto shallow = tetris::extractExpertPatternFeatures(makeWell(4));
+  const auto buried = tetris::extractExpertPatternFeatures(makeWell(6));
+  expect(shallow.preTSpinDoublePatterns > 0 &&
+             shallow.completedTSpinDoublePatterns == 0 &&
+             shallow.unroofedTSpinDoubleBurialDepth == 0,
+         "an unroofed TSD foundation may keep a four-row attack Well");
+  expect(buried.preTSpinDoublePatterns > 0 &&
+             buried.completedTSpinDoublePatterns == 0 &&
+             buried.unroofedTSpinDoubleBurialDepth == 2,
+         "raising both sides to depth six must expose two rows of burial");
+  expect(tetris::evaluateExpertBoard(makeWell(4))
+                 .unroofedTSpinDoubleBurialDepth == 0 &&
+             tetris::evaluateExpertBoard(makeWell(6))
+                 .unroofedTSpinDoubleBurialDepth == 2,
+         "the burial feature must reach beam-search board evaluation");
+}
+
+void testExpertCompletesActionableTSpinDoubleRoof() {
+  // Both future clear rows are complete outside the T cavity. A horizontal I
+  // can overhang from the right stack and add the missing roof cell without
+  // filling the cavity. The resulting TSD is verified by SRS reachability.
+  tetris::Board board;
+  for (int col = 0; col < tetris::kBoardCols; ++col) {
+    if (col < 3 || col > 5)
+      board.set(visibleRow(18), col, tetris::Cell::J);
+    if (col != 4) board.set(visibleRow(19), col, tetris::Cell::J);
+  }
+  const auto before = tetris::extractExpertPatternFeatures(board);
+  expect(before.actionablePreTSpinDoublePatterns == 1 &&
+             before.roofedTSpinDoublePatterns == 0,
+         "roof fixture must begin as a completed foundation without its lid");
+
+  tetris::ExpertAgent agent(std::chrono::milliseconds(50), {}, 200000);
+  const auto decision = agent.decide(
+      board, tetris::PieceType::I,
+      {tetris::PieceType::O, tetris::PieceType::S, tetris::PieceType::Z,
+       tetris::PieceType::J, tetris::PieceType::L, tetris::PieceType::T},
+      std::nullopt, false);
+  expect(decision.has_value(),
+         "expert must find the legal I overhang that roofs the TSD");
+  const auto after = tetris::clearLines(
+      tetris::lockMino(board, decision->placement));
+  const auto features = tetris::extractExpertPatternFeatures(after.board);
+  expect(features.roofedTSpinDoublePatterns == 1 &&
+             features.completedTSpinDoublePatterns == 1 &&
+             features.roofedTSpinDoubleFillDebt == 0,
+         "expert must convert an actionable foundation into a reachable TSD");
 }
 
 void testExpertRejectsSidePocketBesideSingleWell() {
@@ -530,19 +631,34 @@ void testExpertKeepsCleanSoloStackFreeOfUnownedHoles() {
   const auto warmup = agent.decide(tetris::DecisionContext{});
   expect(warmup && agent.lastOpeningName().empty(), "ordinary stacking test must disable openers");
   int maximumUnownedHoles = 0;
+  int worstPieces = 0;
+  int worstChains = 0;
+  int worstHeight = 0;
+  tetris::Board worstBoard;
   const auto result = tetris::simulateGame(
       agent, 982451653U, 80,
-      [&](const tetris::Board& board, const tetris::GameResult&,
+      [&](const tetris::Board& board, const tetris::GameResult& game,
           tetris::PieceType, int, std::optional<tetris::PieceType>) {
-        maximumUnownedHoles = std::max(
-            maximumUnownedHoles,
-            tetris::evaluateExpertBoard(board).unownedHoleCells);
+        const auto evaluation = tetris::evaluateExpertBoard(board);
+        const int holes = evaluation.unownedHoleCells;
+        if (holes > maximumUnownedHoles) {
+          maximumUnownedHoles = holes;
+          worstPieces = game.piecesPlaced;
+          worstChains = evaluation.chainedTSpinPatterns;
+          worstHeight = evaluation.maximumHeight;
+          worstBoard = board;
+        }
       });
   expect(result.reachedPieceLimit && !result.invalidDecision,
          "Expert must complete the side-pocket regression simulation");
   expect(maximumUnownedHoles == 0,
          "Expert must not create holes outside reachable TSD cavities while "
-         "building a clean solo stack");
+         "building a clean solo stack; max=" +
+             std::to_string(maximumUnownedHoles) +
+             " pieces=" + std::to_string(worstPieces) +
+             " chains=" + std::to_string(worstChains) +
+             " height=" + std::to_string(worstHeight) +
+             visibleBoardAscii(worstBoard));
 }
 
 void testExpertDetectsCellsNoPieceCanFill() {
@@ -750,11 +866,17 @@ void testExpertRecognizesStructuredSplitStacks() {
 
   const tetris::Board fourFive = makeWell(4);
   const tetris::Board sixThree = makeWell(6);
+  const tetris::Board eightOne = makeWell(1);
+  const tetris::Board sevenTwo = makeWell(7);
   const tetris::Board edge = makeWell(9);
   const tetris::ExpertPatternFeatures fourFiveFeatures =
       tetris::extractExpertPatternFeatures(fourFive);
   const tetris::ExpertPatternFeatures sixThreeFeatures =
       tetris::extractExpertPatternFeatures(sixThree);
+  const tetris::ExpertPatternFeatures eightOneFeatures =
+      tetris::extractExpertPatternFeatures(eightOne);
+  const tetris::ExpertPatternFeatures sevenTwoFeatures =
+      tetris::extractExpertPatternFeatures(sevenTwo);
   const tetris::ExpertPatternFeatures edgeFeatures =
       tetris::extractExpertPatternFeatures(edge);
   expect(fourFiveFeatures.structuredWellColumn == 4 &&
@@ -766,9 +888,16 @@ void testExpertRecognizesStructuredSplitStacks() {
          "a flat 6-3 stack must be recognized as a structured Well");
   expect(fourFiveFeatures.attackLaneColumn == 4 &&
              fourFiveFeatures.attackLaneDepth == 4 &&
+             fourFiveFeatures.attackLaneShoulderDelta == 0 &&
              sixThreeFeatures.attackLaneColumn == 6 &&
-             sixThreeFeatures.attackLaneDepth == 4,
+             sixThreeFeatures.attackLaneDepth == 4 &&
+             sixThreeFeatures.attackLaneShoulderDelta == 0,
          "completed 4-5 and 6-3 stacks must retain their attack lanes");
+  expect(eightOneFeatures.structuredWellColumn == 1 &&
+             eightOneFeatures.attackLaneColumn == 1 &&
+             sevenTwoFeatures.structuredWellColumn == 7 &&
+             sevenTwoFeatures.attackLaneColumn == 7,
+         "completed 8-1 and 2-7 stacks must also retain their attack lanes");
   expect(edgeFeatures.structuredWellColumn == -1 &&
              edgeFeatures.competingWellUnits > 0,
          "an edge Well must not be treated as a split-stack structure");
@@ -909,6 +1038,84 @@ void testExpertPreventsSecondWellBeforeItBecomesDeep() {
          "expert must choose an order which does not create a second Well");
 }
 
+void testExpertDetectsTwoWideTrenches() {
+  const auto makeSurface =
+      [](const std::array<int, tetris::kBoardCols>& heights) {
+        tetris::Board board;
+        for (int col = 0; col < tetris::kBoardCols; ++col) {
+          for (int height = 0; height < heights[col]; ++height) {
+            board.set(tetris::kBoardRows - 1 - height, col,
+                      tetris::Cell::J);
+          }
+        }
+        return board;
+      };
+
+  const tetris::Board twoWide =
+      makeSurface({4, 4, 4, 4, 0, 0, 4, 4, 4, 4});
+  const auto twoWideFeatures =
+      tetris::extractExpertPatternFeatures(twoWide);
+  expect(twoWideFeatures.openWellCount == 0,
+         "two adjacent low columns demonstrate the one-column blind spot");
+  expect(twoWideFeatures.twoWideTrenchCount == 1 &&
+             twoWideFeatures.twoWideTrenchDepthSum == 4,
+         "a two-column four-row trench must be detected independently");
+
+  const tetris::Board shallow =
+      makeSurface({2, 2, 2, 2, 1, 1, 2, 2, 2, 2});
+  expect(tetris::extractExpertPatternFeatures(shallow)
+                 .twoWideTrenchCount == 0,
+         "a one-row two-column notch is ordinary stacking texture");
+
+  const tetris::Board oneWide =
+      makeSurface({4, 4, 4, 4, 0, 4, 4, 4, 4, 4});
+  tetris::ExpertWeights weights;
+  expect(tetris::evaluateExpertBoard(oneWide, weights).value >
+             tetris::evaluateExpertBoard(twoWide, weights).value,
+         "one supported Well must score above a deep two-column trench");
+
+  for (const auto heights : {
+           std::array<int, 10>{8, 8, 8, 0, 0, 0, 8, 8, 8, 8},
+           std::array<int, 10>{0, 0, 8, 8, 8, 8, 8, 8, 8, 8},
+           std::array<int, 10>{8, 8, 8, 8, 8, 8, 8, 8, 0, 0}}) {
+    const auto field = makeSurface(heights);
+    const auto features = tetris::extractExpertPatternFeatures(field);
+    expect(features.wideDepressionUnits > 0,
+           "deep basins must be detected at widths three and at both edges");
+    auto reversed = heights;
+    std::reverse(reversed.begin(), reversed.end());
+    expect(tetris::extractExpertPatternFeatures(makeSurface(reversed))
+               .wideDepressionUnits == features.wideDepressionUnits,
+           "wide depression severity must be mirror symmetric");
+    auto without = weights;
+    without.wideDepressionPenalty = 0;
+    expect(tetris::evaluateExpertBoard(field, without).value >
+               tetris::evaluateExpertBoard(field, weights).value,
+           "wide depression detection must affect the actual evaluator");
+  }
+  expect(tetris::extractExpertPatternFeatures(oneWide).wideDepressionUnits == 0 &&
+             tetris::extractExpertPatternFeatures(makeSurface(
+                 {5, 5, 5, 2, 2, 2, 5, 5, 5, 5})).wideDepressionUnits == 0,
+         "one planned Well and shallow construction steps must be exempt");
+  // Surface transcribed from the screenshot, not a reconstruction of its
+  // buried cells. The central width-three basin and right edge both matter.
+  const auto screenshot = makeSurface({11, 10, 8, 0, 2, 2, 14, 13, 2, 2});
+  const auto filled = makeSurface({11, 10, 8, 4, 6, 6, 14, 13, 6, 6});
+  expect(tetris::extractExpertPatternFeatures(screenshot).wideDepressionUnits >
+             tetris::extractExpertPatternFeatures(filled).wideDepressionUnits,
+         "filling screenshot basins must reduce their penalty");
+  tetris::ExpertAgent repair(std::chrono::milliseconds(100), {}, 200000);
+  const auto decision = repair.decide(
+      screenshot, tetris::PieceType::O, {}, std::nullopt, false);
+  expect(decision.has_value(), "screenshot surface must have a legal repair");
+  const auto repaired = tetris::clearLines(
+      tetris::lockMino(screenshot, decision->placement)).board;
+  expect(tetris::extractExpertPatternFeatures(repaired).wideDepressionUnits <
+             tetris::extractExpertPatternFeatures(screenshot).wideDepressionUnits &&
+             tetris::evaluateExpertBoard(repaired).maximumHeight <= 14,
+         "O must fill a screenshot basin instead of extending its tower");
+}
+
 void testExpertKeepsChosenSplitAttackLaneOpen() {
   tetris::ExpertWeights weights;
   weights.attackLaneObstructionPenalty = 1.0e9;
@@ -921,7 +1128,8 @@ void testExpertKeepsChosenSplitAttackLaneOpen() {
   const tetris::Board after =
       tetris::lockMino(tetris::Board{}, decision->placement);
   const int lane = agent.attackLaneColumn();
-  expect(lane >= 3 && lane <= 6, "all four central split lanes are allowed");
+  expect(lane >= 1 && lane <= 8,
+         "every non-edge split lane is allowed");
   for (int row = 0; row < tetris::kBoardRows; ++row) {
     expect(after.cells()[row][lane] == tetris::Cell::Empty,
            "ordinary opening pieces must preserve the actually selected lane");
@@ -929,7 +1137,7 @@ void testExpertKeepsChosenSplitAttackLaneOpen() {
 }
 
 void testExpertSelectsMirroredSplitAttackLanes() {
-  for (int lane = 3; lane <= 6; ++lane) {
+  for (int lane = 1; lane <= 8; ++lane) {
     tetris::Board board;
     for (int row = tetris::kBoardRows - 2; row < tetris::kBoardRows; ++row)
       for (int col = 0; col < tetris::kBoardCols; ++col)
@@ -988,6 +1196,17 @@ void testExpertPenalizesOverbuiltWellShoulders() {
          "a two-row TSD lip must not receive the shoulder penalty");
   expect(tetris::evaluateExpertBoard(mirrored).attackLaneShoulderExcess == 18,
          "overbuilt shoulders must be detected symmetrically");
+
+  const auto balanced = stack({3, 3, 3, 4, 0, 4, 3, 3, 3, 3});
+  const auto unbalanced = stack({3, 3, 3, 5, 0, 3, 3, 3, 3, 3});
+  const auto balancedEvaluation = tetris::evaluateExpertBoard(balanced);
+  const auto unbalancedEvaluation = tetris::evaluateExpertBoard(unbalanced);
+  expect(balancedEvaluation.aggregateHeight ==
+             unbalancedEvaluation.aggregateHeight &&
+             balancedEvaluation.attackLaneShoulderDelta == 0 &&
+             unbalancedEvaluation.attackLaneShoulderDelta == 2 &&
+             balancedEvaluation.value > unbalancedEvaluation.value,
+         "one-Well TSD cycles must prefer level immediate shoulders");
   const auto uniform = stack({8, 8, 8, 8, 0, 8, 8, 8, 8, 8});
   expect(tetris::evaluateExpertBoard(uniform).attackLaneShoulderExcess == 0,
          "absolute height alone must not count as shoulder protrusion");
@@ -1153,7 +1372,7 @@ void testExpertUsesIToLowerDangerousStructuredStack() {
 
 void testExpertEmergencyModeBreaksB2BToLowerHeight() {
   tetris::Board board;
-  for (int row = tetris::kBoardRows - 15; row < tetris::kBoardRows; ++row) {
+  for (int row = tetris::kBoardRows - 18; row < tetris::kBoardRows; ++row) {
     board.set(row, 0, tetris::Cell::J);
   }
   for (int col = 0; col < tetris::kBoardCols; ++col) {
@@ -1161,8 +1380,8 @@ void testExpertEmergencyModeBreaksB2BToLowerHeight() {
       board.set(tetris::kBoardRows - 1, col, tetris::Cell::J);
     }
   }
-  expect(tetris::evaluateExpertBoard(board).maximumHeight == 15,
-         "emergency fixture must start at the recovery threshold");
+  expect(tetris::evaluateExpertBoard(board).maximumHeight == 18,
+         "emergency fixture must start at the critical threshold");
 
   tetris::ExpertWeights weights;
   weights.backToBackBreakPenalty = 1.0e12;
@@ -1175,7 +1394,7 @@ void testExpertEmergencyModeBreaksB2BToLowerHeight() {
          "breaks B2B");
   const tetris::Board after = tetris::clearLines(
       tetris::lockMino(board, decision->placement)).board;
-  expect(tetris::evaluateExpertBoard(after).maximumHeight < 15,
+  expect(tetris::evaluateExpertBoard(after).maximumHeight < 18,
          "emergency placement must lower the maximum stack height");
 }
 
@@ -1226,19 +1445,70 @@ void testExpertPreservesReachableTSpinDouble() {
     if (col != 4) board.set(visibleRow(19), col, tetris::Cell::Garbage);
   }
 
-  tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
+  for (const tetris::PieceType active : {
+           tetris::PieceType::O, tetris::PieceType::L,
+           tetris::PieceType::J}) {
+    tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
+    const auto decision = agent.decide(
+        board, active,
+        {tetris::PieceType::I, tetris::PieceType::S,
+         tetris::PieceType::Z, tetris::PieceType::T},
+        std::nullopt, false);
+    expect(decision.has_value(),
+           "expert must decide while waiting for the next T piece");
+    const tetris::ClearResult after = tetris::clearLines(
+        tetris::lockMino(board, decision->placement));
+    expect(tetris::extractExpertPatternFeatures(after.board)
+               .completedTSpinDoublePatterns == 1,
+           "expert must reserve a roofed TSD for T instead of inserting "
+           "O/L/J");
+  }
+}
+
+void testExpertFiresTSpinDoubleBeforeUnderlyingTetris() {
+  // Regression from ./tmp: a completed mirrored TSD sits directly above a
+  // four-row I Well. The I clear is legal and immediately attractive, but it
+  // removes the TSD's supporting row. A low board has time to hold I, fire
+  // the TSD when T arrives, and then cash out the same Tetris Well.
+  const std::array<std::string_view, 6> rows{
+      "0000100000", "1100011111", "1110111111",
+      "1110111111", "1110111111", "1110111111"};
+  tetris::Board board;
+  for (int sourceRow = 0; sourceRow < static_cast<int>(rows.size());
+       ++sourceRow) {
+    const int boardRow = tetris::kBoardRows -
+                         static_cast<int>(rows.size()) + sourceRow;
+    for (int col = 0; col < tetris::kBoardCols; ++col) {
+      if (rows[sourceRow][col] == '1') {
+        board.set(boardRow, col, tetris::Cell::J);
+      }
+    }
+  }
+  const auto before = tetris::evaluateExpertBoard(board);
+  expect(before.reachableTSpinDoublePatterns == 1 &&
+             before.structuredWellDepth == 4,
+         "tmp fixture must contain both a reachable TSD and its lower I Well");
+
+  tetris::ExpertAgent agent(std::chrono::milliseconds(50));
   const auto decision = agent.decide(
-      board, tetris::PieceType::O,
-      {tetris::PieceType::I, tetris::PieceType::J,
-       tetris::PieceType::L, tetris::PieceType::T},
-      tetris::PieceType::S, false);
+      board, tetris::PieceType::I,
+      {tetris::PieceType::O, tetris::PieceType::J, tetris::PieceType::L,
+       tetris::PieceType::S, tetris::PieceType::Z, tetris::PieceType::T},
+      std::nullopt, true);
   expect(decision.has_value(),
-         "expert must decide while waiting for the next T piece");
-  const tetris::ClearResult after = tetris::clearLines(
+         "expert must find a move while preserving the tmp TSD");
+  expect(decision->placement.type != tetris::PieceType::I,
+         "expert must hold I for the Tetris after the tmp TSD; selected=" +
+             std::to_string(static_cast<int>(decision->placement.type)) +
+             " timeout=" + std::to_string(decision->timedOut) +
+             " nodes=" + std::to_string(decision->nodesVisited));
+  expect(decision->linesCleared != 4,
+         "expert must not cash out the underlying Tetris before the TSD");
+  const auto after = tetris::clearLines(
       tetris::lockMino(board, decision->placement));
-  expect(tetris::extractExpertPatternFeatures(after.board)
-             .completedTSpinDoublePatterns == 1,
-         "expert must not bury a reachable TSD before T arrives");
+  expect(tetris::evaluateExpertBoard(after.board)
+                 .reachableTSpinDoublePatterns == 1,
+         "the selected move must preserve the completed TSD until T arrives");
 }
 
 void testExpertEvaluatesDonationUnlocks() {
@@ -1279,6 +1549,194 @@ void testExpertEvaluatesDonationUnlocks() {
          "shift fixture must already contain a reachable TSD");
   expect(tetris::expertDonationLines(shifted, clearBelow, nearT) == 0,
          "moving an existing TSD down with a line clear must not count as donation");
+}
+
+void testExpertEvaluatesChainedTSpinDonations() {
+  struct Fixture {
+    std::string_view name;
+    std::array<std::string_view, 5> rows;
+  };
+  const std::array<Fixture, 2> fixtures{{
+      {"Double Dagger / Fractal",
+       {"####......", "###...####", "####.#####", "###...####",
+        "####.#####"}},
+      {"Imperial Cross",
+       {"..########", "...#######", "##.#######", "#...######",
+        "##.#######"}},
+  }};
+  for (const auto& fixture : fixtures) {
+    for (const bool mirror : {false, true}) {
+      tetris::Board board;
+      for (int row = 0; row < 5; ++row) {
+        for (int col = 0; col < tetris::kBoardCols; ++col) {
+          const int source = mirror ? tetris::kBoardCols - 1 - col : col;
+          if (fixture.rows[static_cast<std::size_t>(row)]
+                          [static_cast<std::size_t>(source)] == '#') {
+            board.set(tetris::kBoardRows - 5 + row, col, tetris::Cell::J);
+          }
+        }
+      }
+      const std::string label = std::string(fixture.name) +
+                                (mirror ? " mirrored" : "");
+      const auto plan = tetris::findExpertTSpinChain(board);
+      expect(plan.has_value(), label + " must be a replayable T-Spin chain");
+      expect(plan && plan->name == fixture.name,
+             label + " must retain its canonical template name");
+      if (!plan) continue;
+      const auto sequence = tetris::findExpertTSpinSequence(board);
+      expect(sequence && sequence->attacks.size() >= 2 &&
+                 sequence->attackUnits >= 8,
+             label + " must enter the general multi-attack evaluator");
+      const auto first = tetris::clearLines(
+          tetris::lockMino(board, plan->first));
+      expect(first.linesCleared == plan->firstLines,
+             label + " first spin line count must be exact");
+      const auto second = tetris::clearLines(
+          tetris::lockMino(first.board, plan->second));
+      expect(second.linesCleared == 2,
+             label + " must expose a real second TSD");
+      const bool strongSequence = sequence && std::all_of(
+          sequence->attacks.begin(), sequence->attacks.end(),
+          [](const auto& attack) {
+            return attack.spin == tetris::TSpin::Full && attack.lines >= 2;
+          });
+      expect(tetris::evaluateExpertBoard(board).chainedTSpinPatterns ==
+                 (strongSequence
+                      ? static_cast<int>(sequence->attacks.size()) - 1
+                      : 0),
+             label +
+                 " must only receive speculative value for all-TSD/TST chains");
+      expect(tetris::evaluateExpertBoard(second.board).holes == 0,
+             label + " must clean up its intentional cavities");
+    }
+  }
+
+  // Recognition is based on the replayed attacks, not only the two named
+  // bitmaps. An extra harmless support block produces an unnamed but still
+  // valid donating chain.
+  tetris::Board variant;
+  for (int row = 0; row < 5; ++row)
+    for (int col = 0; col < tetris::kBoardCols; ++col)
+      if (fixtures[0].rows[static_cast<std::size_t>(row)]
+                           [static_cast<std::size_t>(col)] == '#')
+        variant.set(tetris::kBoardRows - 5 + row, col, tetris::Cell::J);
+  variant.set(tetris::kBoardRows - 5, 6, tetris::Cell::J);
+  const auto generic = tetris::findExpertTSpinChain(variant);
+  expect(generic && generic->name == "T-Spin donation chain",
+         "a replayable non-catalog variant must still receive chain value");
+  tetris::ExpertWeights withoutChain;
+  withoutChain.chainedTSpinTemplateReward = 0.0;
+  tetris::ExpertWeights withChain = withoutChain;
+  withChain.chainedTSpinTemplateReward = 4200.0;
+  const auto genericSequence = tetris::findExpertTSpinSequence(variant);
+  const bool strongGeneric = genericSequence && std::all_of(
+      genericSequence->attacks.begin(), genericSequence->attacks.end(),
+      [](const auto& attack) {
+        return attack.spin == tetris::TSpin::Full && attack.lines >= 2;
+      });
+  tetris::ExpertTAvailability chainT;
+  chainT.inHold = true;
+  chainT.exact = true;
+  chainT.movesUntilPiece = 0;
+  chainT.visibleCount = 1;
+  const double genericBonus =
+      tetris::evaluateExpertBoard(variant, withChain, chainT).value -
+      tetris::evaluateExpertBoard(variant, withoutChain, chainT).value;
+  expect(strongGeneric ? genericBonus > 2000.0 : std::abs(genericBonus) < 0.01,
+         "only an all-TSD/TST generic chain may receive speculative value");
+
+  // Filling the lower reserved T cell leaves a similar-looking stack but no
+  // second TSD. It must not receive speculative template credit.
+  variant.set(tetris::kBoardRows - 1, 4, tetris::Cell::J);
+  expect(!tetris::findExpertTSpinChain(variant),
+         "a blocked second cavity must invalidate the donation chain");
+}
+
+void testExpertMidgameTemplateCatalogIsComplete() {
+  const auto& catalog = tetris::expertMidgameTemplateCatalog();
+  expect(catalog.size() == 71,
+         "the source midgame index currently contains exactly 71 templates");
+  std::vector<int> pages;
+  std::vector<std::string_view> names;
+  int stacking = 0, attacks = 0, techniques = 0;
+  for (const auto& entry : catalog) {
+    expect(entry.sourcePage > 0 && !entry.name.empty(),
+           "every midgame template needs source identity");
+    pages.push_back(entry.sourcePage);
+    names.push_back(entry.name);
+    if (entry.kind == tetris::ExpertMidgameTemplateKind::StackingPattern)
+      ++stacking;
+    else if (entry.kind == tetris::ExpertMidgameTemplateKind::AttackSequence) {
+      ++attacks;
+      expect(!entry.attackSequence.empty(),
+             "every attack template needs its declared firing sequence");
+    } else {
+      ++techniques;
+    }
+  }
+  std::sort(pages.begin(), pages.end());
+  std::sort(names.begin(), names.end());
+  expect(std::adjacent_find(pages.begin(), pages.end()) == pages.end(),
+         "midgame source pages must be unique");
+  expect(std::adjacent_find(names.begin(), names.end()) == names.end(),
+         "midgame template names must be unique");
+  expect(stacking == 14 && attacks == 35 && techniques == 22,
+         "catalog category counts must match the source index");
+  const auto imperial = std::find_if(
+      catalog.begin(), catalog.end(), [](const auto& entry) {
+        return entry.name == "インペリアルクロス";
+      });
+  const auto royal = std::find_if(
+      catalog.begin(), catalog.end(), [](const auto& entry) {
+        return entry.name == "ロイヤルシルバー";
+      });
+  expect(imperial != catalog.end() && imperial->attackSequence == "TSD,TSD" &&
+             royal != catalog.end() &&
+             royal->attackSequence == "TST,TST,TSD,TSD",
+         "short and four-stage catalog sequences must remain exact");
+
+  const auto attack = [](int lines, tetris::TSpin spin = tetris::TSpin::Full) {
+    return tetris::ExpertTSpinSequenceAttack{
+        {tetris::PieceType::T, 0, 0, 0}, lines, spin};
+  };
+  const auto attackForToken = [&](std::string_view token) {
+    if (token == "TSS") return attack(1);
+    if (token == "TST") return attack(3);
+    if (token == "TSM") return attack(1, tetris::TSpin::Mini);
+    if (token == "NEO") return attack(2, tetris::TSpin::Mini);
+    // TSD, FIN and ISO are all Full two-line results. Their different SRS
+    // construction is verified by reachability rather than attack notation.
+    return attack(2);
+  };
+  for (const auto& entry : catalog) {
+    if (entry.kind != tetris::ExpertMidgameTemplateKind::AttackSequence)
+      continue;
+    std::vector<tetris::ExpertTSpinSequenceAttack> sequence;
+    if (entry.attackSequence.size() >= 2 &&
+        entry.attackSequence.substr(entry.attackSequence.size() - 2) == "xN") {
+      const auto token = entry.attackSequence.substr(
+          0, entry.attackSequence.size() - 2);
+      sequence = {attackForToken(token), attackForToken(token),
+                  attackForToken(token), attackForToken(token)};
+    } else {
+      std::size_t begin = 0;
+      while (begin <= entry.attackSequence.size()) {
+        const std::size_t comma = entry.attackSequence.find(',', begin);
+        const std::size_t end = comma == std::string_view::npos
+                                    ? entry.attackSequence.size()
+                                    : comma;
+        sequence.push_back(
+            attackForToken(entry.attackSequence.substr(begin, end - begin)));
+        if (comma == std::string_view::npos) break;
+        begin = comma + 1;
+      }
+    }
+    const auto matches = tetris::matchExpertMidgameTemplates({sequence, 0});
+    expect(std::find(matches.begin(), matches.end(), entry.name) !=
+               matches.end(),
+           std::string(entry.name) +
+               " must be connected to attack-sequence matching");
+  }
 }
 
 void testExpertDonationTemplates() {
@@ -1335,7 +1793,7 @@ void testExpertDonationTemplates() {
         continue;
       }
       expect(plan.has_value(), label + " must recognize a playable unfinished template");
-      expect(!plan->setup.empty() && plan->setup.size() <= 2,
+      expect(!plan->setup.empty() && plan->setup.size() <= 3,
              label + " must value preparation, not just the completed TSD");
       tetris::Board current = base;
       for (const auto& placement : plan->setup) {
@@ -1373,6 +1831,10 @@ void testExpertDonationTemplates() {
          "unfinished donation must include a real playable roof placement");
   expect(!tetris::findExpertDonationTemplate(open, std::nullopt, {P::O, P::T}),
          "a missing roof must not be invented");
+  expect(tetris::findExpertDonationTemplate(
+             open, std::nullopt, {P::O, P::O, P::I, P::T})
+             .has_value(),
+         "midgame planning must preserve a T four queue positions away");
   auto first = tetris::lockMino(open, roofPlan->setup.front());
   const auto progress = tetris::findExpertDonationTemplate(first, std::nullopt, {P::O, P::T});
   expect(progress && progress->setup.size() == 1,
@@ -1564,9 +2026,224 @@ void testExpertConservesTWithDefaultWeights() {
          "saving T is a preference, not an illegal Hold when Hold is locked");
 }
 
+void testExpertHoldsTInsteadOfFillingRowsBeforeTSpinDouble() {
+  // A roofed TSD exists, but its surrounding two rows still need ordinary
+  // filler. The active T can fit horizontally on the stack; O can perform
+  // that work without consuming the once-per-bag firing piece.
+  tetris::Board board;
+  board.set(visibleRow(17), 3, tetris::Cell::J);
+  board.set(visibleRow(19), 3, tetris::Cell::J);
+  board.set(visibleRow(19), 5, tetris::Cell::J);
+  const auto before = tetris::extractExpertPatternFeatures(board);
+  expect(before.roofedTSpinDoublePatterns == 1 &&
+             before.completedTSpinDoublePatterns == 0,
+         "T reservation fixture must contain an unfinished roofed TSD");
+
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
+  const auto decision = agent.decide(
+      board, tetris::PieceType::T, {tetris::PieceType::O},
+      std::nullopt, true);
+  expect(decision && decision->placement.type == tetris::PieceType::O &&
+             !decision->actions.empty() &&
+             decision->actions.front() == tetris::Action::Hold,
+         "Expert must reserve T and use a non-T filler before the TSD fires");
+}
+
+void testExpertBuildsSurfaceStackingTemplates() {
+  using P = tetris::PieceType;
+  struct Fixture {
+    const char* name;
+    std::vector<std::string> rows;
+    P donor;
+  };
+  const std::vector<Fixture> fixtures{
+      {"ST", {"...#######", "....######", "...#######", "..########"}, P::S},
+      {"LT", {"...#######", "...#######", "....######", "...#######"}, P::L},
+      {"LST-L", {"..........", "..........", "..........",
+                 "#...######", "##.#######", "##.#######"}, P::L},
+      {"LST-S", {"..........", "..........", "#.........",
+                 "#...######", "##.#######", "##.#######"}, P::S},
+  };
+  for (const auto& fixture : fixtures) {
+    for (const bool mirror : {false, true}) {
+      tetris::Board board;
+      for (std::size_t row = 0; row < fixture.rows.size(); ++row)
+        for (int col = 0; col < 10; ++col)
+          if (fixture.rows[row][col] == '#')
+            board.set(tetris::kBoardRows - fixture.rows.size() + row,
+                      mirror ? 9 - col : col, tetris::Cell::J);
+      const P donor = !mirror ? fixture.donor : fixture.donor == P::L ? P::J : P::Z;
+      const auto plan = tetris::findExpertDonationTemplate(board, std::nullopt, {donor, P::T});
+      expect(plan && plan->setup.size() == 1,
+             std::string(fixture.name) + " must find its surface setup and TSD");
+      const auto ready = tetris::lockMino(board, plan->setup.front());
+      const auto cleared = tetris::clearLines(tetris::lockMino(ready, plan->target));
+      expect(cleared.linesCleared == 2 && tetris::evaluateExpertBoard(cleared.board).holes == 0,
+             std::string(fixture.name) + " must fire TSD without leaving buried holes");
+      expect(!tetris::findExpertDonationTemplate(board, std::nullopt, {P::T}),
+             std::string(fixture.name) + " must not invent the missing donor");
+    }
+  }
+}
+
+void testExpertBuildsStsdFromTwoDonors() {
+  using P = tetris::PieceType;
+  for (const P roof : {P::O, P::S, P::L}) {
+  for (bool mirror : {false, true}) {
+    tetris::Board board;
+    for (int row = 36; row < 40; ++row)
+      for (int col = (row == 36 && roof != P::O) ? 4 : 3; col < 10; ++col)
+        board.set(row, mirror ? 9 - col : col, tetris::Cell::J);
+    const P actualRoof = !mirror ? roof : roof == P::S ? P::Z : roof == P::L ? P::J : P::O;
+    const auto plan = tetris::findExpertDonationTemplate(
+        board, std::nullopt, {mirror ? P::L : P::J, actualRoof, P::T});
+    expect(plan && plan->name.substr(0, 5) == "STSD-" && plan->setup.size() == 2,
+           "STSD must plan J/O preparation before the first TSD");
+    auto ready = board;
+    for (const auto& donor : plan->setup) {
+      expect(tetris::isValidPosition(ready, donor) &&
+                 tetris::calcGhostY(ready, donor) == donor.y,
+             "STSD donor must be grounded and collision-free");
+      ready = tetris::lockMino(ready, donor);
+    }
+    const auto first = tetris::clearLines(tetris::lockMino(ready, plan->target));
+    expect(first.linesCleared == 2, "STSD first attack must clear two lines");
+    const auto second = tetris::findExpertTSpinSequence(ready);
+    expect(second && second->attacks.size() >= 2,
+           "prepared STSD must have two replayable spin attacks");
+    expect(!tetris::findExpertDonationTemplate(board, std::nullopt, {P::T}),
+           "STSD must not invent its two setup pieces");
+    // Isolate connection to the production evaluator. Default strategy may
+    // legitimately choose a repair instead; the template is never forced.
+    tetris::ExpertWeights weights;
+    weights.donationTemplateReward = 100000.0;
+    tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
+    const auto decision = agent.decide(
+        board, mirror ? P::L : P::J, {actualRoof, P::T}, std::nullopt, false);
+    expect(decision && decision->linesCleared == 0,
+           "Expert must choose a non-clearing STSD setup move: roof=" +
+               std::to_string(static_cast<int>(roof)) +
+               " mirror=" + std::to_string(mirror));
+    const auto prepared = tetris::lockMino(board, decision->placement);
+    expect(tetris::findExpertDonationTemplate(prepared, std::nullopt, {actualRoof, P::T}).has_value(),
+           "Expert's actual first move must retain a supplied template continuation");
+  }
+  }
+}
+
+void testExpertPricesOrdinaryClearsAndRen() {
+  for (int lines = 1; lines <= 3; ++lines) {
+    tetris::Board board;
+    const bool useI = lines == 3;
+    for (int row = tetris::kBoardRows - lines; row < tetris::kBoardRows; ++row)
+      for (int col = 0; col < tetris::kBoardCols; ++col)
+        if (col != 4 && (useI || col != 5))
+          board.set(row, col, tetris::Cell::J);
+    board.set(tetris::kBoardRows - lines - 1, 0, tetris::Cell::J);
+    tetris::ExpertWeights priced;
+    // Force the same clear so score differences isolate the new terms.
+    priced.lineReward = 1.0e9;
+    auto unpriced = priced;
+    unpriced.inefficientSmallClearPenalty = 0;
+    unpriced.inefficientThreeLinePenalty = 0;
+    const auto decide = [&](const tetris::ExpertWeights& weights, int combo) {
+      tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
+      tetris::DecisionContext context;
+      context.board = board;
+      context.active = useI ? tetris::PieceType::I : tetris::PieceType::O;
+      context.canHold = false;
+      context.combo = combo;
+      return agent.decide(context);
+    };
+    const auto isolated = decide(priced, -1);
+    const auto ordinary = decide(unpriced, -1);
+    const auto ren = decide(priced, 0);
+    const auto renUnpriced = decide(unpriced, 0);
+    expect(isolated && ordinary && ren && renUnpriced &&
+               isolated->linesCleared == lines && ren->linesCleared == lines,
+           "ordinary-clear fixture must execute its intended clear");
+    const double penalty = useI ? priced.inefficientThreeLinePenalty
+                                : priced.inefficientSmallClearPenalty;
+    expect(std::abs(isolated->score - ordinary->score - penalty) < 0.01,
+           "isolated Single/Double/Triple must pay an opportunity cost: lines=" +
+               std::to_string(lines) + " difference=" +
+               std::to_string(ordinary->score - isolated->score));
+    expect(std::abs(ren->score - renUnpriced->score) < 0.01,
+           "REN continuation must be exempt from isolated-clear cost");
+    expect(std::abs(ordinary->score - ren->score - priced.garbageReward) < 0.01,
+           "first REN continuation must add one real attack line to search value");
+    if (useI) {
+      tetris::ExpertAgent patient(std::chrono::milliseconds(100), {}, 200000);
+      const auto saved = patient.decide(
+          board, tetris::PieceType::I, {}, tetris::PieceType::O, true);
+      expect(saved && saved->linesCleared == 0 &&
+                 saved->placement.type == tetris::PieceType::O,
+             "safe three-row Well must save I through Hold rather than cash out Triple");
+    }
+  }
+  const auto afterNonClear = [](int combo) {
+    tetris::DecisionContext context;
+    for (int col = 0; col < tetris::kBoardCols; ++col)
+      if (col != 4) context.board.set(tetris::kBoardRows - 1, col, tetris::Cell::J);
+    context.active = tetris::PieceType::O;
+    context.next = {tetris::PieceType::I};
+    context.canHold = false;
+    context.combo = combo;
+    tetris::ExpertAgent agent(std::chrono::milliseconds(100), {}, 200000);
+    return agent.decide(context);
+  };
+  const auto cold = afterNonClear(-1);
+  const auto broken = afterNonClear(6);
+  expect(cold && broken && cold->linesCleared == 0 && broken->linesCleared == 0 &&
+             cold->completedDepth >= 2 && broken->completedDepth >= 2 &&
+             std::abs(cold->score - broken->score) < 0.01,
+         "a non-clear must reset REN before evaluating the next I clear");
+}
+
+void testExpertCanOverrideSetupReservation() {
+  // A ready TSD above a four-row Well. Default weights prefer TSD first,
+  // but a finite heuristic must allow a better-ranked alternative instead
+  // of deleting every I placement before the beam can compare it.
+  const std::array<std::string_view, 6> rows{
+      "0000100000", "1100011111", "1110111111",
+      "1110111111", "1110111111", "1110111111"};
+  tetris::Board board;
+  for (std::size_t row = 0; row < rows.size(); ++row)
+    for (int col = 0; col < tetris::kBoardCols; ++col)
+      if (rows[row][col] == '1')
+        board.set(tetris::kBoardRows - static_cast<int>(rows.size()) + row,
+                  col, tetris::Cell::J);
+  tetris::ExpertWeights weights;
+  weights.tetrisReward = 1.0e10;
+  tetris::ExpertAgent agent(std::chrono::milliseconds(100), weights, 200000);
+  const auto decision = agent.decide(
+      board, tetris::PieceType::I, {}, tetris::PieceType::O, true);
+  expect(decision && decision->placement.type == tetris::PieceType::I &&
+             decision->linesCleared == 4,
+         "setup preservation must be a finite preference, not forced Hold "
+         "or deletion of destructive clears");
+
+  tetris::Board unfinished;
+  unfinished.set(visibleRow(14), 3, tetris::Cell::J);
+  unfinished.set(visibleRow(16), 3, tetris::Cell::J);
+  unfinished.set(visibleRow(16), 5, tetris::Cell::J);
+  for (int col = 3; col < tetris::kBoardCols; ++col)
+    unfinished.set(visibleRow(19), col, tetris::Cell::J);
+  expect(tetris::extractExpertPatternFeatures(unfinished)
+             .roofedTSpinDoublePatterns > 0,
+         "T override fixture must retain an unfinished roof");
+  weights.lineReward = 1.0e10;
+  tetris::ExpertAgent useT(std::chrono::milliseconds(100), weights, 200000);
+  const auto repair = useT.decide(
+      unfinished, tetris::PieceType::T, {}, tetris::PieceType::O, true);
+  expect(repair && repair->placement.type == tetris::PieceType::T &&
+             repair->linesCleared == 1,
+         "a roof must not unconditionally forbid spending T on a better clear");
+}
+
 void testExpertSpendsTForRecoveryAndPerfectClear() {
   tetris::Board danger;
-  for (int row = tetris::kBoardRows - 15; row < tetris::kBoardRows; ++row)
+  for (int row = tetris::kBoardRows - 18; row < tetris::kBoardRows; ++row)
     danger.set(row, 0, tetris::Cell::J);
   for (int col = 0; col < tetris::kBoardCols; ++col)
     if (col < 3 || col > 5) danger.set(tetris::kBoardRows - 1, col, tetris::Cell::J);
@@ -1587,7 +2264,23 @@ void testExpertSpendsTForRecoveryAndPerfectClear() {
   const auto finish = perfect.decide(pc, tetris::PieceType::T, {}, tetris::PieceType::O, true);
   expect(finish && finish->linesCleared == 2 &&
              tetris::clearLines(tetris::lockMino(pc, finish->placement)).board.empty(),
-         "a non-spin perfect clear must not be mistaken for wasted T");
+         "a non-spin perfect clear must not be mistaken for wasted T; piece=" +
+             (finish ? std::to_string(static_cast<int>(finish->placement.type))
+                     : std::string("none")) +
+             " lines=" +
+             (finish ? std::to_string(finish->linesCleared)
+                     : std::string("none")));
+
+  tetris::ExpertAgent heldPerfect(
+      std::chrono::milliseconds(50), weights, 150000);
+  const auto holdFinish = heldPerfect.decide(
+      pc, tetris::PieceType::O, {}, tetris::PieceType::T, true);
+  expect(holdFinish && !holdFinish->actions.empty() &&
+             holdFinish->actions.front() == tetris::Action::Hold &&
+             holdFinish->linesCleared == 2 &&
+             tetris::clearLines(
+                 tetris::lockMino(pc, holdFinish->placement)).board.empty(),
+         "an immediate Perfect Clear in Hold must override the active piece");
 }
 
 void testExpertPricesReplacementTScarcity() {
@@ -2177,6 +2870,8 @@ int main() {
     testHardAgentKeepsSoloStackHoleFree();
     testExpertAgentChoosesTetris();
     testExpertTSpinDoublePatternFeatures();
+    testExpertDoesNotBuryUnroofedTSpinDoubleFoundation();
+    testExpertCompletesActionableTSpinDoubleRoof();
     testExpertRejectsSidePocketBesideSingleWell();
     testExpertKeepsCleanSoloStackFreeOfUnownedHoles();
     testExpertDetectsCellsNoPieceCanFill();
@@ -2186,6 +2881,7 @@ int main() {
     testExpertWellRewardFollowsIAvailability();
     testExpertRecognizesStructuredSplitStacks();
     testExpertPreventsSecondWellBeforeItBecomesDeep();
+    testExpertDetectsTwoWideTrenches();
     testExpertKeepsChosenSplitAttackLaneOpen();
     testExpertSelectsMirroredSplitAttackLanes();
     testExpertPenalizesOverbuiltWellShoulders();
@@ -2197,9 +2893,12 @@ int main() {
     testExpertEmergencyModeBreaksB2BToLowerHeight();
     testExpertRejectsBuriedTSpinSetups();
     testExpertExecutesReachableTSpinDouble();
+    testExpertFiresTSpinDoubleBeforeUnderlyingTetris();
     testExpertPreservesReachableTSpinDouble();
     testExpertRecognizesAndExecutesTSpinTriple();
     testExpertEvaluatesDonationUnlocks();
+    testExpertEvaluatesChainedTSpinDonations();
+    testExpertMidgameTemplateCatalogIsComplete();
     testExpertDonationTemplates();
     testSevenBagForecast();
     testExpertOpeningBook();
@@ -2210,6 +2909,11 @@ int main() {
     testExpertAvoidsWastingTWithHold();
     testExpertTreatsZeroLineTSpinAsWastedT();
     testExpertConservesTWithDefaultWeights();
+    testExpertHoldsTInsteadOfFillingRowsBeforeTSpinDouble();
+    testExpertCanOverrideSetupReservation();
+    testExpertPricesOrdinaryClearsAndRen();
+    testExpertBuildsSurfaceStackingTemplates();
+    testExpertBuildsStsdFromTwoDonors();
     testExpertSpendsTForRecoveryAndPerfectClear();
     testExpertPricesReplacementTScarcity();
     testExpertPricesSafeTSpinSingleOpportunityCost();

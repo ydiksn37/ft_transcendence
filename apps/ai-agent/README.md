@@ -136,7 +136,22 @@ external AI API. It uses a time-bounded beam search over placements reachable
 through the same moves and rotations as the TypeScript backend. Hold and the
 known Next queue are searched at every depth.
 
+Setup preservation and T/I reservation are scoring preferences, not root-move
+filters: the search can abandon a roof or spend a reserved piece when the
+alternative scores better. An immediate Perfect Clear keeps its explicit
+priority. Four of the sixteen beam slots retain distinct first moves; the
+remaining slots follow global score order. This reduces premature loss of
+alternative plans, but does not guarantee a globally optimal move.
+
 Unlike Hard, Expert ranks clears using the backend garbage table directly. Its
+search also carries REN (`combo`): clears increment it, non-clears reset it to
+-1, and attack includes the TS bonus `floor((combo + 1) / 2)` for combo > 0.
+Isolated ordinary Singles/Doubles cost 2500 and Triples cost 5000 on safe
+boards. These costs do not apply to REN continuation, Perfect Clears, verified
+donation unlocks, or actual recovery (holes, garbage, extra Wells, broad basins,
+or height 11+). Shortening a healthy Well alone no longer earns excavation
+bonuses. All placements remain legal; this is a preference, not a clear ban.
+Its
 search state carries B2B status, including the backend's T-Spin Mini and Perfect
 Clear behavior. The evaluator combines survival features with Tetris wells and
 T-Spin Double setup features. In addition to the original completed-slot
@@ -189,8 +204,8 @@ operation sequence remains subject to replay by the authoritative game engine.
 
 #### Opening book (Expert only)
 
-Ordinary Expert search considers all four central split stacks: 3-6, 4-5,
-5-4 and 6-3 (one Well column between the two blocks). It chooses a lane
+Ordinary Expert search considers every non-edge split stack: 8-1, 7-2, 6-3,
+5-4 and all horizontal mirrors (one Well column between the two blocks). It chooses a lane
 from the current board and visible supply when ordinary search first runs,
 including after the opening book. The lane is then retained until the board
 is empty again; it is not hard-coded to the right side. Both orientations are
@@ -204,6 +219,15 @@ weighted by `attack_lane_shoulder_penalty` (default 220). This cost is 1.5x
 when T is held or visible within three Next entries. It is a soft stacking
 preference, not a ban on Tetris, a reward for creating holes, or a restriction
 on the verified opening book.
+
+Deep surface basins are also checked at all widths of two or more columns,
+including both edges. Depth beyond three rows is squared per column, with
+overlapping intervals counted only once (`wide_depression_penalty`, default
+100). A single-column Well and shallow construction steps are exempt from
+this additional feature. A move that reduces this basin severity without
+adding holes or unfillable cavities receives a 90% refund of the obstruction
+cost for newly occupied attack-lane cells, so a stale lane preference does not
+block repairs. Merely creating a basin does not qualify for that refund.
 
 Expert uses [Honey Cup (はちみつ砲)](https://shiwehi.com/tetris/template/honeycup.php)
 instead of the former TKI/LST/Reliable TSD book. The preferred first bag places
@@ -328,7 +352,7 @@ including horizontal mirrors and translated positions. These are local donor
 footprints, not fixed whole-board openings or automatic moves.
 
 The `donation_template_reward` feature values a verified preparation with at
-most **two remaining setup placements (including a roof), followed by TSD**.
+most **three remaining setup placements (including a roof), followed by TSD**.
 It checks the actual remaining Next/Hold order, legal donor movement (including
 tucks), a reachable final T rotation, and the board after the two-row clear.
 A donor must not clear a line during preparation. The clear must reopen the
@@ -338,9 +362,10 @@ Only one plan earns preparation credit; completing more of it increases that
 credit. Verified temporary holes do not receive the otherwise prohibitive
 unowned/unfillable-hole penalty, but ordinary height and hole costs remain.
 
-For speed and safety, this feature requires a stack no higher than 12, a nearby
-visible/held T, and a clean residual stack no higher than 10. It does not invent
-unknown Next pieces, arbitrary filler moves, or three-plus-piece preparations.
+For speed and safety, this feature requires a stack no higher than 12, a T in
+Hold or the next four queue positions, and a clean residual stack no higher
+than 10. It does not invent unknown Next pieces, arbitrary filler moves, or
+four-plus-piece preparations.
 A named silhouette whose donor route is blocked is rejected even if it would
 work with a different construction order. The ordinary beam search still makes
 the final move choice; recognition does not force every donation to be played.
@@ -348,7 +373,58 @@ the final move choice; recognition does not force every donation to be played.
 The older `donation_unlock_reward` separately rewards line clears that expose
 a new TSD/TST; it is not the template detector.
 
+Expert additionally evaluates chained donating terrain such as **Imperial
+Cross** and **Double Dagger / Fractal**, including horizontal mirrors. This is
+not awarded from a bitmap match alone: the verifier must reach the first
+line-clearing T-Spin using the TS/SRS movement rules, apply its real line
+clear, then reach a second TSD and finish with a clean residual stack. The
+same simulation recognizes other T-Spin-to-TSD donation shapes even when they
+do not have a catalog name. A verified chain may own its temporary cavities;
+an unrelated placement which destroys it is penalized, while firing its first
+T-Spin is allowed. `findExpertTSpinChain` exposes the two placements and the
+canonical name, when applicable, for deterministic diagnostics.
+
+The complete [midgame template index](https://w.atwiki.jp/tetrismaps/pages/506.html)
+is retained as a 71-entry catalog: 14 stacking families, 35 declared attack
+sequences, and 22 construction techniques. This is metadata, **not a claim
+that all 71 construction procedures are implemented**. The shared mechanics
+are clean one-Well/flat stacking, reachable donation construction (including
+mirrors and SRS tucks), and replayed multi-T-Spin sequences. The sequence matcher
+understands TSS/TSD/TST/TSM and repeating `xN` recipes. It also preserves the
+TS engine's special-spin distinction: FIN/ISO are Full two-line spins, while
+NEO is a Mini two-line spin. Catalog membership therefore never bypasses
+collision, reachability, line-clear, residual-board, or survival checks.
+
+The supplied `template/` diagrams additionally support these tested setups:
+
+| Diagram | Construction support |
+| --- | --- |
+| `2021y01m16d_142847177.jpg` (LT) | L preparation on the surface; no buried shaft required |
+| `2021y01m13d_193730018.jpg` (LST) | L/S overhang preparation above an existing foundation |
+| `2021y01m13d_194205019.jpg` (ST) | Existing S donation route, now covered by a surface fixture |
+| `2020y09m22d_001127777.jpg` (STSD) | J plus O/S/L roof; first TSD with supplied Next/Hold, followed by a geometrically verified second TSD |
+
+All of these include horizontal mirrors and real SRS reachability checks.
+They are bounded local setups, not perpetual stacking controllers: surrounding
+clear rows must already be fillable by the listed setup pieces. STSD does not
+assume a second T in the queue or commit the agent to waiting for one. Its
+second attack is checked to validate the residual cavity, not awarded as
+guaranteed future attack. Partial/unlabelled Fumen screenshots do not establish
+support for their unseen pages; the catalog alone cannot fill in those steps.
+
 ### Expert weight tuning
+
+#### Expert search threads
+
+Expert expands independent states in each beam layer concurrently. It uses up
+to four worker threads by default and merges results in stable state order.
+Set `TETRIS_EXPERT_THREADS=1` to reproduce the single-thread search, or choose
+between 1 and 8 workers explicitly. Node-budgeted tuning remains
+single-threaded so CEM comparisons keep an exact deterministic node budget.
+
+```sh
+TETRIS_EXPERT_THREADS=4 make ai-run model=expert think_ms=50
+```
 
 `ai_tune` applies the Cross-Entropy Method (CEM) to the Expert evaluation
 weights, including board-stability scaling, quadratic holes, the clean-board
