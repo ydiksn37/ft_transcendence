@@ -33,6 +33,8 @@ export default function Friends() {
 
 	useEffect(() => {
 		const searchInput = addFriendInput.trim();
+		const controller = new AbortController();
+		setSuggestedUsers([]);
 		if (searchInput.length === 0) {
 			setSuggestedUsers([]);
 			return;
@@ -41,15 +43,18 @@ export default function Friends() {
 			try {
 				const token = localStorage.getItem('token');
 				const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchInput)}`, {
+					signal: controller.signal,
 					headers: { Authorization: `Bearer ${token}` }
 				});
 				if (res.ok) {
 					const data = await res.json();
-					setSuggestedUsers(data.data || []);
+					if (!controller.signal.aborted) setSuggestedUsers(data.data || []);
 				}
-			} catch (e) {}
+			} catch {
+				if (!controller.signal.aborted) setSuggestedUsers([]);
+			}
 		}, 300);
-		return () => clearTimeout(timeoutId);
+		return () => { clearTimeout(timeoutId); controller.abort(); };
 	}, [addFriendInput]);
 
 	const fetchFriends = async () => {
@@ -251,7 +256,7 @@ export default function Friends() {
 															const room = await res.json();
 															navigate(`/chat?room=${room.id}${mode ? '&mode='+mode : ''}`);
 														}
-													} catch(e) {}
+													} catch { alert('Could not open chat. Please retry.'); }
 												}}
 												style={{ padding: '5px 10px', backgroundColor: '#3498db', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', fontFamily: "'Press Start 2P', monospace" }}>
 												CHAT

@@ -22,9 +22,9 @@ export class ApiKeyGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const apiKey = request.headers['x-api-key'] as string;
+    const apiKey: unknown = request.headers['x-api-key'];
 
-    if (!apiKey || apiKey.length < 8) {
+    if (typeof apiKey !== 'string' || !/^[0-9a-f]{64}$/.test(apiKey)) {
       throw new UnauthorizedException('X-API-Key ヘッダーが必要です');
     }
 
@@ -32,7 +32,10 @@ export class ApiKeyGuard implements CanActivate {
 
     // プレフィックスでキーを検索
     const keyRecord = await this.prisma.apiKey.findFirst({
-      where: { keyPrefix: prefix, isActive: true },
+      where: {
+        keyPrefix: prefix, isActive: true,
+        user: { deletedAt: null, OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }] },
+      },
     });
 
     if (!keyRecord) {
@@ -40,7 +43,7 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     // 有効期限チェック
-    if (keyRecord.expiresAt && keyRecord.expiresAt < new Date()) {
+    if (keyRecord.expiresAt && keyRecord.expiresAt <= new Date()) {
       throw new UnauthorizedException('APIキーの有効期限が切れています');
     }
 
@@ -52,17 +55,14 @@ export class ApiKeyGuard implements CanActivate {
 
     // レート制限 (1時間あたり)
     const rateLimitKey = `ratelimit:apikey:${keyRecord.id}`;
-    const current = await this.redis.incr(rateLimitKey);
-    if (current === 1) {
-      await this.redis.expire(rateLimitKey, 3600);
-    }
+    const { count: current, ttl } = await this.redis.incrementWindow(rateLimitKey, 3600);
 
     if (current > keyRecord.rateLimit) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
           message: `レート制限超過。上限: ${keyRecord.rateLimit}リクエスト/時間`,
-          retryAfter: await this.redis.ttl(rateLimitKey),
+          retryAfter: Math.max(1, ttl),
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );

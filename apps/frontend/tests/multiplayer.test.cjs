@@ -5,13 +5,15 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function mount() {
+function mount(vsAi = false) {
   const handlers = {}, state = {}, exports = {};
-  const socket = { id: 'me', on: (event, fn) => handlers[event] = fn, disconnect() {}, emit() {} };
+  const sent = [];
+  const socket = { id: 'me', connected: true, on: (event, fn) => handlers[event] = fn, disconnect() {}, emit: (...args) => sent.push(args) };
   const refs = { appStateRef: { current: 'CUSTOM_ROOMS' }, gameOverRef: { current: false },
     stageRef: { current: [] }, pendingGarbageRef: { current: [] }, socketRef: { current: null } };
   let localStarts = 0;
-  const props = new Proxy({ ...refs, token: null, resetPlayer() {}, resetHold() {}, startGame: () => ++localStarts }, {
+  let ready;
+  const props = new Proxy({ ...refs, token: null, resetPlayer() {}, resetHold() {}, startGame: (_mode, callback) => { ++localStarts; ready = callback; } }, {
     get: (obj, key) => key in obj ? obj[key] : key.startsWith('set') ? value => {
       const name = key.slice(3);
       state[name] = typeof value === 'function' ? value(state[name]) : value;
@@ -27,9 +29,27 @@ function mount() {
     if (name.includes('tetrominos')) return { setRandomSeed() {} };
     throw Error(name);
   } });
-  exports.useMultiplayer(props).setupCustomRoomConnection();
-  return { state, refs, emit: (event, data) => handlers[event](data), localStarts: () => localStarts };
+  const hook = exports.useMultiplayer(props);
+  if (vsAi) hook.startVsAi('EXPERT', 0);
+  else hook.setupCustomRoomConnection();
+  return { state, refs, sent, ready: () => ready?.(), emit: (event, data) => handlers[event](data), localStarts: () => localStarts };
 }
+
+test('AI start is acknowledged only when local READY finishes, never for stale matches or sockets', () => {
+  const h = mount(true);
+  h.emit('match:found', { roomId: 'ai-room', seed: 42, vsAi: true });
+  h.emit('game:start', { roomId: 'old-room' });
+  assert.equal(h.localStarts(), 0);
+  h.emit('game:start', { roomId: 'ai-room' });
+  assert.equal(h.localStarts(), 1);
+  assert.equal(h.sent.length, 0);
+  h.ready();
+  assert.equal(h.sent[0][0], 'game:ai_ready');
+  assert.equal(h.sent[0][1].roomId, 'ai-room');
+  h.refs.socketRef.current = null;
+  h.ready();
+  assert.equal(h.sent.length, 1);
+});
 
 test('READY keeps the server piece/Next and disables input until started', () => {
   const h = mount();

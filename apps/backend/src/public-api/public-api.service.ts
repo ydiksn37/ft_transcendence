@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PublicGameSettingsDto } from './dto/public-api.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { GameMode, Rank, TournamentStatus } from '@prisma/client';
 
@@ -6,9 +8,51 @@ import type { GameMode, Rank, TournamentStatus } from '@prisma/client';
 export class PublicApiService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getSettings(userId: string) {
+    const settings = await this.prisma.userGameSettings.findUnique({ where: { userId } });
+    if (!settings) throw new NotFoundException('ゲーム設定が見つかりません');
+    return settings;
+  }
+
+  private settingsData(dto: PublicGameSettingsDto) {
+    // PUT replaces the resource: omitted/null fields reset to schema defaults.
+    return {
+      minoSkin: dto.minoSkin ?? 'NEON' as const,
+      showGhost: dto.showGhost ?? true,
+      arr: dto.arr ?? 33, das: dto.das ?? 170, dcd: dto.dcd ?? 0, sdf: dto.sdf ?? 6,
+      keyBindings: dto.keyBindings ? { ...dto.keyBindings } : Prisma.DbNull,
+      volume: dto.volume ?? 100,
+      sfxEnabled: dto.sfxEnabled ?? true, musicEnabled: dto.musicEnabled ?? true,
+    };
+  }
+
+  async createSettings(userId: string, dto: PublicGameSettingsDto) {
+    try {
+      return await this.prisma.userGameSettings.create({ data: { userId, ...this.settingsData(dto) } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ConflictException('設定は既に存在します。PUTで置き換えてください');
+      throw error;
+    }
+  }
+
+  async replaceSettings(userId: string, dto: PublicGameSettingsDto) {
+    try {
+      return await this.prisma.userGameSettings.update({ where: { userId }, data: this.settingsData(dto) });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025')
+        throw new NotFoundException('設定がありません。POSTで作成してください');
+      throw error;
+    }
+  }
+
+  async deleteSettings(userId: string) {
+    await this.prisma.userGameSettings.deleteMany({ where: { userId } });
+  }
+
   // ── 1. グローバルランキング ───────────────────────────────
   async getLeaderboard(page = 1, limit = 20, rankFilter?: Rank) {
-    const skip = (page - 1) * Math.min(limit, 100);
+    const skip = (page - 1) * limit;
 
     const where = {
       deletedAt: null,
@@ -38,7 +82,7 @@ export class PublicApiService {
             },
           },
         },
-        orderBy: { stats: { rankPoints: 'desc' } },
+        orderBy: [{ stats: { rankPoints: 'desc' } }, { id: 'asc' }],
         skip,
         take: limit,
       }),
@@ -110,7 +154,7 @@ export class PublicApiService {
     });
     if (!user) return null;
 
-    const skip = (page - 1) * Math.min(limit, 50);
+    const skip = (page - 1) * limit;
     const where = {
       OR: [{ player1Id: user.id }, { player2Id: user.id }],
       ...(mode ? { gameMode: mode } : {}),
@@ -119,7 +163,7 @@ export class PublicApiService {
     const [results, total] = await Promise.all([
       this.prisma.gameResult.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip,
         take: limit,
         select: {
@@ -158,13 +202,13 @@ export class PublicApiService {
 
   // ── 5. トーナメント一覧 ───────────────────────────────────
   async getTournaments(page = 1, limit = 20, status?: TournamentStatus) {
-    const skip = (page - 1) * Math.min(limit, 50);
+    const skip = (page - 1) * limit;
     const where = status ? { status } : {};
 
     const [tournaments, total] = await Promise.all([
       this.prisma.tournament.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip,
         take: limit,
         select: {

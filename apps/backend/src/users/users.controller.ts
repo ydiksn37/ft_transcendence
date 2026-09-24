@@ -27,6 +27,9 @@ import {
 import { UsersService } from './users.service';
 import {
   UpdateUserDto,
+  AdminCreateUserDto,
+  AdminEditUserDto,
+  AdminDeleteUserDto,
   SearchUsersDto,
   BanUserDto,
   SearchHistoryDto,
@@ -61,6 +64,12 @@ export class UsersController {
   @ApiOperation({ summary: 'プロフィール更新' })
   updateMe(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateUserDto) {
     return this.usersService.updateMe(user.id, dto);
+  }
+
+  @Get('me/progression')
+  @ApiOperation({ summary: '自分の実績・達成進捗・XPとランクを取得' })
+  getProgression(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getProgression(user.id);
   }
 
   @Patch('me/settings')
@@ -236,6 +245,27 @@ export class UsersController {
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: '[ADMIN] 他ユーザーを永久削除（個人データ削除・履歴匿名化）' })
+  adminDeleteUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminDeleteUserDto) {
+    return this.usersService.adminDeleteUser(user.id, id, dto.confirmation);
+  }
+
+  @Post()
+  @Roles('ADMIN')
+  @ApiOperation({ summary: '[ADMIN] 通常ユーザーを作成（ロールはUSER固定）' })
+  adminCreateUser(@CurrentUser() user: AuthenticatedUser, @Body() dto: AdminCreateUserDto) {
+    return this.usersService.adminCreateUser(user.id, dto);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: '[ADMIN] 表示名・自己紹介を編集（資格情報・権限は変更しない）' })
+  adminEditUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminEditUserDto) {
+    return this.usersService.adminEditUser(user.id, id, dto);
+  }
 
   @Get()
   @Roles('ADMIN', 'MODERATOR')

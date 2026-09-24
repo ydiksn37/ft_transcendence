@@ -65,7 +65,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [gameMode]);
+  }, [gameMode, appState]);
 
   const renderHoldBox = () => {
     const boxStyle = {

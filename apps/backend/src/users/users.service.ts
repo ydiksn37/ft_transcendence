@@ -8,6 +8,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GAME_ACHIEVEMENTS } from '../game/achievements';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
@@ -18,6 +19,8 @@ import { RedisService } from '../redis/redis.service';
 import { MailService } from '../mail/mail.service';
 import {
   UpdateUserDto,
+  AdminCreateUserDto,
+  AdminEditUserDto,
   SearchUsersDto,
   BanUserDto,
   SearchHistoryDto,
@@ -34,6 +37,7 @@ const ADMIN_USER_SELECT = {
   email: true,
   username: true,
   displayName: true,
+  bio: true,
   avatarUrl: true,
   role: true,
   isOnline: true,
@@ -55,6 +59,32 @@ export class UsersService {
   ) {}
 
   // ── 自分のプロフィール取得 ────────────────────────────────
+  async getProgression(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        stats: { select: { xp: true, level: true, rank: true, rankPoints: true, wins: true, totalGames: true, totalTSpins: true, totalTetrises: true } },
+        achievements: { select: { earnedAt: true, achievement: { select: { key: true, xpReward: true } } } },
+      },
+    });
+    if (!user) throw new NotFoundException('ユーザーが見つかりません');
+    const stats = user.stats;
+    const xp = stats?.xp ?? 0;
+    return {
+      xp, level: stats?.level ?? 1, levelProgress: xp % 1000, levelTarget: 1000,
+      rank: stats?.rank ?? 'BRONZE', rankPoints: stats?.rankPoints ?? 0,
+      achievements: GAME_ACHIEVEMENTS.map(item => {
+        const earned = user.achievements.find(entry => entry.achievement.key === item.key);
+        return {
+          key: item.key, name: item.name, description: item.description,
+          target: item.target, progress: Math.min(item.target, stats?.[item.metric] ?? 0),
+          xpReward: earned?.achievement.xpReward ?? item.xpReward,
+          earnedAt: earned?.earnedAt ?? null,
+        };
+      }),
+    };
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId, deletedAt: null },
@@ -190,7 +220,13 @@ export class UsersService {
       await tx.fileUpload.deleteMany({ where: { uploaderId: userId } });
       await tx.user.delete({ where: { id: userId } });
     });
-    await this.redis.del(redisKey);
+    return this.finishAccountDeletion(userId, user);
+  }
+
+  private async finishAccountDeletion(userId: string, user: {
+    email: string; displayName: string; fileUploads: { storageUrl: string | null }[];
+  }) {
+    await this.redis.del(this.accountDeletionKey(userId));
 
     const localFiles = user.fileUploads
       .map((upload) => upload.storageUrl)
@@ -297,7 +333,7 @@ export class UsersService {
       where.isOnline = false;
     }
 
-    let orderBy: any = { stats: { rankPoints: 'desc' } };
+    let orderBy: Prisma.UserOrderByWithRelationInput = { stats: { rankPoints: 'desc' } };
     if (dto.sortBy === 'WIN_RATE_DESC')
       orderBy = { stats: { winRate: 'desc' } };
     else if (dto.sortBy === 'WIN_RATE_ASC')
@@ -324,7 +360,7 @@ export class UsersService {
             },
           },
         },
-        orderBy,
+        orderBy: [orderBy, { id: 'asc' }],
         skip,
         take: limit,
       }),
@@ -351,6 +387,7 @@ export class UsersService {
 
   // ── 対戦履歴取得 ──────────────────────────────────────────
   async getGameHistory(userId: string, dto: SearchHistoryDto) {
+    if (dto.from && dto.to && dto.from > dto.to) throw new BadRequestException('from must not be after to');
     const page = Number(dto.page ?? 1);
     const limit = Math.min(Number(dto.limit ?? 20), 50);
     const skip = (page - 1) * limit;
@@ -358,6 +395,14 @@ export class UsersService {
     const where: any = {
       OR: [{ player1Id: userId }, { player2Id: userId }],
     };
+    if (dto.from || dto.to) {
+      const end = dto.to ? new Date(`${dto.to}T00:00:00.000Z`) : null;
+      end?.setUTCDate(end.getUTCDate() + 1);
+      where.createdAt = {
+        ...(dto.from ? { gte: new Date(`${dto.from}T00:00:00.000Z`) } : {}),
+        ...(end ? { lt: end } : {}),
+      };
+    }
 
     if (dto.mode && dto.mode !== 'ALL') {
       where.gameMode = dto.mode;
@@ -596,6 +641,63 @@ export class UsersService {
   }
 
   // ── [ADMIN] ロール変更 ────────────────────────────────────
+  async adminCreateUser(actorId: string, dto: AdminCreateUserDto) {
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    try {
+      return await this.withSerializableUserWrite(async tx => {
+        const actor = await tx.user.findUnique({
+          where: { id: actorId, deletedAt: null }, select: { role: true, bannedUntil: true },
+        });
+        if (!actor || actor.role !== 'ADMIN' || (actor.bannedUntil && actor.bannedUntil > new Date())) {
+          throw new ForbiddenException('管理操作の権限がありません');
+        }
+        return tx.user.create({
+          data: {
+            email: dto.email, username: dto.username, displayName: dto.displayName,
+            passwordHash, role: 'USER', stats: { create: {} }, gameSettings: { create: {} },
+          },
+          select: ADMIN_USER_SELECT,
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('メールアドレスまたはユーザー名が既に使用されています');
+      }
+      throw error;
+    }
+  }
+
+  async adminDeleteUser(actorId: string, targetId: string, confirmation: string) {
+    if (confirmation !== 'DELETE USER') throw new BadRequestException('削除確認文言が一致しません');
+    if (actorId === targetId) throw new ForbiddenException('自分自身の削除はプロフィールから行ってください');
+    const target = await this.withSerializableUserWrite(async tx => {
+      const actor = await tx.user.findUnique({
+        where: { id: actorId, deletedAt: null }, select: { role: true, bannedUntil: true },
+      });
+      if (!actor || actor.role !== 'ADMIN' || (actor.bannedUntil && actor.bannedUntil > new Date())) {
+        throw new ForbiddenException('管理操作の権限がありません');
+      }
+      const user = await tx.user.findUnique({
+        where: { id: targetId, deletedAt: null },
+        select: { role: true, email: true, displayName: true, fileUploads: { select: { storageUrl: true } } },
+      });
+      if (!user) throw new NotFoundException('ユーザーが見つかりません');
+      if (user.role === 'ADMIN') await this.requireAnotherAdmin(tx, targetId);
+      await tx.chatMessage.deleteMany({ where: { senderId: targetId } });
+      await tx.fileUpload.deleteMany({ where: { uploaderId: targetId } });
+      await tx.user.delete({ where: { id: targetId } });
+      return user;
+    });
+    return this.finishAccountDeletion(targetId, target);
+  }
+
+  async adminEditUser(actorId: string, targetId: string, dto: AdminEditUserDto) {
+    return this.updateManagedUser(actorId, targetId, {
+      ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
+      ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
+    }, true);
+  }
+
   async adminUpdateRole(actorId: string, targetId: string, role: Role) {
     return this.updateManagedUser(actorId, targetId, { role }, true);
   }
@@ -639,7 +741,7 @@ export class UsersService {
   private async updateManagedUser(
     actorId: string,
     targetId: string,
-    data: { role?: Role; bannedUntil?: Date | null; banReason?: string | null },
+    data: { role?: Role; bannedUntil?: Date | null; banReason?: string | null; displayName?: string; bio?: string },
     adminOnly = false,
   ) {
     if (actorId === targetId) {

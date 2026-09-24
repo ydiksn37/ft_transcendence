@@ -21,7 +21,7 @@ export class GameController {
       roomId: `single_${Date.now()}_${userId}`,
       player1Id: userId,
       player2Id: null,
-      winnerId: userId, // Single player essentially "wins" their run to gain XP
+      winnerId: null, // Solo runs grant participation XP, not competitive wins.
       isAiGame: false,
       player1Apm: body.apm ?? 0,
       player2Apm: 0,

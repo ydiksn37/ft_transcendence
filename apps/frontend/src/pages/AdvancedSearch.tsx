@@ -23,47 +23,56 @@ export default function AdvancedSearch() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
-  const [sortBy, setSortBy] = useState<'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC'>('WIN_RATE_DESC');
+  const [sortBy, setSortBy] = useState<'RANK_POINTS_DESC' | 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC'>('RANK_POINTS_DESC');
   const [page, setPage] = useState(1);
   const [results, setResults] = useState<UserResult[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    fetchResults();
-  }, [status, sortBy, page]); // Only auto-fetch when filters/page change. For query, we'll use a search button or debounce.
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const fetchResults = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const token = localStorage.getItem('token');
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: '10',
+          status,
+          sortBy
+        });
+        if (submittedQuery) params.append('q', submittedQuery);
 
-  const fetchResults = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '10',
-        status,
-        sortBy
-      });
-      if (query.trim()) params.append('q', query.trim());
-
-      const res = await fetch(`/api/users/search?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data.data);
-        setTotalPages(data.totalPages);
+        const res = await fetch(`/api/users/search?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal,
+        });
+        if (!res.ok) throw new Error('Search unavailable');
+        {
+          const data = await res.json();
+          if (signal.aborted) return;
+          setResults(data.data);
+          setTotalPages(data.totalPages);
+        }
+      } catch {
+        if (!signal.aborted) setError(true);
+      } finally {
+        if (!signal.aborted) setLoading(false);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    void fetchResults();
+    return () => controller.abort();
+  }, [status, sortBy, page, submittedQuery, revision]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    fetchResults();
+    setSubmittedQuery(query.trim());
+    setRevision(value => value + 1);
   };
 
   const handleUserClick = (id: string) => {
@@ -107,6 +116,7 @@ export default function AdvancedSearch() {
             </select>
 
             <select value={sortBy} onChange={e => { setSortBy(e.target.value as any); setPage(1); }} style={inputStyle}>
+              <option value="RANK_POINTS_DESC">HIGHEST RANK POINTS</option>
               <option value="WIN_RATE_DESC">HIGHEST WIN RATE</option>
               <option value="WIN_RATE_ASC">LOWEST WIN RATE</option>
               <option value="GAMES_DESC">MOST GAMES PLAYED</option>
@@ -119,7 +129,7 @@ export default function AdvancedSearch() {
         </div>
 
         <div className="arcade-panel" style={{ minHeight: '400px' }}>
-          {loading ? (
+          {error ? <p role="alert">Could not load players. <button onClick={() => setRevision(value => value + 1)}>RETRY</button></p> : loading ? (
             <div style={{ textAlign: 'center', padding: '50px', color: '#888' }}>LOADING...</div>
           ) : results.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '50px', color: '#888' }}>NO USERS FOUND</div>
@@ -141,6 +151,10 @@ export default function AdvancedSearch() {
                     </div>
                     
                     <div style={{ display: 'flex', gap: '30px', textAlign: 'right' }}>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#888' }}>{u.stats?.rank ?? 'UNRANKED'}</div>
+                        <div style={{ fontSize: '14px', color: '#00f5ff', marginTop: '5px' }}>{u.stats?.rankPoints ?? 0} RP</div>
+                      </div>
                       <div>
                         <div style={{ fontSize: '10px', color: '#888' }}>WIN RATE</div>
                         <div style={{ fontSize: '14px', color: '#f1c40f', marginTop: '5px' }}>{winRate}%</div>

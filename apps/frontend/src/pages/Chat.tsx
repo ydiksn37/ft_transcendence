@@ -41,9 +41,9 @@ export default function Chat() {
 		.then(res => res.json())
 		.then(data => {
 			setRooms(data);
-			if (!activeRoomId && data.length > 0) {
+			if (data.length > 0) {
 				const globalRoom = data.find((r: any) => r.type === 'GLOBAL') || data[0];
-				setActiveRoomId(globalRoom.id);
+				setActiveRoomId(current => current ?? globalRoom.id);
 			}
 		});
 	}, [token]);

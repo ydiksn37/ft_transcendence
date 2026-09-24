@@ -29,7 +29,7 @@ export function TrendChart({ games }: TrendChartProps) {
   const chartData = [...games].reverse().slice(-30).map((g, index) => ({
     name: `M${index + 1}`,
     apm: g.apm,
-    pps: g.pps * 10, // Scale PPS up by 10 for better visualization on the same axis as APM
+    pps: g.pps,
     result: g.result
   }));
 
@@ -38,8 +38,11 @@ export function TrendChart({ games }: TrendChartProps) {
       return (
         <div style={{ backgroundColor: '#222', border: '2px solid #444', padding: '10px', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}>
           <p style={{ color: '#fff', marginBottom: '5px' }}>Match: {label}</p>
-          <p style={{ color: '#00f5ff' }}>APM: {payload[0].value.toFixed(2)}</p>
-          <p style={{ color: '#ff00ff' }}>PPS: {(payload[1].value / 10).toFixed(2)}</p>
+          {payload.map((entry: any) => (
+            <p key={entry.dataKey} style={{ color: entry.color }}>
+              {entry.name}: {Number(entry.value).toFixed(2)}
+            </p>
+          ))}
         </div>
       );
     }
@@ -49,7 +52,7 @@ export function TrendChart({ games }: TrendChartProps) {
   return (
     <div className="arcade-panel" style={{ width: '100%', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <h2 style={{ fontSize: '14px', color: '#f1c40f', marginBottom: '20px', textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
-        PERFORMANCE TREND (APM / PPS)
+        PERFORMANCE TREND (LATEST 30 MATCHES)
       </h2>
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -59,12 +62,14 @@ export function TrendChart({ games }: TrendChartProps) {
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey="name" stroke="#888" tick={{ fontSize: 10, fill: '#888' }} />
-            <YAxis stroke="#888" tick={{ fontSize: 10, fill: '#888' }} />
+            <YAxis yAxisId="apm" stroke="#00f5ff" tick={{ fontSize: 10 }} />
+            <YAxis yAxisId="pps" orientation="right" stroke="#ff00ff" tick={{ fontSize: 10 }} />
             <Tooltip content={<CustomTooltip />} />
             <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
             <Line 
               type="monotone" 
               name="APM"
+              yAxisId="apm"
               dataKey="apm" 
               stroke="#00f5ff" 
               strokeWidth={3}
@@ -72,7 +77,8 @@ export function TrendChart({ games }: TrendChartProps) {
             />
             <Line 
               type="monotone" 
-              name="PPS (*10)"
+              name="PPS"
+              yAxisId="pps"
               dataKey="pps" 
               stroke="#ff00ff" 
               strokeWidth={3}

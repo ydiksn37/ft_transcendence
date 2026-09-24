@@ -101,6 +101,8 @@ export class GameInstance {
   private spectators: Set<string> = new Set();
   private gravityTimer: NodeJS.Timeout | null = null;
   private simulationStartTimer: NodeJS.Timeout | null = null;
+  private pendingAiStart: (() => void) | null = null;
+  private humanReady = false;
   private lockTimer: Map<string, NodeJS.Timeout> = new Map();
   private playerBags: Map<string, BagGenerator> = new Map();
   private isRunning = false;
@@ -309,15 +311,35 @@ export class GameInstance {
       }
     };
 
-    // VS AIではブラウザ側のREADY表示と同じ1秒後にシミュレーションを始める。
+    // Minimum countdown plus browser READY acknowledgement: network or tab
+    // delays must never let the AI start before the human can use controls.
     if (this.aiDifficulty) {
+      this.humanReady = false;
+      this.pendingAiStart = beginSimulation;
       this.simulationStartTimer = setTimeout(
-        beginSimulation,
+        () => {
+          this.simulationStartTimer = null;
+          if (this.humanReady) this.beginReadyAiMatch();
+        },
         AI_MATCH_COUNTDOWN_MS,
       );
     } else {
       beginSimulation();
     }
+  }
+
+  /** The browser acknowledges only after its READY/input lock has ended. */
+  confirmAiReady(socketId: string): void {
+    if (!this.isRunning || !this.aiDifficulty || !this.pendingAiStart ||
+        !this.players.has(socketId) || socketId === `ai_${this.roomId}`) return;
+    this.humanReady = true;
+    if (!this.simulationStartTimer) this.beginReadyAiMatch();
+  }
+
+  private beginReadyAiMatch(): void {
+    const begin = this.pendingAiStart;
+    this.pendingAiStart = null;
+    begin?.();
   }
 
   /** C++ は探索だけを行い、返された操作はこのTSエンジンで再生する。 */
@@ -1581,6 +1603,8 @@ export class GameInstance {
       this.emitCppPreviewStatus('stopped');
     }
     this.isRunning = false;
+    this.pendingAiStart = null;
+    this.humanReady = false;
     this.cppAgents.clear();
     this.aiAgentService?.releaseMatch(this.roomId);
     this.cppPreviewOptions = null;

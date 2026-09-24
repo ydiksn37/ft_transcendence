@@ -226,15 +226,17 @@ export class AuthService {
   async generateTwoFactorAuthSecret(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
+    if (user.twoFactorEnabled) throw new ConflictException('2FAは既に有効です。変更するには先に解除してください');
 
     const secret = authenticator.generateSecret();
     const appName = 'ft_transcendence';
     const otpauthUrl = authenticator.keyuri(user.email, appName, secret);
 
-    await this.prisma.user.update({
-      where: { id: userId },
+    const changed = await this.prisma.user.updateMany({
+      where: { id: userId, deletedAt: null, twoFactorEnabled: false, twoFactorSecret: user.twoFactorSecret },
       data: { twoFactorSecret: secret },
     });
+    if (changed.count !== 1) throw new ConflictException('2FA設定が変更されました。再読み込みしてください');
 
     return {
       secret,
@@ -254,10 +256,11 @@ export class AuthService {
 
     if (!isCodeValid) throw new UnauthorizedException('コードが無効です');
 
-    await this.prisma.user.update({
-      where: { id: userId },
+    const changed = await this.prisma.user.updateMany({
+      where: { id: userId, deletedAt: null, twoFactorSecret: user.twoFactorSecret },
       data: { twoFactorEnabled: true },
     });
+    if (changed.count !== 1) throw new ConflictException('2FA設定が変更されました');
     return { success: true };
   }
 
@@ -272,10 +275,11 @@ export class AuthService {
 
     if (!isCodeValid) throw new UnauthorizedException('コードが無効です');
 
-    await this.prisma.user.update({
-      where: { id: userId },
+    const changed = await this.prisma.user.updateMany({
+      where: { id: userId, deletedAt: null, twoFactorSecret: user.twoFactorSecret },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
     });
+    if (changed.count !== 1) throw new ConflictException('2FA設定が変更されました');
     return { success: true };
   }
 
@@ -292,7 +296,8 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.twoFactorSecret) throw new UnauthorizedException();
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret || user.deletedAt ||
+        (user.bannedUntil && user.bannedUntil > new Date())) throw new UnauthorizedException();
 
     const isCodeValid = authenticator.verify({
       token: code,

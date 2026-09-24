@@ -14,6 +14,7 @@ import { useStage } from '../hooks/useStage';
 import { calculateGhostY, checkCollision, createStage } from '../utils/gameHelpers';
 import type { Cell } from '../utils/gameHelpers';
 import { soundManager } from '../utils/soundManager';
+import { afterVisiblePaint } from '../lib/afterVisiblePaint';
 import { resetTetrominoBag, setRandomSeed, TETROMINOS } from '../utils/tetrominos';
 import { TetrisUI } from '../components/UI/TetrisUI';
 import { isAiDifficulty, ClientEvent, TETROMINO_SHAPES, type GameState } from '@transcendence/shared';
@@ -109,11 +110,11 @@ const PlayPage = () => {
        return true;
      }
      return false;
-  }, [nextPieceKeys]);
+  }, [nextPieceKeys, setMatchResult, gameModeRef, setGameOver, setDropTime]);
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction } = useConfig();
+  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction, showGhost, minoSkin } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
@@ -356,7 +357,8 @@ const PlayPage = () => {
        setActionText({ text: actionName, key: actionKeyRef.current });
        actionTimeoutRef.current = setTimeout(() => setActionText(null), 2000);
     }
-  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult]);
+  }, [lockEvent, setScore, setLines, level, setFinalTime, setGameOver, setDropTime, setPiecesPlaced, setOpponentStage, setMatchResult,
+    initialLevel, setPendingGarbage, stageRef, startTimeRef, setLevel, pendingGarbageRef, player, socketRef, setStage, gameModeRef, setAttackLines]);
 
   const lastProcessedServerEventIdRef = useRef(-1);
 
@@ -425,7 +427,7 @@ const PlayPage = () => {
         }).catch(err => console.error('Failed to save sprint record:', err));
       }
     }
-  }, [gameOver, finalTime, token, piecesPlaced]);
+  }, [gameOver, finalTime, token, piecesPlaced, gameModeRef]);
 
   // General Game Result Submission Effect
   useEffect(() => {
@@ -455,7 +457,7 @@ const PlayPage = () => {
         }).catch(err => console.error('Failed to save game result:', err));
       }
     }
-  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score]);
+  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score, gameModeRef]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -584,15 +586,7 @@ const PlayPage = () => {
       }
       return prev;
     });
-  }, [stageRef, setPlayer]);
-
-  // Automatically apply soft drop if softDrop key is held and the piece moves/rotates/spawns
-  useEffect(() => {
-    if (serverMatch || gameOver || !dropTime) return;
-    if (heldKeys.current.has(keyConfig.softDrop)) {
-      softDrop();
-    }
-  }, [serverMatch, player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop]);
+  }, [stageRef, setPlayer, tuningRef, setScore]);
 
   /** Hard drop: instantly land the piece at ghost position (+2 pts/row) */
   const hardDrop = useCallback(() => {
@@ -612,15 +606,32 @@ const PlayPage = () => {
         lastAction: dist > 0 ? 'drop' : prev.lastAction,
       };
     });
-  }, [stageRef, setPlayer, clearLockTimer]);
+  }, [stageRef, setPlayer, clearLockTimer, setScore]);
 
 
 
   // ── Game control ────────────────────────────────────────────────────────
-  const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1') => {
+  const readyCallbackRef = useRef<(() => void) | undefined>(undefined);
+  const cancelReadyPaintRef = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => {
+    // Effects run after the GO/input state is committed. A timer alone can
+    // notify the server while the browser is still displaying READY.
+    if (countdown === 'READY' || !dropTime || gameOver || !readyCallbackRef.current) return;
+    cancelReadyPaintRef.current = afterVisiblePaint(() => {
+      const callback = readyCallbackRef.current;
+      readyCallbackRef.current = undefined;
+      callback?.();
+    });
+    return () => cancelReadyPaintRef.current?.();
+  }, [countdown, dropTime, gameOver]);
+
+  const startGame = useCallback((mode?: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1', onReady?: () => void) => {
+    cancelReadyPaintRef.current?.();
+    readyCallbackRef.current = onReady;
     countdownTimeoutsRef.current.forEach(clearTimeout);
     countdownTimeoutsRef.current = [];
     setCountdown('READY');
+    countdownRef.current = 'READY';
 
     const nextMode = mode || gameModeRef.current;
     if (nextMode !== gameModeRef.current) {
@@ -672,6 +683,7 @@ const PlayPage = () => {
 
     const t1 = setTimeout(() => {
       setCountdown('GO!');
+      countdownRef.current = 'GO!';
       const now = Date.now();
       setStartTime(now);
       startTimeRef.current = now;
@@ -683,7 +695,10 @@ const PlayPage = () => {
     }, 2000);
 
     countdownTimeoutsRef.current = [t1, t2];
-  }, [setStage, resetPlayer, resetHold, stageRef]);
+  }, [setStage, resetPlayer, resetHold, stageRef, setScore, setGameMode, setMatchResult, setPendingGarbage,
+    initialLevel, setDropTime, setGameOver, setStartTime, setLines, setPiecesPlaced, setIsWaiting, setCountdown,
+    setFinalTime, startTimeRef, setElapsedTime, setLevel, setAppState, countdownRef, pendingGarbageRef,
+    setOpponentStage, setOpponentScore, countdownTimeoutsRef, gameModeRef, setAttackLines]);
 
   // Handle Game Over sound and stop BGM
   useEffect(() => {
@@ -716,6 +731,12 @@ const PlayPage = () => {
   });
 
   const quitGame = useCallback((leaveRoomEntirely: boolean = false) => {
+    cancelReadyPaintRef.current?.();
+    readyCallbackRef.current = undefined;
+    countdownTimeoutsRef.current.forEach(clearTimeout);
+    countdownTimeoutsRef.current = [];
+    countdownRef.current = null;
+    setCountdown(null);
     if (mode === 'CUSTOM_ROOMS' && socketRef.current) {
       if (leaveRoomEntirely) {
         // カスタムルームの場合: 部屋一覧に戻り、ルーム自体からも完全に離脱する
@@ -750,7 +771,8 @@ const PlayPage = () => {
       navigate(`/lobby/${mode}`);
     }
     setGameOver(true);
-  }, [mode, navigate, setAppState, socketRef, setSocket, gameOver, appState]);
+  }, [mode, navigate, setAppState, socketRef, setSocket, gameOver, appState,
+    setCountdown, setGameOver, setDropTime, countdownTimeoutsRef, countdownRef]);
 
   initializeRouteRef.current = () => {
     if (!mode) return;
@@ -770,10 +792,14 @@ const PlayPage = () => {
 
     // StrictModeの setup -> cleanup -> setup でも古い接続を残さない。
     return () => {
+      cancelReadyPaintRef.current?.();
+      readyCallbackRef.current = undefined;
+      countdownTimeoutsRef.current.forEach(clearTimeout);
+      countdownTimeoutsRef.current = [];
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [mode, location.search, socketRef]);
+  }, [mode, location.search, socketRef, countdownTimeoutsRef]);
 
   // タブが再アクティブになった時の状態リフレッシュ
   useEffect(() => {
@@ -818,6 +844,12 @@ const PlayPage = () => {
     socketRef, setSocket, setIsWaiting, setDropTime, quitGame
   });
 
+  // Reapply held soft drop after movement, rotation or a new piece.
+  useEffect(() => {
+    if (serverMatch || gameOver || !dropTime) return;
+    if (heldKeys.current.has(keyConfig.softDrop)) softDrop();
+  }, [serverMatch, player.pos.x, player.rotationIndex, player.tetromino, gameOver, dropTime, softDrop, keyConfig.softDrop, heldKeys]);
+
   useTouchControls({
     stageRef, tuningRef, gameOver, dropTime, appStateRef, countdownRef,
     ...controls,
@@ -858,6 +890,8 @@ const PlayPage = () => {
   }
   return (
     <TetrisUI
+      showGhost={showGhost}
+      minoSkin={minoSkin}
       stage={shownStage}
       player={shownPlayer}
       ghostYOverride={serverMatch ? serverState?.ghostY : undefined}

@@ -8,6 +8,7 @@ import { DataExportButtons } from "@/components/dashboard/DataExportButtons"
 import type { UserStats, GameRecordView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
 import { useConfig } from '../hooks/useConfig'
+import { startVisibleRefresh } from '../lib/visibleRefresh'
 import './Dashboard.css'
 import '../pages/JoinPage.css'
 import './LobbyPage.css' // Reuse back-btn
@@ -23,6 +24,9 @@ export default function Dashboard() {
 	const [historyMode, setHistoryMode] = useState<'ALL' | 'VERSUS' | 'AI' | 'TOURNAMENT' | 'LINES_40' | 'MARATHON'>('ALL');
 	const [historyResult, setHistoryResult] = useState<'ALL' | 'WIN' | 'LOSE'>('ALL');
 	const [loading, setLoading] = useState(true);
+	const [fromDate, setFromDate] = useState('');
+	const [toDate, setToDate] = useState('');
+	const [error, setError] = useState(false);
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
 
 	useEffect(() => {
@@ -33,7 +37,7 @@ export default function Dashboard() {
 		};
 		window.addEventListener('keydown', handleKeyDown);
 		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [navigate, keyConfig.quitToMenu]);
+	}, [navigate, keyConfig.quitToMenu, mode]);
 
 	useEffect(() => {
 		const pieces = 'IJLOSTZ';
@@ -48,25 +52,33 @@ export default function Dashboard() {
 			return;
 		}
 
+		const controller = new AbortController();
+		const signal = controller.signal;
 		async function fetchData() {
+			setError(false);
 			try {
 				const headers = { Authorization: `Bearer ${token}` };
 
 				// Fetch current user to get ID for calculating game results
-				const meRes = await fetch('/api/users/me', { headers });
+				const meRes = await fetch('/api/users/me', { headers, signal });
 				if (!meRes.ok) throw new Error('Failed to fetch user');
 				const me = await meRes.json();
+				if (signal.aborted) return;
 				setUsername(me.username);
 
 				// Fetch stats
-				const statsRes = await fetch('/api/users/me/stats', { headers });
+				const statsRes = await fetch('/api/users/me/stats', { headers, signal });
 				if (!statsRes.ok) throw new Error('Failed to fetch stats');
 				const statsData = await statsRes.json();
 
 				// Fetch history
-				const historyRes = await fetch(`/api/users/me/history?mode=${historyMode}&result=${historyResult}&limit=50`, { headers });
+				const params = new URLSearchParams({ mode: historyMode, result: historyResult, limit: '50' });
+				if (fromDate) params.set('from', fromDate);
+				if (toDate) params.set('to', toDate);
+				const historyRes = await fetch(`/api/users/me/history?${params}`, { headers, signal });
 				if (!historyRes.ok) throw new Error('Failed to fetch history');
 				const historyData = await historyRes.json();
+				if (signal.aborted) return;
 
 				// Map history to GameRecordView
 				const mappedGames: GameRecordView[] = historyData.data.map((g: any) => {
@@ -92,17 +104,19 @@ export default function Dashboard() {
 				});
 				setGames(mappedGames);
 			} catch (error) {
+				if (signal.aborted) return;
 				console.error(error);
+				setError(true);
+				setGames([]);
 				// Optionally handle error, e.g. navigate to login if unauthorized
 			} finally {
-				setTimeout(() => {
-					setLoading(false);
-				}, location.state?.skipLoading ? 0 : 1000);
+				if (!signal.aborted) setLoading(false);
 			}
 		}
 
-		fetchData();
-	}, [navigate, historyMode, historyResult]);
+		const stopRefresh = startVisibleRefresh(fetchData);
+		return () => { stopRefresh(); controller.abort(); };
+	}, [navigate, historyMode, historyResult, fromDate, toDate]);
 
 	if (loading) {
 		return (
@@ -151,6 +165,7 @@ export default function Dashboard() {
 
 			<div className="dashboard-content">
 				<h1 className="dashboard-title">DASHBOARD</h1>
+				<p>Updates every 15 seconds while this tab is visible.</p>
 
 				<div className="dashboard-panels">
 					{stats && (
@@ -200,6 +215,12 @@ export default function Dashboard() {
 					</div>
 
 					{/* History Filters */}
+					<p>History and trends: latest 50 matching games. Dates use UTC. Summary cards show lifetime statistics.</p>
+					<div style={{ display: 'flex', gap: 16 }}>
+						<label>FROM <input type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} /></label>
+						<label>TO <input type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} /></label>
+					</div>
+					{error && <p role="alert">Could not load dashboard data. Check the date range and try again.</p>}
 					<div style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'flex-start', marginBottom: '10px' }}>
 						<select 
 							value={historyMode} 

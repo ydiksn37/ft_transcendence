@@ -1,27 +1,29 @@
 import { Routes, Route, Navigate } from "react-router-dom"
+import { lazy, Suspense } from 'react'
 
 
-import Login from "@/pages/Login"
-import Dashboard from "@/pages/Dashboard"
-import Chat from "@/pages/Chat"
-import Friends from "@/pages/Friends"
-import AdvancedSearch from "@/pages/AdvancedSearch"
-import Profile from "@/pages/Profile"
-import PublicProfile from "@/pages/PublicProfile"
-import Settings from "@/pages/Settings"
-import AdminPanel from "@/pages/AdminPanel"
+const Login = lazy(() => import('@/pages/Login'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Chat = lazy(() => import('@/pages/Chat'))
+const Friends = lazy(() => import('@/pages/Friends'))
+const AdvancedSearch = lazy(() => import('@/pages/AdvancedSearch'))
+const Profile = lazy(() => import('@/pages/Profile'))
+const PublicProfile = lazy(() => import('@/pages/PublicProfile'))
+const Settings = lazy(() => import('@/pages/Settings'))
+const AdminPanel = lazy(() => import('@/pages/AdminPanel'))
 import JoinPage from "@/pages/JoinPage"
-import MenuPage from "@/pages/MenuPage"
-import LobbyPage from "@/pages/LobbyPage"
-import PlayPage from "@/pages/PlayPage"
-import AiPreviewPage from "@/pages/AiPreviewPage"
-import PrivacyPolicy from "@/pages/PrivacyPolicy"
-import TermsOfService from "@/pages/TermsOfService"
+const MenuPage = lazy(() => import('@/pages/MenuPage'))
+const LobbyPage = lazy(() => import('@/pages/LobbyPage'))
+const PlayPage = lazy(() => import('@/pages/PlayPage'))
+const AiPreviewPage = lazy(() => import('@/pages/AiPreviewPage'))
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'))
 
-import { OAuthCallback } from "@/pages/OAuthCallback"
+const OAuthCallback = lazy(() => import('@/pages/OAuthCallback').then(module => ({ default: module.OAuthCallback })))
 
 export default function App() {
   return (
+    <Suspense fallback={<div role="status" aria-live="polite" style={{ padding: 32 }}>LOADING…</div>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
@@ -49,5 +51,6 @@ export default function App() {
       {/* どこにも適さないURLはTOPへ */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   )
 }

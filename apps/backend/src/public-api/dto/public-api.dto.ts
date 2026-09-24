@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
+import { UpdateGameSettingsDto } from '../../users/dto/user.dto';
 import { GameMode, Rank, TournamentStatus } from '@prisma/client';
 import {
   IsDateString,
@@ -16,14 +17,14 @@ import {
 } from 'class-validator';
 
 export class PaginationQueryDto {
-  @ApiPropertyOptional({ default: 1 })
+  @ApiPropertyOptional({ default: 1, minimum: 1, type: 'integer' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page = 1;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100, type: 'integer' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -87,3 +88,6 @@ export class CreateApiKeyDto {
   @IsDateString({ strict: true })
   expiresAt?: string;
 }
+
+// Only persisted preferences are exposed. No user ID, role, score or game rules.
+export class PublicGameSettingsDto extends OmitType(UpdateGameSettingsDto, ['touchFlick'] as const) {}

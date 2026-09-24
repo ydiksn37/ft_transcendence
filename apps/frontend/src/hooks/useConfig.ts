@@ -1,11 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 
+const DEFAULT_KEYS = {
+  left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
+  rotateCW: 'Slash', rotateCCW: 'Comma', rotate180: 'Period',
+  hold: 'ShiftLeft', restart: 'KeyQ', quitToMenu: 'Escape',
+};
+
 export const useConfig = () => {
+  const [minoSkin, setMinoSkin] = useState<'NEON' | 'RETRO' | 'MINIMAL'>(() => {
+    const saved = localStorage.getItem('tetrisMinoSkin');
+    return saved === 'RETRO' || saved === 'MINIMAL' ? saved : 'NEON';
+  });
+  const [showGhost, setShowGhost] = useState(() => localStorage.getItem('tetrisShowGhost') !== 'false');
   const [tuning, setTuning] = useState(() => {
     const defaultTuning = { das: 133, arr: 33, dcd: 1, sdf: 6, touchFlick: true };
     const saved = localStorage.getItem('tetrisTuning');
     if (saved) {
-      try { return { ...defaultTuning, ...JSON.parse(saved) }; } catch (e) {}
+      try { return { ...defaultTuning, ...JSON.parse(saved) }; } catch { /* Invalid saved data: use defaults. */ }
     }
     return defaultTuning;
   });
@@ -14,21 +25,17 @@ export const useConfig = () => {
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('tetrisVolume');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch { /* Invalid saved data: use defaults. */ }
     }
     return { se: 0.5, bgm: 0.5 };
   });
   const volumeRef = useRef(volume);
 
   const [keyConfig, setKeyConfig] = useState(() => {
-    const defaultConf = {
-      left: 'KeyA', right: 'KeyD', softDrop: 'KeyS', hardDrop: 'KeyW',
-      rotateCW: 'Slash', rotateCCW: 'Comma', rotate180: 'Period',
-      hold: 'ShiftLeft', restart: 'KeyQ', quitToMenu: 'Escape'
-    };
+    const defaultConf = DEFAULT_KEYS;
     const saved = localStorage.getItem('tetrisKeyConfig');
     if (saved) {
-      try { return { ...defaultConf, ...JSON.parse(saved) }; } catch (e) {}
+      try { return { ...defaultConf, ...JSON.parse(saved) }; } catch { /* Invalid saved data: use defaults. */ }
     }
     return defaultConf;
   });
@@ -37,9 +44,17 @@ export const useConfig = () => {
   const [listeningAction, setListeningAction] = useState<string | null>(null);
   const listeningActionRef = useRef(listeningAction);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const isFirstRenderAfterInit = useRef(true);
 
   // Fetch initial settings from DB
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    setIsInitialized(false);
+    isFirstRenderAfterInit.current = true;
+    setSettingsError(null);
     const fetchSettings = async () => {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -52,9 +67,13 @@ export const useConfig = () => {
         const localTuning = localStorage.getItem('tetrisTuning');
         const localVolume = localStorage.getItem('tetrisVolume');
         const localKeyConfig = localStorage.getItem('tetrisKeyConfig');
+        const localShowGhost = localStorage.getItem('tetrisShowGhost');
+        const localMinoSkin = localStorage.getItem('tetrisMinoSkin');
         
-        if (localTuning || localVolume || localKeyConfig) {
+        if (localTuning || localVolume || localKeyConfig || localShowGhost !== null || localMinoSkin !== null) {
           const payload: any = {};
+          if (localShowGhost !== null) payload.showGhost = localShowGhost !== 'false';
+          if (localMinoSkin !== null) payload.minoSkin = ['NEON', 'RETRO', 'MINIMAL'].includes(localMinoSkin) ? localMinoSkin : 'NEON';
           if (localTuning) {
             payload.das = tuningRef.current.das;
             payload.arr = tuningRef.current.arr;
@@ -72,7 +91,8 @@ export const useConfig = () => {
           }
 
           // Push guest settings to the DB
-          await fetch('/api/users/me/settings', {
+          const migration = await fetch('/api/users/me/settings', {
+            signal,
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -80,36 +100,49 @@ export const useConfig = () => {
             },
             body: JSON.stringify(payload)
           });
+          if (!migration.ok) throw new Error('Failed to migrate local settings');
+          if (signal.aborted) return;
 
           // Cleanup localStorage
           localStorage.removeItem('tetrisTuning');
           localStorage.removeItem('tetrisVolume');
           localStorage.removeItem('tetrisKeyConfig');
+          localStorage.removeItem('tetrisShowGhost');
+          localStorage.removeItem('tetrisMinoSkin');
         }
         // ---------------------------------
 
         const res = await fetch('/api/users/me', {
+          signal,
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (res.ok) {
+        if (!res.ok) throw new Error('Failed to load settings');
+        {
           const user = await res.json();
+          if (signal.aborted) return;
           if (user.gameSettings) {
             const gs = user.gameSettings;
-            if (gs.keyBindings) setKeyConfig(gs.keyBindings);
+            setShowGhost(gs.showGhost ?? true);
+            setMinoSkin(gs.minoSkin === 'RETRO' || gs.minoSkin === 'MINIMAL' ? gs.minoSkin : 'NEON');
+            setKeyConfig({ ...DEFAULT_KEYS, ...(gs.keyBindings ?? {}) });
             setTuning({ das: gs.das, arr: gs.arr, dcd: gs.dcd, sdf: gs.sdf, touchFlick: gs.touchFlick ?? true });
             setVolume({ se: gs.sfxEnabled ? gs.volume / 100 : 0, bgm: gs.musicEnabled ? gs.volume / 100 : 0 });
           }
         }
-      } catch (err) {
-        console.error("Failed to load settings from DB", err);
-      } finally {
         setIsInitialized(true);
+      } catch {
+        if (!signal.aborted) setSettingsError('設定を取得できません。DBへの自動保存を停止しています。再読み込みしてください。');
       }
     };
     fetchSettings();
-  }, []);
+    return () => controller.abort();
+  }, [loadAttempt]);
 
-  const isFirstRenderAfterInit = useRef(true);
+  useEffect(() => {
+    tuningRef.current = tuning;
+    volumeRef.current = volume;
+    keyConfigRef.current = keyConfig;
+  }, [tuning, volume, keyConfig]);
 
   // Save changes
   useEffect(() => {
@@ -127,6 +160,8 @@ export const useConfig = () => {
     const token = localStorage.getItem('token');
 
     if (!token) {
+      localStorage.setItem('tetrisShowGhost', String(showGhost));
+      localStorage.setItem('tetrisMinoSkin', minoSkin);
       localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
       localStorage.setItem('tetrisVolume', JSON.stringify(volume));
       localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
@@ -137,7 +172,7 @@ export const useConfig = () => {
     keyConfigRef.current = keyConfig;
 
     const timeoutId = setTimeout(async () => {
-      if (!token) return;
+      if (!token || localStorage.getItem('token') !== token) return;
       try {
         const res = await fetch('/api/users/me/settings', {
           method: 'PATCH',
@@ -146,6 +181,8 @@ export const useConfig = () => {
             Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
+            showGhost,
+            minoSkin,
             das: tuning.das,
             arr: tuning.arr,
             dcd: tuning.dcd,
@@ -161,15 +198,15 @@ export const useConfig = () => {
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           console.error("Save config failed:", errData);
-          alert(`設定の保存に失敗しました: ${errData.message || res.status}`);
-        }
-      } catch (err) {
-        console.error("Failed to save settings to DB", err);
+          setSettingsError(`設定の保存に失敗しました: ${errData.message || res.status}`);
+        } else setSettingsError(null);
+      } catch {
+        setSettingsError('設定を保存できません。通信を確認してください。');
       }
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [tuning, volume, keyConfig, isInitialized]);
+  }, [tuning, volume, keyConfig, showGhost, minoSkin, isInitialized]);
 
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
 
@@ -188,6 +225,9 @@ export const useConfig = () => {
   }, [listeningAction]);
 
   return {
+    settingsError, reloadSettings: () => setLoadAttempt(value => value + 1),
+    showGhost, setShowGhost,
+    minoSkin, setMinoSkin,
     tuning, setTuning, tuningRef,
     keyConfig, setKeyConfig, keyConfigRef,
     listeningAction, setListeningAction, listeningActionRef,

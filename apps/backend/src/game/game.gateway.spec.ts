@@ -49,6 +49,19 @@ describe('GameGateway', () => {
     expect(gateway).toBeDefined();
   });
 
+  it('accepts AI READY only for the socket current room', () => {
+    const room = { confirmAiReady: jest.fn() };
+    (gateway as any).rooms.set('current', room);
+    (gateway as any).clientRoom.set('human', 'current');
+    gateway.handleAiReady({ id: 'human' } as any, { roomId: 'old' });
+    gateway.handleAiReady({ id: 'spectator' } as any, { roomId: 'current' });
+    gateway.handleAiReady({ id: 'human' } as any, undefined as any);
+    expect(room.confirmAiReady).not.toHaveBeenCalled();
+    gateway.handleAiReady({ id: 'human' } as any, { roomId: 'current' });
+    expect(room.confirmAiReady).toHaveBeenCalledTimes(1);
+    expect(room.confirmAiReady).toHaveBeenCalledWith('human');
+  });
+
   it('acknowledges an intentional forfeit after ending the match', async () => {
     const room = {
       isAiMatch: false,

@@ -34,7 +34,7 @@ export const useKeyboardControls = ({
   player, stageRef, tuningRef, keyConfigRef, gameOver, dropTime, appStateRef,
   countdownRef, listeningActionRef, setKeyConfig, setListeningAction,
   movePlayerHorizontal, softDrop, hardDrop, playerRotate, playerHold, startGame,
-  socketRef, setSocket, setIsWaiting, setDropTime, quitGame
+  setIsWaiting, setDropTime, quitGame
 }: UseKeyboardControlsProps) => {
   const heldKeys = useRef<Set<string>>(new Set());
   const horizKeys = useRef<string[]>([]);
@@ -249,7 +249,7 @@ export const useKeyboardControls = ({
           break;
       }
     },
-    [gameOver, dropTime, softDrop, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, socketRef, setSocket, setIsWaiting, setDropTime, quitGame, countdownRef, clearSoftDrop]
+    [gameOver, dropTime, hardDrop, playerRotate, stageRef, playerHold, startDASARR, startGame, keyConfigRef, listeningActionRef, setKeyConfig, setListeningAction, appStateRef, setIsWaiting, setDropTime, quitGame, countdownRef, clearSoftDrop]
   );
 
   const handleKeyUp = useCallback(

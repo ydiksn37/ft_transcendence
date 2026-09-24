@@ -9,11 +9,18 @@ import { useNavigate } from 'react-router-dom';
 
 import campuses from "../../assets/images/campuses.json"
 
-import { colorMap } from "../Cell"
+import { colorMap } from "../../lib/minoColors"
 import { soundManager } from '../../utils/soundManager';
 import './TetrisUI.css';
 
+const backgroundModules = import.meta.glob<string>(
+  '../../assets/images/tetrisbg_*.png',
+  { import: 'default' },
+);
+
 type TetrisUIProps = {
+  showGhost?: boolean;
+  minoSkin?: 'NEON' | 'RETRO' | 'MINIMAL';
   stage: Cell[][];
   player: Player;
   gameOver: boolean;
@@ -62,7 +69,7 @@ type TetrisUIProps = {
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
-  stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo,
+  stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo, showGhost = true, minoSkin,
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText, combo,
   lockEvent, serverPiecesPlaced,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
@@ -221,18 +228,19 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     } as const)[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
   })();
 
-  const modules = import.meta.glob<string>(
-    "../../assets/images/tetrisbg_*.png",
-    { import: "default" }
-  );
-
   const [ bg, setBg ] = useState<{ image: string; campus: typeof campuses[0]} | null>(null);
   useEffect(() => {
     const picked = campuses[Math.floor(Math.random() * campuses.length)];
-    const loader = modules["../../assets/images/" + picked.file];
+    const loader = backgroundModules["../../assets/images/" + picked.file];
     if (!loader)
         return ;
-    loader().then((image) => {setBg({image, campus: picked})});
+    let cancelled = false;
+    void loader().then((image) => {
+      if (!cancelled) setBg({image, campus: picked});
+    }).catch(() => {
+      // Keep the base background if an optional image cannot be loaded.
+    });
+    return () => { cancelled = true; };
   }, [])
 
   if (gameMode === 'ONLINE_1V1' && connectionError) {
@@ -511,6 +519,8 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   }}
                 >
                   <GameBoard 
+                    showGhost={showGhost}
+                    minoSkin={minoSkin}
                     stage={stage} 
                     player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
                     ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}

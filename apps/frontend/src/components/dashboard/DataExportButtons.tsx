@@ -2,6 +2,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { UserStats, GameRecordView } from '../../lib/types';
+import { HISTORY_COLUMNS, historyCsv, historyRows } from '../../lib/historyExport';
 
 interface DataExportButtonsProps {
   stats: UserStats;
@@ -17,21 +18,7 @@ export function DataExportButtons({ stats, games, username }: DataExportButtonsP
       return;
     }
 
-    // CSV Header
-    let csvContent = "Date,Mode,Result,APM,PPS,Lines Cleared\n";
-
-    // CSV Rows
-    games.forEach((game) => {
-      const row = [
-        game.date,
-        game.mode,
-        game.result || 'DRAW',
-        game.apm,
-        game.pps,
-        game.lines
-      ].join(",");
-      csvContent += row + "\n";
-    });
+    const csvContent = historyCsv(games);
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -41,6 +28,7 @@ export function DataExportButtons({ stats, games, username }: DataExportButtonsP
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleExportPDF = () => {
@@ -59,7 +47,7 @@ export function DataExportButtons({ stats, games, username }: DataExportButtonsP
 
     // Stats Summary
     doc.setFontSize(14);
-    doc.text("Overall Statistics", 14, 55);
+    doc.text("Overall Statistics (lifetime)", 14, 55);
     
     doc.setFontSize(10);
     doc.text(`Total Games: ${stats.totalGames}`, 14, 65);
@@ -70,21 +58,14 @@ export function DataExportButtons({ stats, games, username }: DataExportButtonsP
 
     // Match History Table
     doc.setFontSize(14);
-    doc.text("Recent Match History", 14, 95);
+    doc.text(`Filtered history (${games.length} loaded games, dates UTC)`, 14, 95);
 
     if (games && games.length > 0) {
-      const tableData = games.map(g => [
-        g.date,
-        g.mode,
-        g.result || 'DRAW',
-        g.apm.toFixed(2),
-        g.pps.toFixed(2),
-        g.lines.toString()
-      ]);
+      const tableData = historyRows(games);
 
       autoTable(doc, {
         startY: 100,
-        head: [['Date', 'Mode', 'Result', 'APM', 'PPS', 'Lines']],
+        head: [HISTORY_COLUMNS],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [52, 152, 219] },

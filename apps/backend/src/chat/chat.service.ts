@@ -43,9 +43,9 @@ export class ChatService implements OnModuleInit {
     });
 
     const room = existingRooms.find(
-      (r: any) =>
-        r.memberships.some((m: any) => m.userId === userId1) &&
-        r.memberships.some((m: any) => m.userId === userId2),
+      (r) =>
+        r.memberships.some((m) => m.userId === userId1) &&
+        r.memberships.some((m) => m.userId === userId2),
     );
 
     if (room) return room;

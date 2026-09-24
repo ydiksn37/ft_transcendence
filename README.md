@@ -70,11 +70,15 @@ We chose React + Vite for its rapid development cycle and rich ecosystem, which 
 ## Database Schema
 The database uses PostgreSQL and is managed via Prisma. The core entities and their relationships include:
 - **User:** Stores credentials, profile data, and game settings.
-- **GameRecord:** Stores match outcomes, APM, PPS, and line clears. Relates to Player 1 and Player 2 (Users).
+- **GameResult:** Stores match outcomes, APM, PPS, and line clears. Relates to Player 1 and Player 2 (Users).
 - **Tournament:** Manages tournament instances, state (registration, in-progress, completed).
-- **Match:** Individual matches within a tournament, relating back to GameRecord and Tournament.
+- **TournamentMatch:** Individual matches within a tournament, relating back to GameResult and Tournament.
 - **Friendship / Block:** Self-referential relations on the User model for social features.
-*(Refer to `ER.md` for the detailed Entity-Relationship diagram)*
+See the [schema-synchronized ER diagram](ER.md) for all 19 Prisma models,
+12 enums, field constraints, and foreign-key relationships. Verify it with
+`node tools/schema-doc.cjs --check`; regenerate its Markdown with
+`node tools/schema-doc.cjs` after changing the schema. This checks documentation,
+not whether migrations have been applied to a running database.
 
 ## Team Information
 - **sonakamu - Game Engine & Frontend Logic (Player 1)**: Responsible for PixiJS rendering, game state synchronization, local input handling.
@@ -144,15 +148,85 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 | Ban / unban USER or GUEST | Yes | Yes | No |
 | Ban / unban ADMIN or MODERATOR | Yes | No | No |
 | Change own role or own ban state | No | No | No |
+| Create a USER account | Yes | No | No |
+| Edit another user's display name / bio | Yes | No | No |
+| Permanently delete another user (explicit confirmation) | Yes | No | No |
 
 Mutations recheck the actor's current database role and ban/deletion state.
 Authorization and writes run in a serializable transaction; serialization
 conflicts retry up to three attempts, then return HTTP 409. The last usable
 (not deleted or currently banned) administrator cannot be demoted, banned,
 or deleted through the account-deletion flow. Promote another administrator
-before deleting that account. User management create/edit/delete endpoints
-and persistent administrative audit logs are not yet implemented; this table
-describes the existing role/BAN endpoints, not a completed advanced-permissions module.
+before deleting that account. Creation uses `POST /api/admin/users`, profile editing
+uses `PATCH /api/admin/users/:id`, and permanent deletion uses
+`DELETE /api/admin/users/:id` with `{"confirmation":"DELETE USER"}`.
+Deletion removes personal data and anonymizes retained match history; it cannot
+be undone. Persistent administrative audit logs and real-database/browser CRUD
+verification remain outstanding, so the advanced-permissions module is not yet complete.
+
+### Public API usage
+
+Create an API key through authenticated `POST /api/keys` (JWT bearer token).
+The returned 64-character key is shown only once. Send it in the `X-API-Key`
+header for every `/api/public` request. `DELETE /api/keys/:id` revokes your own
+key; expired/revoked keys and keys owned by deleted or currently banned users
+are rejected. Each key has a fixed one-hour quota shared across these routes.
+
+| Method | Path (after `/api/public`) | Purpose |
+| --- | --- | --- |
+| GET | `/leaderboard` | Paginated rankings |
+| GET | `/users/:username` | Public profile |
+| GET | `/users/:username/stats` | Player statistics |
+| GET | `/users/:username/history` | Paginated match history |
+| GET | `/tournaments` | Tournament list |
+| GET | `/me/settings` | Read the key owner's saved preferences |
+| POST | `/me/settings` | Create preferences (201; existing resource returns 409) |
+| PUT | `/me/settings` | Replace existing preferences (200; absent resource returns 404) |
+| DELETE | `/me/settings` | Remove preferences only (204, including already absent) |
+
+Example POST/PUT JSON: `{"showGhost":true,"arr":33,"das":170,"sdf":6,"volume":50}`.
+PUT is replacement, not PATCH: omitted/null fields reset to schema defaults,
+and omitted key bindings reset to null. These are personal preferences, not
+match rules or score submission. Ownership is derived exclusively from the
+authenticated key; `userId`, `role`, `score` and unknown fields are rejected.
+After deleting preferences, use POST to recreate them (normal settings save
+also recreates them). Newly registered accounts generally already have settings,
+so use PUT for their first API update.
+
+Malformed requests return 400; invalid/missing keys return 401; quota excess
+returns 429 with `retryAfter` in seconds in the response JSON. Swagger exposes
+the API-key scheme, validated input schemas, preference examples and status
+descriptions. HTTP contract tests exercise the actual Nest routing, guards,
+validation and services with isolated database/Redis fakes; they do not prove
+real PostgreSQL/Redis integration. Tests bind only to `127.0.0.1` on a temporary
+port and require permission to open a local listener.
+
+### Progression rules
+
+For newly saved results, a competitive win grants 50 XP; other results grant
+20 XP. Level is `floor(XP / 1000) + 1`. Solo runs and draws count toward games
+played, but not wins/losses, and do not reset a winning streak. Win rate is
+`wins / (wins + losses)` (0 when no decisive games exist).
+
+Only matches between two distinct registered human users change rank points:
+win +25, loss -15, draw 0, with a floor of 0. AI, guest and solo matches do not
+change rank points. Ranks are BRONZE (0–499), SILVER (500–999), GOLD (1000–1499),
+PLATINUM (1500–1999), DIAMOND (2000–2499), MASTER (2500+).
+Results and statistics are saved in one transaction. Existing historical
+statistics are not automatically recalculated; old records cannot reliably
+distinguish a guest/AI victory from a draw using winner user ID alone.
+
+Game achievements are awarded once per account on result saving: first victory
+(100 XP), 10 victories (200 XP), 100 games (200 XP), 10 cumulative T-spins
+(150 XP), and 100 cumulative Tetrises (300 XP). Multiple achievements can unlock
+in the same game; their XP is added before calculating the new level. Definitions
+are created on demand, so reseeding or deleting existing data is not required.
+Solo/AI games contribute to play and technique totals; solo runs do not count as
+victories. Historical threshold eligibility is checked at the next saved game.
+
+Daily analytics group newly saved games by completion date in UTC. APM and PPS
+are arithmetic means across that day's games (not time-weighted); cleared lines
+and playtime are summed. Existing incomplete daily aggregates are not backfilled.
 
 ## Individual Contributions
 - **sonakamu**: 

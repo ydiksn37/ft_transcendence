@@ -21,8 +21,11 @@ export const useStage = (
   const [lockEvent, setLockEvent] = useState<LockEvent | null>(null);
   const lockEventIdRef = useRef(0);
   const stageRef = useRef<Cell[][]>(stage);
+  const lastLockedSpawnRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // Effect replay or changing callbacks must not lock/draw Next twice.
+    if (player.collided && lastLockedSpawnRef.current === player.spawnCount) return;
     const sweepRows = (newStage: Cell[][]): { swept: Cell[][]; cleared: number } => {
       let cleared = 0;
       const swept = newStage.reduce((acc, row) => {
@@ -46,6 +49,7 @@ export const useStage = (
 
     // 2. If collided, bake the active piece into the stage
     if (player.collided) {
+      lastLockedSpawnRef.current = player.spawnCount;
       let isLockOut = true;
       player.tetromino.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -128,7 +132,7 @@ export const useStage = (
       stageRef.current = newStage;
       setStage(newStage);
     }
-  }, [player, resetPlayer, checkGameOver]);
+  }, [player, resetPlayer, checkGameOver, disableSweep]);
 
   return [stage, setStage, lockEvent, stageRef] as const;
 };

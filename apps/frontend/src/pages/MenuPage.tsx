@@ -217,7 +217,7 @@ const MenuPage = () => {
       }
       return prev;
     });
-  }, [stageRef, setPlayer]);
+  }, [stageRef, setPlayer, tuningRef]);
 
   const hardDrop = useCallback(() => {
     clearLockTimer();

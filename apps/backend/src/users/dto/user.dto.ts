@@ -17,8 +17,10 @@ import {
   MinLength,
   Matches,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RegisterDto } from '../../auth/dto/register.dto';
 import { MinoSkin, Role } from '@prisma/client';
 
 export class KeyBindingsDto {
@@ -226,11 +228,32 @@ export class SearchUsersDto {
 
   @ApiPropertyOptional({
     example: 'WIN_RATE_DESC',
-    enum: ['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'],
+    enum: ['RANK_POINTS_DESC', 'WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'],
   })
   @IsOptional()
-  @IsIn(['WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'])
-  sortBy?: 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC';
+  @IsIn(['RANK_POINTS_DESC', 'WIN_RATE_DESC', 'WIN_RATE_ASC', 'GAMES_DESC'])
+  sortBy?: 'RANK_POINTS_DESC' | 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC';
+}
+
+export class AdminCreateUserDto extends RegisterDto {}
+export class AdminDeleteUserDto {
+  @ApiProperty({ example: 'DELETE USER' })
+  @IsIn(['DELETE USER'])
+  confirmation!: 'DELETE USER';
+}
+export class AdminEditUserDto {
+  @ApiPropertyOptional({ minLength: 1, maxLength: 50 })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  displayName?: string;
+
+  @ApiPropertyOptional({ maxLength: 200 })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(200)
+  bio?: string;
 }
 
 export class BanUserDto {
@@ -286,6 +309,18 @@ export class AdminUsersQueryDto {
 }
 
 export class SearchHistoryDto {
+  @ApiPropertyOptional({ example: '2026-09-01', description: 'Inclusive UTC date (YYYY-MM-DD).' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  from?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-24', description: 'Inclusive UTC date (YYYY-MM-DD).' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  to?: string;
+
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
   @Type(() => Number)

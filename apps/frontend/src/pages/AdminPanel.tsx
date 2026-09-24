@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import './Dashboard.css';
@@ -12,6 +12,55 @@ export default function AdminPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [newUser, setNewUser] = useState({ email: '', username: '', displayName: '', password: '' });
+  const [edit, setEdit] = useState<{ id: string; displayName: string; bio: string } | null>(null);
+
+  const deleteUser = async (target: { id: string; username: string }) => {
+    if (savingRef.current || user?.role !== 'ADMIN' || target.id === user.id) return;
+    const confirmation = window.prompt(`Permanently delete ${target.username}? Personal data will be removed and match history anonymized. This cannot be undone. Type the username to confirm:`);
+    if (confirmation !== target.username) return;
+    savingRef.current = true; setSaving(true); setError(''); setMessage('');
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(target.id)}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ confirmation: 'DELETE USER' }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.message || `Delete failed (${res.status})`);
+      setUsers(current => current.filter(item => item.id !== target.id));
+      setEdit(null); setMessage('User and personal data permanently deleted. This cannot be undone.');
+    } catch (error) { setError(error instanceof Error ? error.message : 'Delete failed'); }
+    finally { savingRef.current = false; setSaving(false); }
+  };
+
+  const saveManagedUser = async (creating: boolean) => {
+    if (savingRef.current || user?.role !== 'ADMIN' || (!creating && !edit)) return;
+    savingRef.current = true;
+    setSaving(true); setError(''); setMessage('');
+    const payload = creating ? newUser : { displayName: edit!.displayName, bio: edit!.bio };
+    try {
+      const res = await fetch(creating ? '/api/admin/users' : `/api/admin/users/${encodeURIComponent(edit!.id)}`, {
+        method: creating ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(Array.isArray(result.message) ? result.message.join('; ') : result.message || `Request failed (${res.status})`);
+      if (creating) setNewUser({ email: '', username: '', displayName: '', password: '' });
+      else setEdit(null);
+      setMessage(creating ? 'User created with USER role.' : 'Profile updated.');
+      await fetchUsers();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not save user');
+    } finally {
+      // Never retain a submitted plaintext password in the form after a request.
+      if (creating) setNewUser(current => ({ ...current, password: '' }));
+      savingRef.current = false; setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!user || (user.role !== 'ADMIN' && user.role !== 'MODERATOR')) {
@@ -117,7 +166,33 @@ export default function AdminPanel() {
         <div style={{ width: '80px', visibility: 'hidden' }} className="mobile-hide"></div>
       </div>
 
-      {error && <div style={{ color: 'red', marginBottom: '20px' }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'red', marginBottom: '20px' }}>{error}</div>}
+      {message && <p role="status">{message}</p>}
+
+      {user?.role === 'ADMIN' && <section className="arcade-panel" style={{ width: '100%', maxWidth: 1000, margin: '0 auto 24px' }}>
+        <h2>CREATE USER</h2>
+        <form onSubmit={event => { event.preventDefault(); void saveManagedUser(true); }}>
+          <fieldset disabled={saving} style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <label>Email <input required type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} /></label>
+            <label>Username <input required minLength={3} maxLength={20} value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} /></label>
+            <label>Display name <input required maxLength={50} value={newUser.displayName} onChange={e => setNewUser({ ...newUser, displayName: e.target.value })} /></label>
+            <label>Password <input required type="password" autoComplete="new-password" minLength={8} maxLength={100} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} /></label>
+            <button type="submit">{saving ? 'SAVING…' : 'CREATE USER'}</button>
+          </fieldset>
+        </form>
+      </section>}
+
+      {edit && user?.role === 'ADMIN' && <section className="arcade-panel" style={{ width: '100%', maxWidth: 1000, margin: '0 auto 24px' }}>
+        <h2>EDIT PROFILE</h2>
+        <form onSubmit={event => { event.preventDefault(); void saveManagedUser(false); }}>
+          <fieldset disabled={saving}>
+            <label>Display name <input required maxLength={50} value={edit.displayName} onChange={e => setEdit({ ...edit, displayName: e.target.value })} /></label>
+            <label>Bio <textarea maxLength={200} value={edit.bio} onChange={e => setEdit({ ...edit, bio: e.target.value })} /></label>
+            <button type="submit">SAVE PROFILE</button>
+            <button type="button" onClick={() => setEdit(null)}>CANCEL</button>
+          </fieldset>
+        </form>
+      </section>}
 
       <div className="dashboard-grid" style={{ width: '100%', maxWidth: '1000px', margin: '0 auto' }}>
         {users.map((u) => {
@@ -131,6 +206,8 @@ export default function AdminPanel() {
                 </span>
               </div>
               <div style={{ fontSize: '10px', color: '#ccc', marginBottom: '15px', wordBreak: 'break-all' }}>{u.email}</div>
+              {user?.role === 'ADMIN' && u.id !== user.id && <button disabled={saving} onClick={() => setEdit({ id: u.id, displayName: u.displayName, bio: u.bio ?? '' })}>EDIT PROFILE</button>}
+              {user?.role === 'ADMIN' && u.id !== user.id && <button disabled={saving} onClick={() => void deleteUser(u)}>PERMANENTLY DELETE</button>}
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -138,7 +215,7 @@ export default function AdminPanel() {
                   <select 
                       value={u.role} 
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      disabled={user?.role !== 'ADMIN'}
+                      disabled={user?.role !== 'ADMIN' || u.id === user.id || saving}
                       style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '5px', fontFamily: "'Press Start 2P', monospace", fontSize: '10px', cursor: 'pointer' }}
                     >
                       <option value="USER">USER</option>

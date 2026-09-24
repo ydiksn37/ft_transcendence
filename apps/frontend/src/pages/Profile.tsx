@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
+import { Progression } from "@/components/dashboard/Progression"
 import type { UserStats, GameRecordView } from "@/lib/types"
 import { useConfig } from '../hooks/useConfig'
 import { TETROMINOS } from '../utils/tetrominos'
@@ -53,8 +54,6 @@ export default function Profile() {
 					navigate(mode ? `/settings?mode=${mode}` : '/settings');
 				} else if (selectedIndex === 2) {
 					navigate(mode ? `/admin?mode=${mode}` : '/admin');
-				} else if (selectedIndex === 0) {
-					navigate(mode ? `/settings?mode=${mode}` : '/settings');
 				}
 			}
 		};
@@ -347,6 +346,7 @@ export default function Profile() {
 
 					</div>
 
+					<Progression />
 					<RecentBattles games={games} />
 				</div>
 			</div>

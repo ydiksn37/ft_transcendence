@@ -36,6 +36,39 @@ describe('GameInstance AI matches', () => {
     jest.useRealTimers();
   });
 
+  it('waits for the human READY completion, ignoring spectators and duplicate acknowledgements', async () => {
+    const aiAgent = { releaseMatch: jest.fn(), getDecision: jest.fn(() => new Promise(() => undefined)) };
+    const game = new GameInstance('ready_ai', server, 42, undefined, aiAgent as unknown as AiAgentService);
+    game.addPlayer('human', null);
+    game.addPlayer('ai_ready_ai', null);
+    game.start('EXPERT');
+    game.confirmAiReady('spectator');
+    game.confirmAiReady('ai_ready_ai');
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(aiAgent.getDecision).not.toHaveBeenCalled();
+    expect(game.getPlayers().get('ai_ready_ai')!.piecesPlaced).toBe(0);
+    game.confirmAiReady('human');
+    game.confirmAiReady('human');
+    await jest.advanceTimersByTimeAsync(0);
+    expect(aiAgent.getDecision).toHaveBeenCalledTimes(1);
+    game.stop();
+    game.confirmAiReady('human');
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(aiAgent.getDecision).toHaveBeenCalledTimes(1);
+  });
+
+  it('stopping during READY cancels a delayed start acknowledgement', async () => {
+    const aiAgent = { releaseMatch: jest.fn(), getDecision: jest.fn() };
+    const game = new GameInstance('cancel_ready', server, 42, undefined, aiAgent as unknown as AiAgentService);
+    game.addPlayer('human', null);
+    game.addPlayer('ai_cancel_ready', null);
+    game.start('EXPERT');
+    game.stop();
+    game.confirmAiReady('human');
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(aiAgent.getDecision).not.toHaveBeenCalled();
+  });
+
   it('rebinds a player state to a new socket without resetting the match', () => {
     const game = new GameInstance('reconnect_room', server, 42);
     game.addPlayer('old-socket', null);
@@ -330,6 +363,7 @@ describe('GameInstance AI matches', () => {
     game.addPlayer('human', null);
     game.addPlayer('ai_cancel_room', null);
     game.start('EXPERT');
+    game.confirmAiReady('human');
     await jest.advanceTimersByTimeAsync(1000);
     expect(getDecision).toHaveBeenCalledTimes(1);
     game.stop();
@@ -384,6 +418,7 @@ describe('GameInstance AI matches', () => {
     game.addPlayer('human_socket', null);
     game.addPlayer(`ai_${roomId}`, null);
     game.start('EASY');
+    game.confirmAiReady('human_socket');
 
     await jest.advanceTimersByTimeAsync(999);
     expect(aiAgent.getDecision).not.toHaveBeenCalled();
@@ -424,6 +459,7 @@ describe('GameInstance AI matches', () => {
     game.addPlayer(humanSocketId, null);
     game.addPlayer(`ai_${roomId}`, null);
     game.start('EASY', 125);
+    game.confirmAiReady(humanSocketId);
 
     await jest.advanceTimersByTimeAsync(1800);
 

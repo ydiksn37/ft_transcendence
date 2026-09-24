@@ -9,13 +9,15 @@ type GameBoardProps = {
   stage: CellType[][];
   player: Player;
   ghostY: number;
+  showGhost?: boolean;
+  minoSkin?: 'NEON' | 'RETRO' | 'MINIMAL';
   targetLine?: number;
 };
 
 export const CELL_SIZE = 30; 
 export const BOARD_PIXEL_HEIGHT = 22 * CELL_SIZE;
 
-const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine, showGhost = true, minoSkin }) => {
   const width = stage.length > 0 ? stage[0].length * CELL_SIZE : 300;
   const isOverlapping = stage.length > 0 ? checkCollision(player, stage, { x: 0, y: 0 }) : false;
 
@@ -68,6 +70,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
           return (
             <Cell
               key={`stage-${y}-${x}`}
+              skin={minoSkin}
               type={cell[0]}
               status={cell[1]}
               x={x * CELL_SIZE}
@@ -79,12 +82,13 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
       )}
       
       {/* 2. Ghost piece */}
-      {player.tetromino.map((row, y) =>
+      {showGhost && player.tetromino.map((row, y) =>
         row.map((value, x) => {
           if (value === 0 || player.collided || isOverlapping || ghostY === player.pos.y) return null;
           return (
             <Cell
               key={`ghost-${y}-${x}`}
+              skin={minoSkin}
               type={value as string}
               status="ghost"
               x={(player.pos.x + x) * CELL_SIZE}
@@ -102,6 +106,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
           return (
             <Cell
               key={`active-${y}-${x}`}
+              skin={minoSkin}
               type={value as string}
               status="clear"
               x={(player.pos.x + x) * CELL_SIZE}

@@ -17,7 +17,7 @@ export default function Settings() {
   const location = useLocation();
   const { logout, user } = useAuth();
   const mode = new URLSearchParams(location.search).get('mode');
-  const { keyConfig } = useConfig();
+  const { keyConfig, showGhost, setShowGhost, minoSkin, setMinoSkin, settingsError, reloadSettings } = useConfig();
 
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -190,26 +190,44 @@ export default function Settings() {
       reader.onload = async (event) => {
         try {
           const json = JSON.parse(event.target?.result as string);
-          if (!json.settings) {
+          if (!json || !json.settings || typeof json.settings !== 'object' || Array.isArray(json.settings)) {
             alert('Invalid JSON format. Expected "settings" object.');
             return;
           }
           const token = localStorage.getItem('token');
+          const allowed = ['minoSkin', 'showGhost', 'arr', 'das', 'dcd', 'sdf', 'keyBindings', 'volume', 'sfxEnabled', 'musicEnabled'];
+          const settings = Object.fromEntries(Object.entries(json.settings).filter(([key]) => allowed.includes(key)));
+          if (Object.keys(settings).length === 0) {
+            alert('No supported preferences found.');
+            return;
+          }
+          const previewResponse = await fetch('/api/users/me/export/preview', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ settings }),
+          });
+          const preview = await previewResponse.json();
+          if (!previewResponse.ok) {
+            alert(`Import validation failed: ${Array.isArray(preview.message) ? preview.message.join('\n') : preview.message || previewResponse.status}`);
+            return;
+          }
+          const changes = preview.changes.map((change: { field: string; previous: unknown; next: unknown }) => `${change.field}: ${JSON.stringify(change.previous)} → ${JSON.stringify(change.next)}`).join('\n');
+          if (!window.confirm(`Apply these preferences?\n${changes}\n\n${preview.note}`)) return;
           const res = await fetch('/api/users/me/export/import', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify({ settings: json.settings })
+            body: JSON.stringify({ settings })
           });
           if (res.ok) {
             alert('Settings successfully imported!');
+            reloadSettings();
           } else {
             alert('Failed to import settings.');
           }
         } catch (err) {
-          alert('Invalid JSON file.');
+          alert(err instanceof SyntaxError ? 'Invalid JSON file.' : 'Import failed. Check your connection and try again.');
         }
       };
       reader.readAsText(file);
@@ -217,10 +235,10 @@ export default function Settings() {
     input.click();
   };
 
-  const handleExportData = async () => {
+  const handleExportData = async (format: 'json' | 'csv' = 'json') => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/users/me/export/download', {
+      const res = await fetch(`/api/users/me/export/download?format=${format}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -228,10 +246,11 @@ export default function Settings() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'my_data.json';
+        a.download = `my_data.${format}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       } else {
         alert('Failed to export data.');
       }
@@ -347,6 +366,15 @@ export default function Settings() {
       </div>
 
       <div style={{ width: '100%', maxWidth: '900px' }}>
+        <div style={panelStyle}>
+          <h2>GAME DISPLAY</h2>
+          {settingsError && <p role="alert">{settingsError} <button onClick={reloadSettings}>RELOAD SAVED SETTINGS</button></p>}
+          <label>MINO SKIN <select value={minoSkin} onChange={event => setMinoSkin(event.target.value as typeof minoSkin)}>
+            <option value="NEON">NEON</option><option value="RETRO">RETRO</option><option value="MINIMAL">MINIMAL</option>
+          </select></label>
+          <label><input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} /> SHOW GHOST PIECE</label>
+          <p>Changes your board display only. Does not change game rules or your opponent’s settings.</p>
+        </div>
         
         {/* PUBLIC API KEYS SECTION */}
         <div style={panelStyle}>
@@ -509,11 +537,12 @@ export default function Settings() {
                   IMPORT SETTINGS
                 </button>
                 <button 
-                  onClick={handleExportData} 
+                  onClick={() => void handleExportData('json')}
                   style={{ ...buttonStyle, backgroundColor: '#3498db' }}
                 >
                   EXPORT JSON
                 </button>
+                <button onClick={() => void handleExportData('csv')} style={{ ...buttonStyle, backgroundColor: '#3498db' }}>EXPORT CSV</button>
               </div>
             </div>
 

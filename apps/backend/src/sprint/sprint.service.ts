@@ -36,7 +36,7 @@ export class SprintService {
       },
     });
 
-    return records.map((record: any, index: any) => ({
+    return records.map((record, index) => ({
       rank: index + 1,
       record: {
         id: record.id,
@@ -67,7 +67,7 @@ export class SprintService {
       },
     });
 
-    return records.map((record: any, index: any) => ({
+    return records.map((record, index) => ({
       rank: index + 1,
       record: {
         id: record.id,

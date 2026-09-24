@@ -132,7 +132,7 @@ export default function LobbyPage() {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, selectedAiDifficulty, token, user]);
+  }, [mode, startLevel, navigate, keyConfig.quitToMenu, listeningAction, selectedIndex, selectedAiDifficulty, token, user, logout]);
 
   const [records, setRecords] = useState<any[]>([]);
   const [myRecords, setMyRecords] = useState<any[]>([]);

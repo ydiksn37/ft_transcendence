@@ -3,28 +3,15 @@ import { Graphics } from '@pixi/react';
 import * as PIXI from 'pixi.js';
 import { type TetrominoKey, TETROMINOS } from '../utils/tetrominos';
 import type { CellStatus } from '../utils/gameHelpers';
+import { colorMap } from '../lib/minoColors';
 
 type CellProps = {
+  skin?: 'NEON' | 'RETRO' | 'MINIMAL';
   type: TetrominoKey | string | 0;
   status: CellStatus;
   x: number;
   y: number;
   size: number;
-};
-
-export const colorMap: Record<string, number> = {
-  cyan: 0x00FFFF,
-  // blue: 0x0000FF,
-  blue: 0x0077D3,
-  orange: 0xFFA500,
-  yellow: 0xFFFF00,
-  green: 0x008000,
-  // purple: 0x800080,  
-  purple: 0xDD0AB2,
-  red: 0xFF0000,
-  transparent: 0x000000,
-  gray: 0x888888,
-  brown: 0x8E4833,
 };
 
 /** Lighten (amt>0) or darken (amt<0) a 0xRRGGBB color for bevel shading. */
@@ -35,7 +22,7 @@ const shade = (color: number, amt: number): number => {
   return (r << 16) | (g << 8) | b;
 };
 
-const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
+const Cell: React.FC<CellProps> = ({ type, status, x, y, size, skin = 'RETRO' }) => {
   const colorName = type === 'X' ? 'gray' : (TETROMINOS[type as TetrominoKey]?.color || 'transparent');
   const hexColor = colorMap[colorName] || 0x888888;
   const isGhost = status === 'ghost';
@@ -61,6 +48,16 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
 
           g.lineStyle(1, hexColor, 0.75);
           g.drawRect(0, 0, size, size);
+        } else if (skin === 'MINIMAL') {
+          g.beginFill(hexColor);
+          g.drawRect(1, 1, size - 2, size - 2);
+          g.endFill();
+        } else if (skin === 'NEON') {
+          g.beginFill(shade(hexColor, -100));
+          g.drawRect(1, 1, size - 2, size - 2);
+          g.endFill();
+          g.lineStyle(2, hexColor, 1);
+          g.drawRect(2, 2, size - 4, size - 4);
         } else {
           // Normal / merged piece: solid
           // g.beginFill(hexColor);
@@ -105,7 +102,7 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size }) => {
         g.drawRect(0, 0, size, size);
       }
     },
-    [hexColor, size, isFilled, isGhost]
+    [hexColor, size, isFilled, isGhost, skin]
   );
 
   return <Graphics draw={draw} x={x} y={y} />;

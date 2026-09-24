@@ -628,6 +628,7 @@ export class GameGateway
         player1Id: p1Stats.userId,
         player2Id: p2Stats.userId,
         winnerId: winnerUserId,
+        winnerPlayer: winnerSocketId === p1SocketId ? 1 : winnerSocketId === p2SocketId ? 2 : null,
         isAiGame,
         aiDifficulty,
         player1Apm: p1Stats.apm,
@@ -1490,7 +1491,14 @@ export class GameGateway
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
     const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
-    setTimeout(() => instance.start(difficulty, actionDelayMs), 1000);
+    instance.start(difficulty, actionDelayMs);
+  }
+
+  @SubscribeMessage('game:ai_ready')
+  handleAiReady(@ConnectedSocket() client: Socket, @MessageBody() data: { roomId?: string }) {
+    const roomId = this.clientRoom.get(client.id);
+    if (!roomId || data?.roomId !== roomId) return;
+    this.rooms.get(roomId)?.confirmAiReady(client.id);
   }
 
   // ── C++ AI Webプレビュー ──────────────────────────────────

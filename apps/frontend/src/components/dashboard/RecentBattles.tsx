@@ -3,10 +3,11 @@ import type { GameRecordView } from "@/lib/types"
 type Props = { games: GameRecordView[] };
 
 const MODE_STYLE: Record<string, string> = {
-	ONLINE_1V1: "#e74c3c",
+	VERSUS: "#e74c3c",
+	AI: "#bf00ff",
+	TOURNAMENT: "#3498db",
 	MARATHON:   "#4caf50",
-	"40_LINES": "#ff9800",
-	"4_WIDE":   "#3498db",
+	LINES_40: "#ff9800",
 }
 
 export function RecentBattles({ games }: Props) {
