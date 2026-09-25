@@ -43,26 +43,44 @@ services:
       - transcendence_net
 
   # ─────────────────────────────────────────
-  #  HashiCorp Vault (dev モード)
+  #  HashiCorp Vault (server モード / file storage)
+  #  初期化・秘密情報の同期は tools/vault-init.sh（make vault-init）で行う
   # ─────────────────────────────────────────
   vault:
     image: hashicorp/vault:1.18
     container_name: transcendence_vault
     restart: unless-stopped
-    command: vault server -dev
+    command: vault server -config=/vault/config/config.hcl
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN_ID}
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_ADDR: "http://127.0.0.1:8200"
     cap_add:
       - IPC_LOCK
-    ports:
-      - "8200:8200"
+    volumes:
+      - ./vault/config.hcl:/vault/config/config.hcl:ro
+      - vault_data:/vault/file
+    # vault status は unseal 済みの場合のみ exit 0
     healthcheck:
-      test: ["CMD", "vault", "status"]
+      test: ["CMD-SHELL", "vault status > /dev/null 2>&1"]
       interval: 2s
       timeout: 5s
-      retries: 10
+      retries: 30
+    networks:
+      - transcendence_net
+
+  vault-unsealer:
+    image: hashicorp/vault:1.18
+    container_name: transcendence_vault_unsealer
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/vault/unseal.sh"]
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_UNSEAL_KEY_FILE: /run/secrets/vault_unseal_key
+    secrets:
+      - vault_unseal_key
+    volumes:
+      - ./vault/unseal.sh:/vault/unseal.sh:ro
+    depends_on:
+      - vault
     networks:
       - transcendence_net
 
@@ -76,13 +94,17 @@ services:
       target: development
     container_name: transcendence_backend
     restart: unless-stopped
-    command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run dev"
+    # schema変更は `make migrate-dev name=...` でmigrationを作成する（db pushは使わない）
+    command: sh -c "npm run db:generate && npx ts-node --transpile-only src/migrate.ts && npm run dev"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
       VAULT_ADDR: "http://vault:8200"
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN_ID}
+      VAULT_TOKEN_FILE: /run/secrets/vault_token
+      VAULT_SECRET_PATH: secret/data/transcendence
+      VAULT_REQUIRED: ${VAULT_REQUIRED:-true}
+      MIGRATE_BASELINE_EXISTING: "true"
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
@@ -102,6 +124,8 @@ services:
       UPLOAD_DIR: /app/uploads
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       AI_AGENT_PATH: /opt/ai-agent-dev/ai_agent
+    secrets:
+      - vault_token
     volumes:
       - ./apps/backend/src:/app/apps/backend/src:ro  # ホットリロード用
       - ./apps/backend/prisma:/app/apps/backend/prisma:ro # schema変更時のClient再生成用
@@ -199,6 +223,14 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  vault_data:
+
+# tools/vault-init.sh（VAULT_ENV=development）が生成する。secrets/ はGit管理外
+secrets:
+  vault_token:
+    file: ./secrets/dev/vault_token.txt
+  vault_unseal_key:
+    file: ./secrets/dev/vault_unseal_key.txt
 
 networks:
   transcendence_net:

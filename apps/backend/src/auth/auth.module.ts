@@ -9,9 +9,12 @@ import { FtOauthStrategy } from './strategies/ft-oauth.strategy';
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '1d' },
+    // Vaultの値はbootstrap時にprocess.envへ入るため、import時ではなくDI時に読む
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: process.env.JWT_SECRET,
+        signOptions: { expiresIn: '1d' },
+      }),
     }),
   ],
   providers: [AuthService, JwtStrategy, FtOauthStrategy],

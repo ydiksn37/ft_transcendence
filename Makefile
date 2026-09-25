@@ -4,13 +4,13 @@ help: ## コマンド一覧を表示する
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # --- Docker Compose 基本操作 ---
-up: shared-build ai-web-build ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
+up: shared-build ai-web-build vault-init ## 全てのコンテナを起動し、DBマイグレーションも自動実行する
 	docker compose up -d
 
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
 
-build: ai-web-build ## Dockerイメージをビルドしてコンテナを起動する
+build: ai-web-build vault-init ## Dockerイメージをビルドしてコンテナを起動する
 	docker compose up -d --build
 
 logs: ## 全コンテナのログをリアルタイムで表示する (Ctrl+Cで終了)
@@ -192,8 +192,17 @@ test-cov: ## テストカバレッジを測定する
 	npm run test:cov
 
 # --- インフラ & セキュリティテスト ---
-vault-init: ## Vault開発環境に初期テストシークレットを投入する
-	docker compose exec -e VAULT_TOKEN=dev-root-token vault vault kv put secret/transcendence JWT_SECRET="vault_test_secret_12345"
+vault-init: ## 開発用Vaultを初期化・unsealし、.envの秘密情報を同期する
+	VAULT_ENV=development ./tools/vault-init.sh
+
+prod-vault-init: ## 本番構成のVaultを初期化・unsealし、秘密情報とbackend用トークンを用意する
+	VAULT_ENV=production ./tools/vault-init.sh
+
+prod-up: prod-vault-init ## 本番構成 (docker-compose.production.yml) をビルドして起動する
+	docker compose -f docker-compose.production.yml up -d --build
+
+prod-down: ## 本番構成を停止する (volumeは残す)
+	docker compose -f docker-compose.production.yml down
 
 waf-test: ## WAF (ModSecurity) がXSS攻撃を遮断(403)するかテストする
 	./tools/test-waf.sh
@@ -221,4 +230,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init prod-vault-init prod-up prod-down waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check

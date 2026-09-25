@@ -61,12 +61,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV AI_AGENT_PATH=/usr/local/bin/ai_agent
 
-COPY --from=builder /app/apps/backend/dist ./dist
+# workspace固有の依存（@prisma/client等）とsymlinkを解決するため、モノレポと同じ配置を保つ
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
-COPY --from=builder /app/apps/backend/prisma ./prisma
+COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
 COPY --from=ai-builder /app/build/ai_agent /usr/local/bin/ai_agent
 
+WORKDIR /app/apps/backend
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+CMD ["sh", "-c", "node dist/src/migrate && exec node dist/src/main"]

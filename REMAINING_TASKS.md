@@ -31,11 +31,13 @@
 | 解消済み | `npm run build --workspace=@transcendence/frontend` | `AiPreviewPage.tsx(560,8): TS2741`。`TetrisUIProps` が要求する `combo` が渡されていない | 2026-09-18、サーバーのcomboを渡し、production build成功 |
 | 解消済み | `node --test apps/frontend/tests/multiplayer.test.cjs` | Game over後の観戦状態について、期待値 `SPECTATING` と実装側の状態が一致しない | 2026-09-18、明示的なREADY以外は観戦へ遷移。観戦READY中の個人盤面も拒否。観戦5件・入力5件成功 |
 | 解消済み | 2026-09-18 public profile実装時のbuild | `TS1294`。`erasableSyntaxOnly` ではconstructor parameter propertyを利用できない | エラー型のstatusを通常のクラスフィールドへ変更。frontend production build成功 |
-| 未解消 | 2026-09-18 `npm audit --json` | registry接続が `EAI_AGAIN`。制限外実行も承認拒否 | npm registryへの依存名・バージョン送信について実行環境が拒否。監査・更新は未実施。ユーザーの明示承認が必要 |
-| 未解消 | 2026-09-18 frontend production build | 500 kBを超えるJSチャンクのwarning | 本番ビルド自体は成功。適切なコード分割を検討し、単に警告閾値を上げて隠さない |
+| 解消済み | 2026-09-18 `npm audit --json` | registry接続が `EAI_AGAIN`。制限外実行も承認拒否 | 2026-09-25に通常環境で `npm audit --json` が成功（1214依存を監査、0件） |
+| 解消済み・実ブラウザ再確認待ち | 2026-09-18 frontend production build | 500 kBを超えるJSチャンクのwarning | 2026-09-25、Pixi系のcodeSplittingグループ追加後の本番buildでwarningなし（最大 `Dashboard` 約405 kB）。閾値は変更していない。分割後の公開ページ描画は第21項で再確認する |
 | 未解消 | Chrome 147、トップページ | PixiJSが `renderer.plugins.interaction has been deprecated, use renderer.events` をconsoleへ出力 | PC・タブレット・スマホの全viewportで再現。依存ライブラリと`BackgroundTetris`の利用方法を更新し、production buildでも再確認する |
 | 未解消 | Chrome 147、390x844 viewport | トップ画面のタイトル、幅360pxのボタン、背景盤面が右側でクリップされる | 390px幅に固定幅と配置計算が収まっていない。スマホ用の幅をviewport基準にして実機相当で再確認する |
-| 未解消 | Docker image build | npmがModerate 1件、High 12件、合計13件の脆弱性を報告 | `npm audit` で到達可能性を確認し、互換性を保って更新する。第1A項に登録済み |
+| 解消済み | Docker image build | npmがModerate 1件、High 12件、合計13件の脆弱性を報告 | 依存更新後の2026-09-25、`npm audit` 全体・`--omit=dev` ともに0件。第1A項参照 |
+| 解消済み | 2026-09-25 本番構成で空DBへ `prisma migrate deploy` | 適用後の `prisma migrate diff` でschemaとの差分（`GameMode` 2値、`User.twoFactorSecret`、削除済みOrganization系テーブル）を検出 | 開発環境が `db push` のみでmigration履歴に反映されていなかった。`20260925200000_sync_schema_drift` を追加し差分0件を確認 |
+| 解消済み | 2026-09-25 backend production image起動 | `Cannot find module '@transcendence/shared'`、続いて `Cannot find module '@prisma/client'`。`dist/main.js` も存在しない | 本番stageが `packages/shared` を含まず、`dist` を `/app/dist` に置いたためworkspace固有の `apps/backend/node_modules` を解決できなかった。モノレポと同じ配置でコピーし、起動パスを `dist/src/main` に修正。DB未接続のP1001まで起動することを確認 |
 | 解消済み | Backend type-check | Prisma Clientがschemaより古く、`twoFactorSecret` 関連のTypeScriptエラーが8件発生 | build/type-check/Docker起動前に同一schemaから `prisma generate` するよう統一 |
 | 解消済み | Vite CSS読み込み | `[plugin:vite:css] [postcss] ENOENT: no such file or directory, open 'tailwindcss'` | 存在しないTailwind importへの依存を除去。現在のソースに `tailwindcss` 参照がないことを確認 |
 | 一時的・解消済み | Nodemailer依存追加 | npm registryへの接続が `EAI_AGAIN` で失敗 | sandbox外の許可済みnpm通信で再実行し、lockfile整合性を `npm ci --dry-run` で確認 |
@@ -77,11 +79,20 @@ client secret等の実値が残っていることを確認。現行ファイル�
 
 残タスク:
 
-- [ ] `npm audit` で直接依存・間接依存と影響範囲を特定
-- [ ] 互換性を維持できる範囲で依存関係とlockfileを更新
-- [ ] `npm audit fix --force` を無条件に使用せず、破壊的更新を個別確認
-- [ ] 修正後にtype-check、Jest、frontend build、backend Docker buildを再実行
-- [ ] 更新できない脆弱性は到達可能性、理由、緩和策をREADMEへ記録
+- [x] `npm audit` で直接依存・間接依存と影響範囲を特定
+- [x] 互換性を維持できる範囲で依存関係とlockfileを更新
+- [x] `npm audit fix --force` を無条件に使用せず、破壊的更新を個別確認
+- [x] 修正後にtype-check、Jest、frontend build、backend Docker buildを再実行
+- [x] 更新できない脆弱性は到達可能性、理由、緩和策をREADMEへ記録（該当なし）
+
+2026-09-25: 未コミットの依存更新（NestJS 11.2.6系、multer 2.4.0、nodemailer 10.0.10、
+ルートの `js-yaml` override削除）後に `npm audit --json` を実行し、1214依存
+（prod 378 / dev 822）でinfo〜criticalすべて0件。`--omit=dev` も0件。
+`npm audit fix --force` は使用していない。`npm ci --dry-run` でlockfile整合性を確認。
+backend `tsc --noEmit`、Jest 38 suite / 256テスト、frontend型チェック・11テストファイル、
+frontend本番build（warningなし）、backend/frontendのproduction target Docker buildが成功。
+nodemailer 7→10のメジャー更新はイメージ内でのloadのみ確認で、実SMTP送信は未検証。
+更新不能な脆弱性が存在しないためREADMEへの記録対象はない。
 
 完了条件:
 
@@ -155,6 +166,8 @@ OAuth callbackは `https://localhost:8443` 基準へ変更済み。READMEは依�
 表記のまま。`docker-compose.production.yml` はnginx以外のポートを公開せずDB/Redis/Vaultを
 internal networkに置くが、開発用 `docker-compose.yml` はPostgreSQL/Redis/Vault等のポートを
 公開したまま。42側のcallback登録とChromeでのMixed Content確認は未実施。
+同日追記: 開発用composeからVaultの8200公開を削除（操作は `docker compose exec` 経由）。
+PostgreSQL/Redis/backend/frontendの開発用ポート公開は、ホスト側のPrisma CLI等で使うため維持。
 
 ### 7. GDPR削除処理を完成させる（完了）
 
@@ -468,10 +481,10 @@ DB NULLとして正しくクリアする。ネットワーク失敗とJSON構文
 
 ### 20. WAF + Vault
 
-- [ ] Vaultのdev modeと固定root tokenを廃止
+- [x] Vaultのdev modeと固定root tokenを廃止
 - [x] 永続化された暗号化storageを使用
 - [x] Vault取得失敗時に秘密情報へ無条件フォールバックしない
-- [ ] WAFルールをstrict modeとして検証
+- [x] WAFルールをstrict modeとして検証
 - [x] SQLi、XSS、異常payloadの拒否テストを用意
 
 この要件を満たさない場合は、WAF/VaultモジュールをREADMEの申告から外す。
@@ -486,6 +499,38 @@ Vault連携がskipされる点にも注意）。本番構成はTLS無効・手�
 `tools/test-waf.sh`（正常JSON通過、XSS・SQLi・パストラバーサルの403）を追加し `make waf-test` から
 呼ぶ形にした。Composeへ `BLOCKING_PARANOIA=2` 等を設定済みだが、実環境でのスクリプト実行は未実施。
 
+同日追記: 本番構成（Paranoia Level 2、inbound anomaly閾値5のblocking）で `tools/test-waf.sh` を実行し、
+正常JSONが通過（400はアプリのvalidation）、XSS・SQLi・パストラバーサルが403で全件成功。
+認証付きAPI・2FA・設定更新・socket.io pollingなど正常系が誤検知されないことも確認
+（途中の403はテスト側でAuthorizationヘッダーがAcceptへ連結されたことによるルール920600で、WAFの正当な拒否）。
+本番構成のVault起動・unseal・秘密情報読込・再起動後の永続性も第27項の手順で確認済み。
+dev mode廃止のみ、開発用 `docker-compose.yml` が `vault server -dev` のままなので未チェック。
+
+2026-09-25追記（unseal・鍵管理・開発環境の移行）:
+- 開発用 `docker-compose.yml` のVaultを本番と同じserver mode（`vault/config.hcl`、file storage、
+  `vault_data` volume）へ変更。`VAULT_DEV_ROOT_TOKEN_ID` を廃止し、backendは
+  `/run/secrets/vault_token` のpolicy tokenで接続（`VAULT_REQUIRED` 既定true）。ホストへの8200公開も削除。
+- `vault-unsealer` sidecar（`vault/unseal.sh`）を両composeへ追加。Vaultが再起動でsealされると
+  unseal keyファイルから自動unsealする。Vaultのhealthcheckはunseal済みのみ成功とし、
+  backendは `service_healthy` まで待機する。
+- `tools/prod-vault-init.sh` を `tools/vault-init.sh` に置換（`VAULT_ENV=production|development`）。
+  root tokenはファイルへ保存せず、初期化時はメモリ上でのみ使用し、再実行時はunseal keyから
+  `operator generate-root`（OTP方式）で一時発行して終了時にrevoke。途中失敗などで残った
+  root tokenも終了時に全件revokeする。秘密値は `docker exec -e` とstdin経由で渡し、ホストの
+  コマンドライン引数に載せない。開発は `docker compose config` で解決したbackend環境変数（.env由来）を
+  毎回Vaultへ同期し、本番は初回のみ生成する。
+- unseal keyは既定で `secrets/vault_unseal_key.txt`（開発は `secrets/dev/`、いずれも0600・Git管理外）。
+  `VAULT_STORE_UNSEAL_KEY=false` で初期化するとkeyを保存せず一度だけ表示し、以後は
+  `VAULT_UNSEAL_KEY=... ./tools/vault-init.sh` で手動unsealするオフライン保管運用になる。
+- Makefileに `vault-init`（`up`/`build` の前提）、`prod-vault-init`、`prod-up`、`prod-down` を追加。
+- 検証: 本番構成で新規init・再実行・Vault単体再起動→自動unseal・全体down/up（スクリプトなし）後の
+  login 200を確認。token accessor監査で残存root tokenが0件（backend用 `default,transcendence` のみ）、
+  失敗で残ったroot tokenが次回実行で自動revokeされることを確認。オフライン保管モードでは
+  keyファイル0 byte、再起動後sealedのまま、`VAULT_UNSEAL_KEY` 指定でunseal、key未指定時は明示エラー。
+  開発環境でも新規init・同期・自動unseal・backend起動を確認。
+- 残課題: 自動unsealを使う場合はunseal keyがVaultと同じホストに置かれる（オフライン保管とは排他）。
+  Vault listenerのTLS無効（internal network内のみ）と、1 share/threshold 1の構成は維持。
+
 ### 21. Design system
 
 - [x] Tailwindを使わないなら未処理の `@theme` を通常のCSS変数へ変更
@@ -497,6 +542,9 @@ Vault連携がskipされる点にも注意）。本番構成はTLS無効・手�
 ただし現時点で他のページ・componentからimportされておらず、再利用の実績がないため未チェック。
 `vite.config.ts` にPixi系のみを対象とした `codeSplitting` グループを追加したが、
 本番buildでのwarning解消と公開ページの描画は未再検証。
+同日追記: 本番buildはwarningなしで成功（最大chunk約405 kB）。過去にvendor強制分割で
+公開ページが空DOMになった経緯があるため、分割後のJoin/Login/Privacy/Termsの実ブラウザ描画を
+確認するまでVite warning項目は未チェックとする。
 
 2026-09-24: Join以外のページをReact.lazy/Suspenseで遅延ロードし、vendor群も分割。
 最大JSは約2.26MBから約327KBへ縮小（総転送量の比較ではない）。警告閾値の引き上げはせず、
@@ -586,8 +634,8 @@ Vite本番build、Docker build、C++ CTestは今回未実行。
 - [x] Frontend lint warningを解消
 - [x] `AiPreviewPage.tsx` から `TetrisUI` へ必須の `combo` propを渡し、TS2741を解消
 - [x] Viteの `@theme` warningを解消（通常の `:root` へ置換、本番ビルド成功）
-- [ ] production用frontend/backend imageを用意
-- [ ] development serverに依存せずproduction構成で起動確認
+- [x] production用frontend/backend imageを用意
+- [x] development serverに依存せずproduction構成で起動確認
 
 2026-09-24: Frontend lintの一部を修正。共有ミノ色をcomponentから独立させFast Refreshの警告を解消。
 Profileの到達不能な重複分岐を除去、Dashboardの戻り先mode依存を修正。
@@ -637,6 +685,50 @@ production imageのbuild・起動は未実施。静的確認では、backend pro
 `@transcendence/shared` の解決に失敗する懸念がある。また `prisma migrate deploy` を
 実行する手順がなく、追加migrationが本番DBへ適用されない。このため第27項の該当2件は未チェック。
 
+2026-09-25追記: backend production imageを実際にbuild・起動し、上記の `@transcendence/shared`
+解決失敗を確認。さらに `@prisma/client` 解決失敗と、存在しない `dist/main` を起動していた問題も判明。
+本番stageを `/app/apps/backend` 配下のモノレポ配置へ変更し、`packages/shared` の
+`package.json`/`dist` をコピー、CMDと `start:prod` を `dist/src/main` へ修正。
+Vault必須設定ではVault未設定時に起動を停止し、Vault任意設定では全モジュールの初期化後に
+DB未接続（Prisma P1001）で停止することを確認。frontend production imageはnginxで
+`/` と `/dashboard`（SPA fallback）が200、`nginx -t` 成功。
+`docker-compose.production.yml` 全体（Vault init/unseal、DB、Redis、nginx）の起動と
+migration適用手順（`prisma migrate deploy`。DATABASE_URLはVaultから読むため実行位置の設計が必要）は未完了。
+
+2026-09-25追記（本番構成の全体起動確認）: 開発スタックと分離するため
+`COMPOSE_PROJECT_NAME=ft-prod-check NGINX_PORT=9443 NGINX_HTTP_PORT=9080` で実施。
+- `tools/prod-vault-init.sh`（後に `tools/vault-init.sh` へ置換、第20項参照）を追加。Vaultのinit（1 share）・unseal・kv-v2有効化・
+  `secret/transcendence` 投入（DB/Redis URL、JWT/refresh/session secretを生成）・policy適用・
+  backend用のperiodic orphan token発行を行い、Git管理外の `secrets/` へ保存。再実行時は既存値を再利用する。
+- `src/migrate.ts` を追加し、backend CMDを `node dist/src/migrate && exec node dist/src/main` に変更。
+  Vaultから読んだDATABASE_URLで `prisma migrate deploy` を実行してからアプリを起動する。
+- `AuthModule` の `JwtModule.register` がimport時に `process.env.JWT_SECRET` を読んでおり、
+  Vaultの値が入る前に評価される問題を `registerAsync` へ修正。
+- 空DBへ既存6 migrationを適用後、`prisma migrate diff` でschemaとの差分を検出
+  （`GameMode` の `LINES_40`/`MARATHON`、`User.twoFactorSecret`、削除済みOrganization/
+  DataExportRequest関連）。開発環境の `db push` でのみ反映されていたため、
+  `20260925200000_sync_schema_drift` を追加し、適用後の差分が0件であることを確認。
+- 確認結果: 全6コンテナ起動（postgres/redis/nginx healthy）、Vault読込・migration・DB/Redis接続成功。
+  HTTP→`https://localhost:9443` の301、`/` と `/dashboard` 200、`/api/docs` 200、
+  register 201・login 200・`/api/users/me` 200（passwordHash/twoFactorSecretを含まない）、
+  2FA generate 201、表示設定PATCH 200、archive GET 200、不正token 401、socket.io polling 200。
+  `WAF_BASE_URL=https://localhost:9443 ./tools/test-waf.sh` 全件成功。
+  公開ポートはnginxの9080/9443のみ。停止→再起動後も再unsealでVault/DBのデータを保持し、
+  既存ユーザーでlogin 200、`No pending migrations`。検証後はコンテナ・volume・image・secretsを削除済み。
+- 当時の残課題: Vault listenerはTLS無効（internal network内のみ）、unsealは手動、root tokenと
+  unseal keyが `secrets/vault-init.json` に残る、開発DBが `db push` 管理。42 OAuth・SMTPは実値未投入で未検証（後回し）。
+  unseal・鍵保管は第20項の追記で解消。開発DBは下記で解消。
+
+2026-09-25追記（開発DBのmigration移行）: 開発backendの起動コマンドを `prisma db push --accept-data-loss` から
+`ts-node --transpile-only src/migrate.ts` へ変更（schema変更は `make migrate-dev name=...` で作成）。
+`MIGRATE_BASELINE_EXISTING=true` の場合のみ、`_prisma_migrations` がなくテーブルが存在するDBについて
+`prisma migrate diff --exit-code` でschemaと完全一致を確認したうえで全migrationを `migrate resolve --applied` で
+baseline化し、差分がある場合はDBへ書き込まずに停止する。事前に `pg_dump` でバックアップ
+（`/tmp/ft-dev-backup/dev-db-before-baseline.dump`）を取得して既存開発DBへ適用し、7件をbaseline化、
+User件数不変、再起動時は `No pending migrations`。差分のある使い捨てDBでは起動が停止し
+`_prisma_migrations` も作成されないことを確認（検証DBは削除済み）。backend 38 suite / 256テスト、
+lint、type-check成功。
+
 ### 28. 負荷・同期試験
 
 - [ ] 複数試合を同時実行して状態が混ざらないことを確認
@@ -655,6 +747,12 @@ node --test apps/frontend/tests/public-profile.test.cjs
 make ai-build
 ctest --test-dir build/ai-agent --output-on-failure
 docker compose config --quiet
+
+# 本番構成（開発スタックと並行する場合はプロジェクト名とポートを分ける）
+export COMPOSE_PROJECT_NAME=ft-prod-check NGINX_PORT=9443 NGINX_HTTP_PORT=9080
+make prod-up   # = VAULT_ENV=production ./tools/vault-init.sh + compose up -d --build
+WAF_BASE_URL=https://localhost:9443 ./tools/test-waf.sh
+docker compose -f docker-compose.production.yml down -v --rmi local
 ```
 
 ## 推奨作業順
