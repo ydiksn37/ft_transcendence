@@ -57,8 +57,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   /** Increment and establish the fixed window atomically; repair legacy
    * counters whose separate EXPIRE was interrupted. Never extend a live TTL. */
-  async incrementWindow(key: string, seconds: number): Promise<{ count: number; ttl: number }> {
-    const result = await this.client.eval(
+  async incrementWindow(
+    key: string,
+    seconds: number,
+  ): Promise<{ count: number; ttl: number }> {
+    const result = (await this.client.eval(
       `local count = redis.call('INCR', KEYS[1])
        local ttl = redis.call('TTL', KEYS[1])
        if ttl < 0 then
@@ -66,8 +69,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
          ttl = tonumber(ARGV[1])
        end
        return {count, ttl}`,
-      1, key, seconds,
-    ) as [number, number];
+      1,
+      key,
+      seconds,
+    )) as [number, number];
     return { count: result[0], ttl: result[1] };
   }
 

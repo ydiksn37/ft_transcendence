@@ -6,12 +6,28 @@ const DEFAULT_KEYS = {
   hold: 'ShiftLeft', restart: 'KeyQ', quitToMenu: 'Escape',
 };
 
+type DisplayTheme = 'CYBER' | 'ARCADE' | 'MONO';
+type MapStyle = 'GRID' | 'VOID' | 'ARENA';
+type BackgroundStyle = 'MATRIX' | 'STARS' | 'SOLID';
+
 export const useConfig = () => {
   const [minoSkin, setMinoSkin] = useState<'NEON' | 'RETRO' | 'MINIMAL'>(() => {
     const saved = localStorage.getItem('tetrisMinoSkin');
     return saved === 'RETRO' || saved === 'MINIMAL' ? saved : 'NEON';
   });
   const [showGhost, setShowGhost] = useState(() => localStorage.getItem('tetrisShowGhost') !== 'false');
+  const [displayTheme, setDisplayTheme] = useState<DisplayTheme>(() => {
+    const saved = localStorage.getItem('tetrisDisplayTheme');
+    return saved === 'ARCADE' || saved === 'MONO' ? saved : 'CYBER';
+  });
+  const [mapStyle, setMapStyle] = useState<MapStyle>(() => {
+    const saved = localStorage.getItem('tetrisMapStyle');
+    return saved === 'VOID' || saved === 'ARENA' ? saved : 'GRID';
+  });
+  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>(() => {
+    const saved = localStorage.getItem('tetrisBackgroundStyle');
+    return saved === 'STARS' || saved === 'SOLID' ? saved : 'MATRIX';
+  });
   const [tuning, setTuning] = useState(() => {
     const defaultTuning = { das: 133, arr: 33, dcd: 1, sdf: 6, touchFlick: true };
     const saved = localStorage.getItem('tetrisTuning');
@@ -69,11 +85,17 @@ export const useConfig = () => {
         const localKeyConfig = localStorage.getItem('tetrisKeyConfig');
         const localShowGhost = localStorage.getItem('tetrisShowGhost');
         const localMinoSkin = localStorage.getItem('tetrisMinoSkin');
+        const localDisplayTheme = localStorage.getItem('tetrisDisplayTheme');
+        const localMapStyle = localStorage.getItem('tetrisMapStyle');
+        const localBackgroundStyle = localStorage.getItem('tetrisBackgroundStyle');
         
-        if (localTuning || localVolume || localKeyConfig || localShowGhost !== null || localMinoSkin !== null) {
+        if (localTuning || localVolume || localKeyConfig || localShowGhost !== null || localMinoSkin !== null || localDisplayTheme !== null || localMapStyle !== null || localBackgroundStyle !== null) {
           const payload: any = {};
           if (localShowGhost !== null) payload.showGhost = localShowGhost !== 'false';
           if (localMinoSkin !== null) payload.minoSkin = ['NEON', 'RETRO', 'MINIMAL'].includes(localMinoSkin) ? localMinoSkin : 'NEON';
+          if (localDisplayTheme !== null) payload.displayTheme = ['CYBER', 'ARCADE', 'MONO'].includes(localDisplayTheme) ? localDisplayTheme : 'CYBER';
+          if (localMapStyle !== null) payload.mapStyle = ['GRID', 'VOID', 'ARENA'].includes(localMapStyle) ? localMapStyle : 'GRID';
+          if (localBackgroundStyle !== null) payload.backgroundStyle = ['MATRIX', 'STARS', 'SOLID'].includes(localBackgroundStyle) ? localBackgroundStyle : 'MATRIX';
           if (localTuning) {
             payload.das = tuningRef.current.das;
             payload.arr = tuningRef.current.arr;
@@ -109,6 +131,9 @@ export const useConfig = () => {
           localStorage.removeItem('tetrisKeyConfig');
           localStorage.removeItem('tetrisShowGhost');
           localStorage.removeItem('tetrisMinoSkin');
+          localStorage.removeItem('tetrisDisplayTheme');
+          localStorage.removeItem('tetrisMapStyle');
+          localStorage.removeItem('tetrisBackgroundStyle');
         }
         // ---------------------------------
 
@@ -124,6 +149,9 @@ export const useConfig = () => {
             const gs = user.gameSettings;
             setShowGhost(gs.showGhost ?? true);
             setMinoSkin(gs.minoSkin === 'RETRO' || gs.minoSkin === 'MINIMAL' ? gs.minoSkin : 'NEON');
+            setDisplayTheme(gs.displayTheme === 'ARCADE' || gs.displayTheme === 'MONO' ? gs.displayTheme : 'CYBER');
+            setMapStyle(gs.mapStyle === 'VOID' || gs.mapStyle === 'ARENA' ? gs.mapStyle : 'GRID');
+            setBackgroundStyle(gs.backgroundStyle === 'STARS' || gs.backgroundStyle === 'SOLID' ? gs.backgroundStyle : 'MATRIX');
             setKeyConfig({ ...DEFAULT_KEYS, ...(gs.keyBindings ?? {}) });
             setTuning({ das: gs.das, arr: gs.arr, dcd: gs.dcd, sdf: gs.sdf, touchFlick: gs.touchFlick ?? true });
             setVolume({ se: gs.sfxEnabled ? gs.volume / 100 : 0, bgm: gs.musicEnabled ? gs.volume / 100 : 0 });
@@ -162,6 +190,9 @@ export const useConfig = () => {
     if (!token) {
       localStorage.setItem('tetrisShowGhost', String(showGhost));
       localStorage.setItem('tetrisMinoSkin', minoSkin);
+      localStorage.setItem('tetrisDisplayTheme', displayTheme);
+      localStorage.setItem('tetrisMapStyle', mapStyle);
+      localStorage.setItem('tetrisBackgroundStyle', backgroundStyle);
       localStorage.setItem('tetrisTuning', JSON.stringify(tuning));
       localStorage.setItem('tetrisVolume', JSON.stringify(volume));
       localStorage.setItem('tetrisKeyConfig', JSON.stringify(keyConfig));
@@ -183,6 +214,9 @@ export const useConfig = () => {
           body: JSON.stringify({
             showGhost,
             minoSkin,
+            displayTheme,
+            mapStyle,
+            backgroundStyle,
             das: tuning.das,
             arr: tuning.arr,
             dcd: tuning.dcd,
@@ -206,7 +240,13 @@ export const useConfig = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [tuning, volume, keyConfig, showGhost, minoSkin, isInitialized]);
+  }, [tuning, volume, keyConfig, showGhost, minoSkin, displayTheme, mapStyle, backgroundStyle, isInitialized]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.displayTheme = displayTheme.toLowerCase();
+    document.documentElement.dataset.backgroundStyle = backgroundStyle.toLowerCase();
+  }, [displayTheme, backgroundStyle]);
 
   useEffect(() => { listeningActionRef.current = listeningAction; }, [listeningAction]);
 
@@ -228,6 +268,9 @@ export const useConfig = () => {
     settingsError, reloadSettings: () => setLoadAttempt(value => value + 1),
     showGhost, setShowGhost,
     minoSkin, setMinoSkin,
+    displayTheme, setDisplayTheme,
+    mapStyle, setMapStyle,
+    backgroundStyle, setBackgroundStyle,
     tuning, setTuning, tuningRef,
     keyConfig, setKeyConfig, keyConfigRef,
     listeningAction, setListeningAction, listeningActionRef,

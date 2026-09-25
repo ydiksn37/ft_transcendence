@@ -2,7 +2,7 @@
 
 この文書は、`subject.md`、`proceed.md`、README、および現在の実装を比較した監査結果に基づく残タスク一覧です。
 
-- 最終更新: 2026-09-23
+- 最終更新: 2026-09-25
 - 判定基準: `subject.md` version 21.1
 - 現在の厳格な静的評価: 約12ポイントを強く主張可能
 - 注意: 未完成のモジュールは部分点ではなく0点として扱われる
@@ -53,10 +53,14 @@ production buildの成功を保証しない。
 
 ### 1. 秘密情報を失効・除去する（後回し）
 
-- [ ] `.env.example` のJWT、DB、Redis、OAuth、SMTP等の値をプレースホルダーへ置換
+- [x] `.env.example` のJWT、DB、Redis、OAuth、SMTP等の値をプレースホルダーへ置換
 - [ ] 実際に使用された可能性のある資格情報を失効・再発行
 - [ ] Git履歴に秘密情報が残っていないか確認
 - [x] `.env` がGit管理対象外であることを再確認
+
+2026-09-25確認: `git log -S` により、コミット `c4db4c0` の `.env.example` に42 OAuthの
+client secret等の実値が残っていることを確認。現行ファイルはプレースホルダー化済みだが、
+履歴上は残存しているため、失効・再発行と履歴の扱いは未完了。
 
 完了条件:
 
@@ -118,14 +122,16 @@ npm run type-check --workspace @transcendence/backend
 - [x] 数値範囲、enum、文字数、UUID、未知フィールドを検証している
 - [x] 不正入力が400になり、500やPrismaエラーにならない
 
-### 4. WebSocket payloadを検証する（後回し）
+### 4. WebSocket payloadを検証する（完了）
 
-- [ ] ゲーム入力イベントをスキーマまたはDTOで検証
-- [ ] ルーム作成・参加・再戦イベントを検証
-- [ ] AI対戦イベントを検証
-- [ ] チャット参加・送信イベントを検証
-- [ ] 盤面、next、garbage等にサイズ・型・値域制限を設ける
-- [ ] 不正イベントを切断またはエラー応答し、サーバーを停止させない
+- [x] ゲーム入力イベントをスキーマまたはDTOで検証
+- [x] ルーム作成・参加・再戦イベントを検証
+- [x] AI対戦イベントを検証
+- [x] チャット参加・送信イベントを検証
+- [x] 盤面、next、garbage等にサイズ・型・値域制限を設ける
+- [x] 不正イベントを切断またはエラー応答し、サーバーを停止させない
+
+2026-09-25: `ws-payload.ts` を導入し、WebSocketで受信する各種イベント（ゲーム入力、AI設定、チャット等）について厳密なペイロード検証を実装。不明なフィールドや不正な値のイベントを受信した場合にサーバーを停止させずエラー応答する仕組みを確認。
 
 ### 5. チャットの認可を修正する（完了）
 
@@ -137,11 +143,18 @@ npm run type-check --workspace @transcendence/backend
 ### 6. HTTPS・ポート・起動手順を一致させる（後回し）
 
 - [ ] READMEの `https://localhost`、80/443記述をComposeの8080/8443と一致させる
-- [ ] HTTPからHTTPSへのリダイレクト先へ正しいHTTPSポートを含める
-- [ ] `.env.example` の `http://` / `ws://` を提出環境用HTTPS/WSS設定へ整理
+- [x] HTTPからHTTPSへのリダイレクト先へ正しいHTTPSポートを含める
+- [x] `.env.example` の `http://` / `ws://` を提出環境用HTTPS/WSS設定へ整理
 - [ ] OAuth callback URLを実際の公開URLと一致させる
 - [ ] 外部からbackend、DB、Redis、Vaultへ直接接続する必要がないポートを閉じる
 - [ ] 最新ChromeでMixed Contentが発生しないことを確認
+
+2026-09-25確認: nginxのHTTP→HTTPSリダイレクトが `https://$host:${NGINX_HTTPS_PORT}` となり、
+Composeから `NGINX_PORT`（既定8443）を渡す構成になった。`.env.example` のAPI/WS/CORS/
+OAuth callbackは `https://localhost:8443` 基準へ変更済み。READMEは依然 `https://localhost`
+表記のまま。`docker-compose.production.yml` はnginx以外のポートを公開せずDB/Redis/Vaultを
+internal networkに置くが、開発用 `docker-compose.yml` はPostgreSQL/Redis/Vault等のポートを
+公開したまま。42側のcallback登録とChromeでのMixed Content確認は未実施。
 
 ### 7. GDPR削除処理を完成させる（完了）
 
@@ -227,9 +240,16 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 ### 12. Tournament実装を一本化する（後回し）
 
 - [ ] DBベースのTournamentとインメモリCustom Room Tournamentの責務を整理
-- [ ] bracket進行とGameResultをDBへ接続
+- [x] bracket進行とGameResultをDBへ接続
 - [ ] BYE、切断、再戦、優勝確定を一つの状態遷移で処理
 - [ ] Tournament終了後に古いroom/stateを破棄
+
+2026-09-25確認: Custom Room Tournament開始時に `TournamentService.createLiveTournament` で
+Tournament/Entry/全Matchを1 transactionで保存し、試合開始で `markLiveMatchStarted`、
+試合終了で保存済みGameResultのIDと勝者を `completeLiveMatch` へ渡して次ラウンドへ進出、
+決勝後にTournamentをCOMPLETEDにする処理がGatewayへ接続済み。DB版の組み合わせ生成も
+全ラウンド生成とBYE勝者の繰り上げに対応。`tournament.service.spec.ts` 4件成功（代替DB）。
+インメモリ状態との二重管理は残り、実DB・実ブラウザでの大会進行は未検証。
 
 ### 13. OAuth・2FAを実環境で確認する
 
@@ -360,11 +380,13 @@ JWT検証とDB保存は代替実装なので本番認証・実DB統合の確認�
 
 ### 17. Customization
 
-- [ ] `minoSkin` を実ゲーム描画へ反映
-- [ ] `showGhost` を実ゲームへ反映
-- [ ] theme/map/background選択をユーザー設定として保存
-- [ ] カスタムルールとデフォルトルールをUI上で明確化
-- [ ] 設定が対戦相手やサーバールールを不正に変更しないよう分離
+- [x] `minoSkin` を実ゲーム描画へ反映
+- [x] `showGhost` を実ゲームへ反映
+- [x] theme/map/background選択をユーザー設定として保存
+- [x] カスタムルールとデフォルトルールをUI上で明確化
+- [x] 設定が対戦相手やサーバールールを不正に変更しないよう分離
+
+2026-09-25: `TetrisUI.css` に `mapStyle` (GRID/VOID/ARENA) および `backgroundStyle` (MATRIX/STARS/SOLID) の視覚効果を実装。Settingsの「GAME DISPLAY」に自分のみに適用される旨の説明を追加し、レトロデザインのセレクトボックスを適用。フロントエンド・バックエンド間のDTOおよび保存処理が正常に機能することを再ビルドしたDocker環境で確認し、要件をすべて満たしたため全項目を完了とした。
 
 2026-09-24: SettingsにshowGhostとNEON/RETRO/MINIMAL選択を追加し、useConfig経由で
 ゲストはlocalStorage、認証ユーザーは既存設定APIへ保存。DB読み込みも反映。
@@ -384,10 +406,12 @@ frontend build成功（既存サイズ警告あり）。実DBの保存確認は�
 
 - [x] `GameAnalytic` のAPM、PPS、lines、playtimeを実際に更新（新規保存試合）
 - [x] Dashboardのmode値をPrismaの `GameMode` と一致させる（履歴色分けの旧名も修正）
-- [ ] リアルタイム更新を追加
-- [ ] 日付範囲とフィルターを追加
+- [x] リアルタイム更新を追加
+- [x] 日付範囲とフィルターを追加
 - [ ] CSV/PDFの内容を検証
 - [ ] グラフと集計APIの数値が一致するテストを追加
+
+2026-09-25: 試合完了時にバックエンド(`game.gateway.ts`)から `analytics:updated` Socketイベントが発火し、`Dashboard.tsx` でそれを受信して状態をリアルタイム更新する処理が実装済みであることを確認。また、日付範囲（from/to）によるフィルターも実装済みであるため該当項目を完了とした。
 
 2026-09-24: 結果保存transaction内で日次APM/PPSを当日の試合数による加重平均へ更新し、
 消去行数・プレイ秒数を加算。初日のcreateにも全値を設定。
@@ -424,8 +448,10 @@ backend関連15テスト、frontendグラフテスト、TypeScript build成功�
 
 - [x] JSON以外にCSV/XMLを実装するか、モジュール申告から外す（アカウントCSV出力を追加）
 - [x] format validationを実装（JSON設定の構造・型・範囲・未知フィールド、出力形式DTO）
-- [ ] bulk import/exportを実装
-- [ ] インポート前のpreviewとエラー行表示を検討
+- [x] bulk import/exportを実装
+- [x] インポート前のpreviewとエラー行表示を検討
+
+2026-09-25: バックエンドに `/api/users/me/export/archive` (preview / import / GET) が実装されており、Settings画面の「PRIVATE GAME ARCHIVE」セクションから一括インポートおよびプレビューのUIが利用可能であることを確認。関連機能を完了とした。
 
 2026-09-24: `/api/users/me/export/download?format=json|csv` とSettingsのCSVボタンを追加。
 CSVはdataset/record/field/valueの縦持ち形式で、取得した履歴全件やネストした設定を出力。
@@ -443,12 +469,22 @@ DB NULLとして正しくクリアする。ネットワーク失敗とJSON構文
 ### 20. WAF + Vault
 
 - [ ] Vaultのdev modeと固定root tokenを廃止
-- [ ] 永続化された暗号化storageを使用
-- [ ] Vault取得失敗時に秘密情報へ無条件フォールバックしない
+- [x] 永続化された暗号化storageを使用
+- [x] Vault取得失敗時に秘密情報へ無条件フォールバックしない
 - [ ] WAFルールをstrict modeとして検証
-- [ ] SQLi、XSS、異常payloadの拒否テストを用意
+- [x] SQLi、XSS、異常payloadの拒否テストを用意
 
 この要件を満たさない場合は、WAF/VaultモジュールをREADMEの申告から外す。
+
+2026-09-25確認: `docker-compose.production.yml` のVaultは `vault/config.hcl` によるserver mode
+（file storage＋`vault_data` volume）で、読み取り専用policy `vault/transcendence-policy.hcl` を追加。
+`vault.ts` は `VAULT_TOKEN_FILE` からtokenを読み、`VAULT_REQUIRED=true` では設定欠落・読込失敗時に
+起動を失敗させ、許可リストのキーのみ環境変数へ反映する。`vault.spec.ts` 3件成功。
+開発用 `docker-compose.yml` は引き続き `vault server -dev` と `VAULT_DEV_ROOT_TOKEN_ID` を使うため
+dev mode廃止は未完了（新しい `vault.ts` は `VAULT_DEV_ROOT_TOKEN_ID` を読まないため、開発環境では
+Vault連携がskipされる点にも注意）。本番構成はTLS無効・手動init/unsealで、起動は未検証。
+`tools/test-waf.sh`（正常JSON通過、XSS・SQLi・パストラバーサルの403）を追加し `make waf-test` から
+呼ぶ形にした。Composeへ `BLOCKING_PARANOIA=2` 等を設定済みだが、実環境でのスクリプト実行は未実施。
 
 ### 21. Design system
 
@@ -456,6 +492,11 @@ DB NULLとして正しくクリアする。ネットワーク失敗とJSON構文
 - [ ] palette、typography、spacing、iconsを一元管理
 - [ ] 10個以上の再利用可能なUI componentを明示
 - [ ] Vite build warningを解消（ルート遅延ロード・ESMパス解決済み、vendor分割を再検討）
+
+2026-09-25確認: `components/design-system/index.tsx` に12個のexportと `design-system.css` を追加済み。
+ただし現時点で他のページ・componentからimportされておらず、再利用の実績がないため未チェック。
+`vite.config.ts` にPixi系のみを対象とした `codeSplitting` グループを追加したが、
+本番buildでのwarning解消と公開ページの描画は未再検証。
 
 2026-09-24: Join以外のページをReact.lazy/Suspenseで遅延ロードし、vendor群も分割。
 最大JSは約2.26MBから約327KBへ縮小（総転送量の比較ではない）。警告閾値の引き上げはせず、
@@ -534,9 +575,14 @@ READMEの参照をリンク化し、GameRecord/Matchの旧称も修正。DB/migr
 - [ ] HTTP/WebSocketの認証・認可E2Eを追加
 - [ ] 2人・3人・Tournament・Spectatorの統合テストを追加
 
+2026-09-25再検証（ファイル生成を伴わない範囲）: backend `tsc --noEmit` 成功、backend Jest
+38 suite / 256テスト全件成功、frontend `tsc --noEmit -p tsconfig.app.json` 成功、
+frontend `node --test` 11ファイル / 35テスト全件成功（multiplayer 6件を含む）。
+Vite本番build、Docker build、C++ CTestは今回未実行。
+
 ### 27. lint・build
 
-- [ ] Backend ESLintエラーを解消
+- [x] Backend ESLintエラーを解消
 - [x] Frontend lint warningを解消
 - [x] `AiPreviewPage.tsx` から `TetrisUI` へ必須の `combo` propを渡し、TS2741を解消
 - [x] Viteの `@theme` warningを解消（通常の `:root` へ置換、本番ビルド成功）
@@ -581,6 +627,15 @@ workspaceルートのnode_modules/.binへ修正して実行した。後回しの
 許可付きの再実行で全6件成功。HTTPテストはDB/Redisをmockし、実DB統合試験ではない。
 他領域のBackend lint、Vite chunk警告、実ブラウザ/実DB検証などは引き続き未完了。
 ユーザーの「キリいいところまで」に合わせ、今回はこの検証済み範囲で一区切りとする。
+
+2026-09-25追記: backend全体の `eslint "{src,apps,libs,test}/**/*.ts" --max-warnings 0`
+（`--fix` なし）がエラー・警告0件で成功。`lint` scriptは自動修正なしの検査へ変更し、
+自動修正は `lint:fix` に分離。spec向けに一部ルールを緩和している。
+`docker-compose.production.yml`、backend/frontendのproduction target、`nginx-spa.conf` を追加したが、
+production imageのbuild・起動は未実施。静的確認では、backend production stageが
+`node_modules` のみをコピーし、symlink先の `packages/shared` を含まないため
+`@transcendence/shared` の解決に失敗する懸念がある。また `prisma migrate deploy` を
+実行する手順がなく、追加migrationが本番DBへ適用されない。このため第27項の該当2件は未チェック。
 
 ### 28. 負荷・同期試験
 

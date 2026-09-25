@@ -21,7 +21,13 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RegisterDto } from '../../auth/dto/register.dto';
-import { MinoSkin, Role } from '@prisma/client';
+import {
+  BackgroundStyle,
+  DisplayTheme,
+  MapStyle,
+  MinoSkin,
+  Role,
+} from '@prisma/client';
 
 export class KeyBindingsDto {
   @IsOptional()
@@ -107,6 +113,21 @@ export class UpdateGameSettingsDto {
   @IsOptional()
   @IsBoolean()
   showGhost?: boolean;
+
+  @ApiPropertyOptional({ enum: DisplayTheme })
+  @IsOptional()
+  @IsEnum(DisplayTheme)
+  displayTheme?: DisplayTheme;
+
+  @ApiPropertyOptional({ enum: MapStyle })
+  @IsOptional()
+  @IsEnum(MapStyle)
+  mapStyle?: MapStyle;
+
+  @ApiPropertyOptional({ enum: BackgroundStyle })
+  @IsOptional()
+  @IsEnum(BackgroundStyle)
+  backgroundStyle?: BackgroundStyle;
 
   @ApiPropertyOptional({ minimum: 0, maximum: 5000 })
   @IsOptional()

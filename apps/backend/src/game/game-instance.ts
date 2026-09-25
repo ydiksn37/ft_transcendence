@@ -131,7 +131,7 @@ export class GameInstance {
         durationSeconds: number;
       }
     >,
-  ) => void;
+  ) => void | Promise<void>;
 
   constructor(
     roomId: string,
@@ -141,7 +141,7 @@ export class GameInstance {
       roomId: string,
       winnerId: string | null,
       stats: Record<string, any>,
-    ) => void,
+    ) => void | Promise<void>,
     aiAgentService?: AiAgentService,
   ) {
     this.roomId = roomId;
@@ -316,13 +316,10 @@ export class GameInstance {
     if (this.aiDifficulty) {
       this.humanReady = false;
       this.pendingAiStart = beginSimulation;
-      this.simulationStartTimer = setTimeout(
-        () => {
-          this.simulationStartTimer = null;
-          if (this.humanReady) this.beginReadyAiMatch();
-        },
-        AI_MATCH_COUNTDOWN_MS,
-      );
+      this.simulationStartTimer = setTimeout(() => {
+        this.simulationStartTimer = null;
+        if (this.humanReady) this.beginReadyAiMatch();
+      }, AI_MATCH_COUNTDOWN_MS);
     } else {
       beginSimulation();
     }
@@ -330,8 +327,14 @@ export class GameInstance {
 
   /** The browser acknowledges only after its READY/input lock has ended. */
   confirmAiReady(socketId: string): void {
-    if (!this.isRunning || !this.aiDifficulty || !this.pendingAiStart ||
-        !this.players.has(socketId) || socketId === `ai_${this.roomId}`) return;
+    if (
+      !this.isRunning ||
+      !this.aiDifficulty ||
+      !this.pendingAiStart ||
+      !this.players.has(socketId) ||
+      socketId === `ai_${this.roomId}`
+    )
+      return;
     this.humanReady = true;
     if (!this.simulationStartTimer) this.beginReadyAiMatch();
   }
@@ -662,13 +665,18 @@ export class GameInstance {
     }
     player.board = clearedBoard;
     player.piecesPlaced++;
-    
+
     const perfectClear = isPerfectClear(player.board);
-    
+
     player.lastLock = {
       id: player.piecesPlaced,
       lines: linesCleared,
-      tSpinType: tspin === 'tspin' ? 't-spin' : (tspin === 'tspin_mini' ? 'mini-t-spin' : 'none'),
+      tSpinType:
+        tspin === 'tspin'
+          ? 't-spin'
+          : tspin === 'tspin_mini'
+            ? 'mini-t-spin'
+            : 'none',
       perfectClear: perfectClear,
     };
 
@@ -1100,7 +1108,11 @@ export class GameInstance {
             durationSeconds: duration,
           };
         });
-        this.onGameOver(this.roomId, winner?.socketId ?? null, stats);
+        void Promise.resolve(
+          this.onGameOver(this.roomId, winner?.socketId ?? null, stats),
+        ).catch((error: unknown) =>
+          console.error('[GameInstance] onGameOver callback failed', error),
+        );
       }
       this.stop();
     }
@@ -1177,10 +1189,7 @@ export class GameInstance {
           decision.actions[index + 1],
           this.aiActionIntervalMs,
         );
-        if (
-          index < decision.actions.length - 1 &&
-          replayDelayMs > 0
-        ) {
+        if (index < decision.actions.length - 1 && replayDelayMs > 0) {
           await new Promise<void>((resolve) =>
             setTimeout(resolve, replayDelayMs),
           );

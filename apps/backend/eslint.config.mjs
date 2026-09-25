@@ -35,7 +35,15 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/require-await': 'off',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
     },
   },
 );

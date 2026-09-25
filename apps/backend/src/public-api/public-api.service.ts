@@ -25,6 +25,9 @@ export class PublicApiService {
     return {
       minoSkin: dto.minoSkin ?? ('NEON' as const),
       showGhost: dto.showGhost ?? true,
+      displayTheme: dto.displayTheme ?? ('CYBER' as const),
+      mapStyle: dto.mapStyle ?? ('GRID' as const),
+      backgroundStyle: dto.backgroundStyle ?? ('MATRIX' as const),
       arr: dto.arr ?? 33,
       das: dto.das ?? 170,
       dcd: dto.dcd ?? 0,

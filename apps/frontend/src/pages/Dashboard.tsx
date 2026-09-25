@@ -9,6 +9,7 @@ import type { UserStats, GameRecordView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
 import { useConfig } from '../hooks/useConfig'
 import { startVisibleRefresh } from '../lib/visibleRefresh'
+import { io } from 'socket.io-client'
 import './Dashboard.css'
 import '../pages/JoinPage.css'
 import './LobbyPage.css' // Reuse back-btn
@@ -115,7 +116,20 @@ export default function Dashboard() {
 		}
 
 		const stopRefresh = startVisibleRefresh(fetchData);
-		return () => { stopRefresh(); controller.abort(); };
+		const socket = io(import.meta.env.VITE_WS_URL || window.location.origin, {
+			transports: ['websocket'],
+			auth: { token },
+		});
+		const handleAnalyticsUpdate = () => {
+			if (document.visibilityState === 'visible') void fetchData();
+		};
+		socket.on('analytics:updated', handleAnalyticsUpdate);
+		return () => {
+			stopRefresh();
+			controller.abort();
+			socket.off('analytics:updated', handleAnalyticsUpdate);
+			socket.disconnect();
+		};
 	}, [navigate, historyMode, historyResult, fromDate, toDate]);
 
 	if (loading) {

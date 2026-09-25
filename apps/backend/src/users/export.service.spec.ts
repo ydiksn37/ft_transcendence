@@ -29,6 +29,7 @@ describe('ExportService', () => {
     userGameSettings: { findUnique: jest.fn() },
     gameResult: { findMany: jest.fn() },
     sprintRecord: { findMany: jest.fn() },
+    importedGameArchive: { findMany: jest.fn(), createMany: jest.fn() },
   };
 
   beforeEach(() => {
@@ -38,6 +39,7 @@ describe('ExportService', () => {
     prisma.userGameSettings.findUnique.mockResolvedValue(null);
     prisma.gameResult.findMany.mockResolvedValue([]);
     prisma.sprintRecord.findMany.mockResolvedValue([]);
+    prisma.importedGameArchive.findMany.mockResolvedValue([]);
   });
 
   it('exports only explicitly allowed profile fields', async () => {

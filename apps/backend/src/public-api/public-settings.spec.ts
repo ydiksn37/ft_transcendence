@@ -65,6 +65,9 @@ describe('public owner settings CRUD', () => {
     expect(settings.update.mock.calls[0][0].data).toEqual({
       minoSkin: 'NEON',
       showGhost: false,
+      displayTheme: 'CYBER',
+      mapStyle: 'GRID',
+      backgroundStyle: 'MATRIX',
       arr: 33,
       das: 170,
       dcd: 0,

@@ -333,3 +333,32 @@
   z-index: 10;
   animation: flashWhite 0.3s ease-out forwards;
 }
+
+/* ── MAP STYLE ────────────────────────────────────────────── */
+/* GRID: デフォルト。枠線のみ（glow なし） */
+.tetris-ui-container.map-grid .tetris-board-container {
+  box-shadow: none;
+}
+
+/* VOID: 枠線・ボーダーを非表示にして空間に溶け込む */
+.tetris-ui-container.map-void .tetris-board-container {
+  box-shadow: none;
+  border-color: transparent;
+}
+
+/* ARENA: 角丸で競技場風 */
+.tetris-ui-container.map-arena .tetris-board-container {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── BACKGROUND STYLE ─────────────────────────────────────── */
+/* SOLID: 単色背景 */
+.tetris-ui-container.background-solid {
+  background-color: var(--color-surface);
+}
+
+/* STARS: 星空サイズ調整 */
+.tetris-ui-container.background-stars {
+  background-size: 160px 160px, 230px 230px, auto;
+}

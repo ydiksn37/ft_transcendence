@@ -31,9 +31,7 @@ RUN npx turbo run build --filter=@transcendence/frontend
 FROM nginx:1.27-alpine AS production
 
 COPY --from=builder /app/apps/frontend/dist /usr/share/nginx/html
-
-# nginx-spa.conf は用意されていない場合は後で作成します。
-# COPY nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY apps/frontend/nginx-spa.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

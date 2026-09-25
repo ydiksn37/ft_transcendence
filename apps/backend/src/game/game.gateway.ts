@@ -12,14 +12,14 @@ import {
 import { Namespace, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { resolve } from 'node:path';
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { JwtService } from '@nestjs/jwt';
 import {
-  ClientEvent,
-  ServerEvent,
-  Cell,
-  isAiDifficulty,
-} from '@transcendence/shared';
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
+import { JwtService } from '@nestjs/jwt';
+import { ClientEvent, ServerEvent } from '@transcendence/shared';
 import type {
   AiAgentModel,
   AiDifficulty,
@@ -30,7 +30,25 @@ import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { generateTournamentBracket, Tournament } from './tournament.utils';
+import { TournamentService } from '../tournament/tournament.service';
+import {
+  generateTournamentBracket,
+  Tournament,
+  TournamentNode,
+} from './tournament.utils';
+import {
+  parseAiMatch,
+  parseAiPreview,
+  parseBoardUpdate,
+  parseChatJoin,
+  parseChatMessage,
+  parseCustomRoomId,
+  parseCustomRoomName,
+  parseGameInput,
+  parseGarbage,
+  parseOptionalRoomId,
+  WsPayloadError,
+} from './ws-payload';
 
 interface CustomRoom {
   roomId: string;
@@ -46,6 +64,8 @@ interface CustomRoom {
   isPlaying: boolean;
   isTournamentActive?: boolean;
   tournament?: Tournament;
+  databaseTournamentId?: string;
+  databaseMatchIds?: Record<string, string>;
 }
 
 interface GuestSession {
@@ -64,7 +84,14 @@ interface GuestSession {
 const GUEST_RECONNECT_GRACE_MS = 15_000;
 
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: {
+    origin: (process.env.ALLOWED_ORIGINS ?? 'https://localhost:8443')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+    credentials: true,
+  },
+  maxHttpBufferSize: 64 * 1024,
   namespace: '/',
 })
 export class GameGateway
@@ -91,7 +118,28 @@ export class GameGateway
     private readonly aiAgentService: AiAgentService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly tournamentService: TournamentService,
   ) {}
+
+  private parsePayload<T>(
+    client: Socket,
+    parser: (value: unknown) => T,
+    value: unknown,
+  ): T | undefined {
+    try {
+      return parser(value);
+    } catch (error: unknown) {
+      const message =
+        error instanceof WsPayloadError ? error.message : 'invalid payload';
+      if (typeof client.emit === 'function') {
+        client.emit(ServerEvent.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message,
+        });
+      }
+      return undefined;
+    }
+  }
 
   afterInit() {
     this.logger.log('GameGateway initialized');
@@ -137,8 +185,10 @@ export class GameGateway
 
     const isGuestGameSession = client.handshake.auth?.guestGameSession === true;
     if (isGuestGameSession) {
-      const { session, reconnectToken, resumed } =
-        this.connectGuestSession(client, authenticatedUserId);
+      const { session, reconnectToken, resumed } = this.connectGuestSession(
+        client,
+        authenticatedUserId,
+      );
       setTimeout(() => {
         if (!client.connected) return;
         client.emit('session:ready', {
@@ -186,12 +236,7 @@ export class GameGateway
       guestSession.socketId === client.id &&
       this.canRestoreGuest(client.id, roomId, gameRoomId)
     ) {
-      this.reserveGuestReconnect(
-        guestSession,
-        client,
-        roomId,
-        gameRoomId,
-      );
+      this.reserveGuestReconnect(guestSession, client, roomId, gameRoomId);
       return;
     }
 
@@ -414,8 +459,7 @@ export class GameGateway
     newSocketId: string,
   ): void {
     if (tournament.playerNames[oldSocketId]) {
-      tournament.playerNames[newSocketId] =
-        tournament.playerNames[oldSocketId];
+      tournament.playerNames[newSocketId] = tournament.playerNames[oldSocketId];
       delete tournament.playerNames[oldSocketId];
     }
     tournament.matches.forEach((match) => {
@@ -520,7 +564,6 @@ export class GameGateway
     roomId: string | null,
     gameRoomId: string | null,
   ): void {
-
     // ゲーム中だった場合
     if (gameRoomId) {
       const room = this.rooms.get(gameRoomId);
@@ -570,7 +613,10 @@ export class GameGateway
             }
           }
           activeRoom.players.forEach((p) => {
-            if (this.clientRoom.get(p.socket.id) === roomId && p.socket.id !== client.id) {
+            if (
+              this.clientRoom.get(p.socket.id) === roomId &&
+              p.socket.id !== client.id
+            ) {
               p.socket.emit('custom_room_state', {
                 inRoom: true,
                 roomId: activeRoom.roomId,
@@ -612,6 +658,7 @@ export class GameGateway
     gameMode: 'VERSUS' | 'AI' | 'TOURNAMENT',
     isAiGame: boolean,
     aiDifficulty?: AiDifficulty,
+    tournamentMatchId?: string,
   ) {
     const socketIds = Object.keys(stats);
     if (socketIds.length < 2) return;
@@ -623,12 +670,17 @@ export class GameGateway
     const winnerUserId = winnerSocketId ? stats[winnerSocketId]?.userId : null;
 
     try {
-      await this.gameService.saveResult({
+      const result = await this.gameService.saveResult({
         roomId,
         player1Id: p1Stats.userId,
         player2Id: p2Stats.userId,
         winnerId: winnerUserId,
-        winnerPlayer: winnerSocketId === p1SocketId ? 1 : winnerSocketId === p2SocketId ? 2 : null,
+        winnerPlayer:
+          winnerSocketId === p1SocketId
+            ? 1
+            : winnerSocketId === p2SocketId
+              ? 2
+              : null,
         isAiGame,
         aiDifficulty,
         player1Apm: p1Stats.apm,
@@ -648,9 +700,25 @@ export class GameGateway
           p2Stats.durationSeconds,
         ),
         gameMode: gameMode,
+        tournamentMatchId,
       });
+      const affectedUsers = new Set(
+        [p1Stats.userId, p2Stats.userId].filter(
+          (userId): userId is string => typeof userId === 'string',
+        ),
+      );
+      this.server.sockets.forEach((socket) => {
+        if (affectedUsers.has(socket.data.userId as string)) {
+          socket.emit('analytics:updated', {
+            roomId,
+            completedAt: new Date().toISOString(),
+          });
+        }
+      });
+      return result.id;
     } catch (e) {
       this.logger.error('Failed to save game result', e);
+      return null;
     }
   }
 
@@ -701,13 +769,15 @@ export class GameGateway
         player2: client.id,
         players: [opponent.id, client.id],
         displayNames: {
-          [opponent.id]: p1Username || (opponent.data?.userId as string) || 'Player 1',
-          [client.id]: p2Username || (client.data?.userId as string) || 'Player 2',
+          [opponent.id]:
+            p1Username || (opponent.data?.userId as string) || 'Player 1',
+          [client.id]:
+            p2Username || (client.data?.userId as string) || 'Player 2',
         },
         users: {
           [opponent.id]: { username: p1Username },
           [client.id]: { username: p2Username },
-        }
+        },
       });
 
       // ゲームスタート
@@ -730,8 +800,10 @@ export class GameGateway
   @SubscribeMessage('game:create_custom_room')
   handleCreateCustomRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { name?: string },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseCustomRoomName, payload);
+    if (!data) return;
     // 既存の自分のルームがあれば削除（1人1ルーム）
     for (const [rId, room] of this.customRooms.entries()) {
       if (room.ownerSocketId === client.id) {
@@ -787,13 +859,14 @@ export class GameGateway
   @SubscribeMessage('game:update_custom_room_id')
   handleUpdateCustomRoomId(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { newRoomId: string },
+    @MessageBody() payload: unknown,
   ) {
-    const newId = data.newRoomId.trim().toUpperCase();
-    if (!newId || newId.length === 0) {
-      client.emit('error', { message: 'Invalid Room ID' });
-      return;
-    }
+    const newId = this.parsePayload(
+      client,
+      (value) => parseCustomRoomId(value, 'newRoomId'),
+      payload,
+    );
+    if (!newId) return;
 
     if (this.customRooms.has(newId)) {
       client.emit('error', { message: 'Room ID already exists' });
@@ -881,7 +954,7 @@ export class GameGateway
       if (!room.isTournamentActive) {
         room.players = room.players.filter((p) => p.socket.id !== client.id);
       }
-      
+
       const hasActivePlayers = room.players.some(
         (p) =>
           p.socket.id !== client.id &&
@@ -904,7 +977,10 @@ export class GameGateway
           }
         }
         room.players.forEach((p) => {
-          if (this.clientRoom.get(p.socket.id) === roomId && p.socket.id !== client.id) {
+          if (
+            this.clientRoom.get(p.socket.id) === roomId &&
+            p.socket.id !== client.id
+          ) {
             p.socket.emit('custom_room_state', {
               inRoom: true,
               roomId: room.roomId,
@@ -932,20 +1008,24 @@ export class GameGateway
   @SubscribeMessage('game:join_custom_room')
   handleJoinCustomRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string },
+    @MessageBody() payload: unknown,
   ) {
-    const room = this.customRooms.get(data.roomId);
+    const roomId = this.parsePayload(client, parseCustomRoomId, payload);
+    if (!roomId) return;
+    const room = this.customRooms.get(roomId);
     if (!room) {
       client.emit('error', { message: 'ルームが見つかりません' });
       return;
     }
-    const existingSameSocketIndex = room.players.findIndex((p) => p.socket.id === client.id);
+    const existingSameSocketIndex = room.players.findIndex(
+      (p) => p.socket.id === client.id,
+    );
     if (existingSameSocketIndex !== -1) {
       // Already in room.players (e.g., they clicked leave but were kept because tournament was active).
       // Seamlessly rejoin them to the socket.io room and update state.
       this.clientRoom.set(client.id, room.roomId);
       client.join(room.roomId);
-      
+
       const payload = {
         inRoom: true,
         roomId: room.roomId,
@@ -961,25 +1041,27 @@ export class GameGateway
         tournament: room.tournament,
       };
       client.emit('custom_room_state', payload);
-      
+
       // Update others
-      room.players.forEach(p => {
-        if (p.socket.id !== client.id) p.socket.emit('custom_room_players_updated', { players: payload.players });
+      room.players.forEach((p) => {
+        if (p.socket.id !== client.id)
+          p.socket.emit('custom_room_players_updated', {
+            players: payload.players,
+          });
       });
       return;
     }
 
     let isReconnecting = false;
-    console.log(`[handleJoinCustomRoom] Client ${client.id} joining ${data.roomId}. isTournamentActive: ${room.isTournamentActive}`);
     if (room.isTournamentActive) {
       const userId = (client.data?.userId as string) ?? null;
       const guestSessionId =
         (client.data?.guestSessionId as string | undefined) ?? null;
-      
+
       // Find a player with the same userId.
       // If anonymous (null), require them to be disconnected to prevent hijacking other anonymous players.
       // If authenticated, allow hijacking their own slot to avoid race conditions on page reload.
-      const existingPlayerIndex = room.players.findIndex(p => {
+      const existingPlayerIndex = room.players.findIndex((p) => {
         if (userId === null)
           return (
             guestSessionId !== null &&
@@ -988,31 +1070,36 @@ export class GameGateway
           );
         return p.userId === userId;
       });
-      
+
       if (existingPlayerIndex === -1) {
-        client.emit('error', { message: 'トーナメント進行中は新規参加できません' });
+        client.emit('error', {
+          message: 'トーナメント進行中は新規参加できません',
+        });
         return;
       }
-      
+
       isReconnecting = true;
       const oldSocketId = room.players[existingPlayerIndex].socket.id;
       room.players[existingPlayerIndex].socket = client;
-      
+
       if (room.tournament) {
         if (room.tournament.playerNames[oldSocketId]) {
-          room.tournament.playerNames[client.id] = room.tournament.playerNames[oldSocketId];
+          room.tournament.playerNames[client.id] =
+            room.tournament.playerNames[oldSocketId];
           delete room.tournament.playerNames[oldSocketId];
         }
-        const updateSocketId = (matches: any[]) => {
-          matches.forEach(m => {
-            m.playerIds = m.playerIds.map((id: string) => id === oldSocketId ? client.id : id);
+        const updateSocketId = (matches: TournamentNode[]) => {
+          matches.forEach((m) => {
+            m.playerIds = m.playerIds.map((id: string) =>
+              id === oldSocketId ? client.id : id,
+            );
             if (m.winnerId === oldSocketId) m.winnerId = client.id;
             if (m.children) updateSocketId(m.children);
           });
         };
         updateSocketId(room.tournament.matches);
       }
-      
+
       if (room.ownerSocketId === oldSocketId) {
         room.ownerSocketId = client.id;
       } else if (
@@ -1026,7 +1113,7 @@ export class GameGateway
       }
     } else {
       let lowest = 1;
-      while (room.players.some(p => p.username === `Player ${lowest}`)) {
+      while (room.players.some((p) => p.username === `Player ${lowest}`)) {
         lowest++;
       }
       room.players.push({
@@ -1059,7 +1146,10 @@ export class GameGateway
     });
 
     room.players.forEach((p) => {
-      if (p.socket.id !== client.id && this.clientRoom.get(p.socket.id) === room.roomId) {
+      if (
+        p.socket.id !== client.id &&
+        this.clientRoom.get(p.socket.id) === room.roomId
+      ) {
         p.socket.emit('custom_room_players_updated', {
           players: room.players.map((pl) => ({
             socketId: pl.socket.id,
@@ -1082,13 +1172,17 @@ export class GameGateway
           client.join(gameRoomId);
           const displayNames: Record<string, string> = {};
           room.players.forEach((p, idx) => {
-            displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+            displayNames[p.socket.id] = p.username
+              ? p.username
+              : p.userId
+                ? p.userId
+                : `Player ${idx + 1}`;
           });
           client.emit('spectating', {
             roomId: gameRoomId,
             displayNames,
             players: activeMatch.playerIds,
-            isStarted: instance.isStarted
+            isStarted: instance.isStarted,
           });
           instance.broadcastSnapshot();
         }
@@ -1098,12 +1192,28 @@ export class GameGateway
   }
 
   @SubscribeMessage('game:create_tournament')
-  handleCreateTournament(@ConnectedSocket() client: Socket) {
+  async handleCreateTournament(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     const room = this.customRooms.get(roomId);
-    if (!room || room.ownerSocketId !== client.id || room.players.length < 4)
+    if (
+      !room ||
+      room.ownerSocketId !== client.id ||
+      ![4, 8, 16].includes(room.players.length)
+    )
       return;
+
+    const participantIds = room.players.map((player) => player.userId);
+    if (
+      participantIds.some((userId) => userId === null) ||
+      new Set(participantIds).size !== participantIds.length
+    ) {
+      client.emit(ServerEvent.ERROR, {
+        message:
+          'トーナメントは重複のない4、8、16名のログインユーザーが必要です',
+      });
+      return;
+    }
 
     room.isTournamentActive = true;
     const playerIds = room.players.map((p) => p.socket.id);
@@ -1116,11 +1226,68 @@ export class GameGateway
 
     room.tournament = generateTournamentBracket(playerIds, playerNames);
 
+    const roundCache = new Map<string, number>();
+    const roundFor = (node: TournamentNode): number => {
+      const cached = roundCache.get(node.id);
+      if (cached) return cached;
+      const childMatches = node.children.filter(
+        (child) => child.type === 'MATCH',
+      );
+      const round =
+        childMatches.length === 0
+          ? 1
+          : Math.max(...childMatches.map(roundFor)) + 1;
+      roundCache.set(node.id, round);
+      return round;
+    };
+    const matchNumbers = new Map<number, number>();
+    const socketToUser = new Map(
+      room.players.map((player) => [player.socket.id, player.userId as string]),
+    );
+    const persistentMatches = room.tournament.matches.map((match) => {
+      const round = roundFor(match);
+      const matchNumber = (matchNumbers.get(round) ?? 0) + 1;
+      matchNumbers.set(round, matchNumber);
+      return {
+        clientMatchId: match.id,
+        round,
+        matchNumber,
+        player1Id: match.playerIds[0]
+          ? (socketToUser.get(match.playerIds[0]) ?? null)
+          : null,
+        player2Id: match.playerIds[1]
+          ? (socketToUser.get(match.playerIds[1]) ?? null)
+          : null,
+        status: 'PENDING' as const,
+      };
+    });
+    try {
+      const persisted = await this.tournamentService.createLiveTournament(
+        room.name,
+        client.data.userId as string,
+        participantIds as string[],
+        persistentMatches,
+      );
+      room.databaseTournamentId = persisted.tournamentId;
+      room.databaseMatchIds = persisted.matchIds;
+    } catch (error: unknown) {
+      room.isTournamentActive = false;
+      room.tournament = undefined;
+      room.databaseTournamentId = undefined;
+      room.databaseMatchIds = undefined;
+      client.emit(ServerEvent.ERROR, {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'トーナメントを保存できませんでした',
+      });
+      return;
+    }
+
     // Broadcast tournament state
     room.players.forEach((p) => {
       p.socket.emit('tournament_state', { tournament: room.tournament });
     });
-
   }
 
   @SubscribeMessage('game:start_tournament_match')
@@ -1129,7 +1296,7 @@ export class GameGateway
     if (!roomId) return;
     const room = this.customRooms.get(roomId);
     if (!room || room.ownerSocketId !== client.id || !room.tournament) return;
-    
+
     // Only start if not already playing and not finished
     if (!room.isPlaying && !room.tournament.root.winnerId) {
       this.startNextTournamentRound(roomId);
@@ -1218,6 +1385,16 @@ export class GameGateway
       startedCount++;
       currentMatch.isPlaying = true;
 
+      const databaseTournamentId = room.databaseTournamentId;
+      const databaseMatchId = room.databaseMatchIds?.[currentMatch.id];
+      if (databaseTournamentId && databaseMatchId) {
+        void this.tournamentService
+          .markLiveMatchStarted(databaseTournamentId, databaseMatchId)
+          .catch((error: unknown) =>
+            this.logger.error('Failed to mark tournament match started', error),
+          );
+      }
+
       const gameRoomId = `${roomId}_${currentMatch.id}`;
       const seed = Math.floor(Math.random() * 2147483647);
 
@@ -1225,10 +1402,45 @@ export class GameGateway
         gameRoomId,
         this.server,
         seed,
-        (rId, winnerSocketId, stats) => {
+        async (rId, winnerSocketId, stats) => {
           currentMatch.winnerId =
             winnerSocketId || activePlayerSockets[0]?.socket.id || '';
           currentMatch.isPlaying = false;
+
+          const gameResultId = await this.saveGameStats(
+            rId,
+            winnerSocketId,
+            stats,
+            'TOURNAMENT',
+            false,
+            undefined,
+            databaseMatchId,
+          );
+          const winnerUserId = winnerSocketId
+            ? activePlayerSockets.find(
+                (player) => player.socket.id === winnerSocketId,
+              )?.userId
+            : null;
+          if (
+            databaseTournamentId &&
+            databaseMatchId &&
+            gameResultId &&
+            winnerUserId
+          ) {
+            await this.tournamentService
+              .completeLiveMatch(
+                databaseTournamentId,
+                databaseMatchId,
+                winnerUserId,
+                gameResultId,
+              )
+              .catch((error: unknown) =>
+                this.logger.error(
+                  'Failed to persist tournament match result',
+                  error,
+                ),
+              );
+          }
 
           const parentMatch = tournament.matches.find((m) =>
             m.children.some((c) => c.id === currentMatch.id),
@@ -1237,8 +1449,12 @@ export class GameGateway
             parentMatch.playerIds.push(currentMatch.winnerId);
           } else if (currentMatch.id === tournament.root.id) {
             room.isTournamentActive = false;
-            console.log(`[Tournament End] Tournament finished for room ${roomId}. isTournamentActive set to false.`);
-            this.server.to(gameRoomId).emit('tournament_win', { winnerId: currentMatch.winnerId });
+            console.log(
+              `[Tournament End] Tournament finished for room ${roomId}. isTournamentActive set to false.`,
+            );
+            this.server
+              .to(gameRoomId)
+              .emit('tournament_win', { winnerId: currentMatch.winnerId });
           }
 
           for (const [sid, rId] of this.clientGameRoom.entries()) {
@@ -1282,11 +1498,15 @@ export class GameGateway
 
       const users: Record<string, { username: string | null }> = {};
       const displayNames: Record<string, string> = {};
-      
+
       const customRoom = this.customRooms.get(roomId);
       if (customRoom) {
         customRoom.players.forEach((p, idx) => {
-          displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+          displayNames[p.socket.id] = p.username
+            ? p.username
+            : p.userId
+              ? p.userId
+              : `Player ${idx + 1}`;
         });
       }
 
@@ -1343,14 +1563,18 @@ export class GameGateway
               p.socket.join(gameRoomId);
               const displayNames: Record<string, string> = {};
               room.players.forEach((rp, idx) => {
-                displayNames[rp.socket.id] = rp.username ? rp.username : (rp.userId ? rp.userId : `Player ${idx + 1}`);
+                displayNames[rp.socket.id] = rp.username
+                  ? rp.username
+                  : rp.userId
+                    ? rp.userId
+                    : `Player ${idx + 1}`;
               });
 
               p.socket.emit('spectating', {
                 roomId: gameRoomId,
                 displayNames,
                 players: firstStartedMatch.playerIds,
-                isStarted: instance.isStarted
+                isStarted: instance.isStarted,
               });
               instance.broadcastSnapshot();
             }
@@ -1436,7 +1660,11 @@ export class GameGateway
     room.players.forEach((p, idx) => {
       instance.addPlayer(p.socket.id, p.userId);
       users[p.socket.id] = { username: p.username };
-      displayNames[p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+      displayNames[p.socket.id] = p.username
+        ? p.username
+        : p.userId
+          ? p.userId
+          : `Player ${idx + 1}`;
       playersArray.push(p.socket.id);
     });
 
@@ -1457,12 +1685,10 @@ export class GameGateway
   @SubscribeMessage('game:start_vs_ai')
   handleStartVsAi(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { difficulty?: unknown; actionDelayMs?: unknown },
+    @MessageBody() payload: unknown,
   ) {
-    if (!isAiDifficulty(data?.difficulty)) {
-      client.emit(ServerEvent.ERROR, { message: 'Invalid AI difficulty' });
-      return;
-    }
+    const data = this.parsePayload(client, parseAiMatch, payload);
+    if (!data) return;
     const difficulty = data.difficulty;
 
     const roomId = `ai_${Date.now()}_${client.id}`;
@@ -1490,12 +1716,16 @@ export class GameGateway
     this.rooms.set(roomId, instance);
 
     client.emit(ServerEvent.MATCH_FOUND, { roomId, seed, vsAi: true });
-    const actionDelayMs = this.clampInteger(data.actionDelayMs, 50, 0, 1000);
-    instance.start(difficulty, actionDelayMs);
+    instance.start(difficulty, data.actionDelayMs);
   }
 
   @SubscribeMessage('game:ai_ready')
-  handleAiReady(@ConnectedSocket() client: Socket, @MessageBody() data: { roomId?: string }) {
+  handleAiReady(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+  ) {
+    const data = this.parsePayload(client, parseOptionalRoomId, payload);
+    if (!data) return;
     const roomId = this.clientRoom.get(client.id);
     if (!roomId || data?.roomId !== roomId) return;
     this.rooms.get(roomId)?.confirmAiReady(client.id);
@@ -1505,8 +1735,10 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.START_AI_PREVIEW)
   handleStartAiPreview(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: AiPreviewStartRequest,
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseAiPreview, payload);
+    if (!data) return;
     const allowedModels: AiAgentModel[] = ['easy', 'hard', 'expert'];
     const mode = data?.mode === 'versus' ? 'versus' : 'solo';
     const model = allowedModels.includes(data?.model) ? data.model : null;
@@ -1589,15 +1821,19 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.SET_AI_PREVIEW_SPEED)
   handleSetAiPreviewSpeed(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { actionDelayMs?: number },
+    @MessageBody() payload: unknown,
   ) {
+    const parsed = this.parsePayload(
+      client,
+      (value) => parseAiPreview({ model: 'easy', ...(value as object) }),
+      payload,
+    );
+    if (!parsed) return;
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     this.rooms
       .get(roomId)
-      ?.setCppPreviewActionDelay(
-        this.clampInteger(data?.actionDelayMs, 100, 0, 1000),
-      );
+      ?.setCppPreviewActionDelay(parsed.actionDelayMs ?? 100);
   }
 
   @SubscribeMessage(ClientEvent.STOP_AI_PREVIEW)
@@ -1614,7 +1850,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.MOVE_LEFT)
   handleMoveLeft(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.MOVE_LEFT, input);
   }
@@ -1622,7 +1858,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.MOVE_RIGHT)
   handleMoveRight(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.MOVE_RIGHT, input);
   }
@@ -1630,7 +1866,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.ROTATE_CW)
   handleRotateCw(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.ROTATE_CW, input);
   }
@@ -1638,7 +1874,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.ROTATE_CCW)
   handleRotateCcw(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.ROTATE_CCW, input);
   }
@@ -1646,7 +1882,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.ROTATE_180)
   handleRotate180(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.ROTATE_180, input);
   }
@@ -1654,7 +1890,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.SOFT_DROP)
   handleSoftDrop(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.SOFT_DROP, input);
   }
@@ -1662,7 +1898,7 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.HARD_DROP)
   handleHardDrop(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.HARD_DROP, input);
   }
@@ -1670,12 +1906,12 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.HOLD)
   handleHold(
     @ConnectedSocket() client: Socket,
-    @MessageBody() input?: GameInput,
+    @MessageBody() input?: unknown,
   ) {
     this.routeInput(client.id, ClientEvent.HOLD, input);
   }
 
-  private routeInput(socketId: string, event: string, input?: GameInput): void {
+  private routeInput(socketId: string, event: string, payload?: unknown): void {
     // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
     const gameRoomId = this.clientGameRoom.get(socketId);
     const roomId = this.clientRoom.get(socketId);
@@ -1687,8 +1923,13 @@ export class GameGateway
       room.applyInput(socketId, event);
       return;
     }
+    let input: GameInput;
+    try {
+      input = parseGameInput(payload);
+    } catch {
+      return;
+    }
     if (
-      !input ||
       input.roomId !==
         (gameRoomId && this.rooms.has(gameRoomId) ? gameRoomId : roomId) ||
       !Number.isSafeInteger(input.pieceId) ||
@@ -1712,8 +1953,10 @@ export class GameGateway
   @SubscribeMessage('board_update')
   handleBoardUpdate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { stage: Cell[][]; score: number },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseBoardUpdate, payload);
+    if (!data) return;
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
     const gameRoomId = this.clientGameRoom.get(client.id) ?? roomId;
@@ -1740,8 +1983,10 @@ export class GameGateway
   @SubscribeMessage('send_garbage')
   handleSendGarbage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { lines: number; generated?: number },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseGarbage, payload);
+    if (!data) return;
     // clientGameRoom を優先（トーナメント中など）、なければ clientRoom を使う
     const gameRoomId = this.clientGameRoom.get(client.id);
     const roomId = this.clientRoom.get(client.id);
@@ -1836,12 +2081,13 @@ export class GameGateway
     }
   }
 
-
   @SubscribeMessage(ClientEvent.SPECTATE)
   handleSpectate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId?: string },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseOptionalRoomId, payload);
+    if (!data) return;
     let targetRoomId = data?.roomId;
     if (!targetRoomId) {
       targetRoomId = this.clientRoom.get(client.id);
@@ -1897,15 +2143,21 @@ export class GameGateway
     if (customRoom) {
       displayNames = {};
       customRoom.players.forEach((p, idx) => {
-        displayNames![p.socket.id] = p.username ? p.username : (p.userId ? p.userId : `Player ${idx + 1}`);
+        displayNames![p.socket.id] = p.username
+          ? p.username
+          : p.userId
+            ? p.userId
+            : `Player ${idx + 1}`;
       });
       if (customRoom.tournament) {
-        const activeMatch = customRoom.tournament.matches.find(m => m.isPlaying);
+        const activeMatch = customRoom.tournament.matches.find(
+          (m) => m.isPlaying,
+        );
         if (activeMatch) {
           playersArr = activeMatch.playerIds;
         }
       } else {
-        playersArr = customRoom.players.map(p => p.socket.id);
+        playersArr = customRoom.players.map((p) => p.socket.id);
       }
     }
 
@@ -1913,7 +2165,7 @@ export class GameGateway
       roomId: gameRoomId,
       displayNames,
       players: playersArr,
-      isStarted: room.isStarted
+      isStarted: room.isStarted,
     });
     room.broadcastSnapshot();
   }
@@ -1922,8 +2174,10 @@ export class GameGateway
   @SubscribeMessage('chat:join')
   async handleJoinChatRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string },
+    @MessageBody() payload: unknown,
   ) {
+    const data = this.parsePayload(client, parseChatJoin, payload);
+    if (!data) return;
     const userId = client.data?.userId;
     if (typeof userId !== 'string') {
       client.emit(ServerEvent.ERROR, { message: 'チャットには認証が必要です' });
@@ -1949,9 +2203,10 @@ export class GameGateway
   @SubscribeMessage(ClientEvent.CHAT_MESSAGE)
   async handleChatMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string; content: string },
+    @MessageBody() payload: unknown,
   ) {
-    if (!data.content?.trim()) return;
+    const data = this.parsePayload(client, parseChatMessage, payload);
+    if (!data) return;
     const userId = client.data?.userId;
     if (typeof userId !== 'string') {
       client.emit(ServerEvent.ERROR, { message: 'チャットには認証が必要です' });
@@ -1962,7 +2217,7 @@ export class GameGateway
       const savedMsg = await this.chatService.saveMessage(
         data.roomId,
         userId,
-        data.content.trim().substring(0, 500),
+        data.content,
       );
       const message = {
         id: savedMsg.id,

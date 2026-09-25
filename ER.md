@@ -4,7 +4,7 @@
 `node tools/schema-doc.cjs --check` で同期を検証できます。DB接続・migrationは行いません。
 
 正本: [schema.prisma](apps/backend/prisma/schema.prisma)。テーブルはPrismaモデル名で表記しています。
-総テーブル数: **19** / enum数: **12**。実DBへのmigration適用状況を証明する図ではありません。
+総テーブル数: **20** / enum数: **15**。実DBへのmigration適用状況を証明する図ではありません。
 
 ## ER図
 
@@ -62,6 +62,9 @@ erDiagram
         String userId FK,UK
         MinoSkin minoSkin
         Boolean showGhost
+        DisplayTheme displayTheme
+        MapStyle mapStyle
+        BackgroundStyle backgroundStyle
         Int arr
         Int das
         Int dcd
@@ -244,6 +247,20 @@ erDiagram
         Int pieces "nullable"
         DateTime createdAt
     }
+    ImportedGameArchive {
+        String id PK
+        String userId FK
+        DateTime playedAt
+        String mode
+        String result
+        String opponent "nullable"
+        Int score "nullable"
+        Decimal apm "nullable"
+        Decimal pps "nullable"
+        Int lines "nullable"
+        String sourceFormat
+        DateTime createdAt
+    }
     User ||..o| UserStats : "user (userId)"
     User ||..o| UserGameSettings : "user (userId)"
     User |o..o{ GameResult : "player1 (player1Id)"
@@ -273,9 +290,10 @@ erDiagram
     User ||..o{ ApiKey : "user (userId)"
     User |o..o{ FileUpload : "uploader (uploaderId)"
     User ||..o{ SprintRecord : "user (userId)"
+    User ||..o{ ImportedGameArchive : "user (userId)"
 ```
 
-FKリレーション数: **29**。関連先が任意なら0..1、必須なら1、子側は0..多（unique FKなら0..1）です。
+FKリレーション数: **30**。関連先が任意なら0..1、必須なら1、子側は0..多（unique FKなら0..1）です。
 
 ## Enum
 
@@ -284,6 +302,9 @@ FKリレーション数: **29**。関連先が任意なら0..1、必須なら1�
 | Role | ADMIN, MODERATOR, USER, GUEST |
 | Rank | BRONZE, SILVER, GOLD, PLATINUM, DIAMOND, MASTER |
 | MinoSkin | NEON, RETRO, MINIMAL |
+| DisplayTheme | CYBER, ARCADE, MONO |
+| MapStyle | GRID, VOID, ARENA |
+| BackgroundStyle | MATRIX, STARS, SOLID |
 | AiDifficulty | EASY, HARD, EXPERT |
 | GameMode | VERSUS, AI, TOURNAMENT, LINES_40, MARATHON |
 | FriendshipStatus | PENDING, ACCEPTED, REJECTED |
@@ -361,6 +382,9 @@ id String @id @default(uuid())
 userId String @unique
 minoSkin MinoSkin @default(NEON)
 showGhost Boolean @default(true)
+displayTheme DisplayTheme @default(CYBER)
+mapStyle MapStyle @default(GRID)
+backgroundStyle BackgroundStyle @default(MATRIX)
 arr Int @default(33)
 das Int @default(170)
 dcd Int @default(0)
@@ -652,6 +676,25 @@ createdAt DateTime @default(now())
 user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 @@index([lines, timeMs])
 @@index([userId, lines, timeMs])
+```
+
+### ImportedGameArchive
+
+```prisma
+id String @id @default(uuid())
+userId String
+playedAt DateTime
+mode String
+result String
+opponent String?
+score Int?
+apm Decimal? @db.Decimal(8, 2)
+pps Decimal? @db.Decimal(6, 3)
+lines Int?
+sourceFormat String
+createdAt DateTime @default(now())
+user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+@@index([userId, playedAt(sort: Desc)])
 ```
 
 ## 解釈上の注意

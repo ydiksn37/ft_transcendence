@@ -11,7 +11,7 @@ const Profile = lazy(() => import('@/pages/Profile'))
 const PublicProfile = lazy(() => import('@/pages/PublicProfile'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const AdminPanel = lazy(() => import('@/pages/AdminPanel'))
-import JoinPage from "@/pages/JoinPage"
+const JoinPage = lazy(() => import('@/pages/JoinPage'))
 const MenuPage = lazy(() => import('@/pages/MenuPage'))
 const LobbyPage = lazy(() => import('@/pages/LobbyPage'))
 const PlayPage = lazy(() => import('@/pages/PlayPage'))

@@ -2,44 +2,56 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateGameSettingsDto } from './dto/user.dto';
+import { previewArchive } from './archive-import';
 
 @Injectable()
 export class ExportService {
   constructor(private prisma: PrismaService) {}
 
   async exportUserData(userId: string) {
-    const [user, stats, settings, gameResultsP1, gameResultsP2, sprintRecords] =
-      await Promise.all([
-        this.prisma.user.findUnique({
-          where: { id: userId },
-          // Keep this as an explicit allowlist. Authentication secrets such as
-          // passwordHash and twoFactorSecret must never leave the server.
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-            bio: true,
-            role: true,
-            isOnline: true,
-            lastSeenAt: true,
-            bannedUntil: true,
-            banReason: true,
-            oauthProvider: true,
-            oauthId: true,
-            twoFactorEnabled: true,
-            deletedAt: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        }),
-        this.prisma.userStats.findUnique({ where: { userId } }),
-        this.prisma.userGameSettings.findUnique({ where: { userId } }),
-        this.prisma.gameResult.findMany({ where: { player1Id: userId } }),
-        this.prisma.gameResult.findMany({ where: { player2Id: userId } }),
-        this.prisma.sprintRecord.findMany({ where: { userId } }),
-      ]);
+    const [
+      user,
+      stats,
+      settings,
+      gameResultsP1,
+      gameResultsP2,
+      sprintRecords,
+      importedArchive,
+    ] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        // Keep this as an explicit allowlist. Authentication secrets such as
+        // passwordHash and twoFactorSecret must never leave the server.
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+          bio: true,
+          role: true,
+          isOnline: true,
+          lastSeenAt: true,
+          bannedUntil: true,
+          banReason: true,
+          oauthProvider: true,
+          oauthId: true,
+          twoFactorEnabled: true,
+          deletedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.userStats.findUnique({ where: { userId } }),
+      this.prisma.userGameSettings.findUnique({ where: { userId } }),
+      this.prisma.gameResult.findMany({ where: { player1Id: userId } }),
+      this.prisma.gameResult.findMany({ where: { player2Id: userId } }),
+      this.prisma.sprintRecord.findMany({ where: { userId } }),
+      this.prisma.importedGameArchive.findMany({
+        where: { userId },
+        orderBy: [{ playedAt: 'desc' }, { id: 'desc' }],
+      }),
+    ]);
 
     // GDPR data export payload
     return {
@@ -48,6 +60,7 @@ export class ExportService {
       settings,
       matchHistory: [...gameResultsP1, ...gameResultsP2],
       sprintHistory: sprintRecords,
+      importedArchive,
       exportedAt: new Date().toISOString(),
     };
   }
@@ -98,5 +111,47 @@ export class ExportService {
         })),
       note: 'Only these preferences will be updated. Account, rank, history and game rules are not imported.',
     };
+  }
+
+  previewGameArchive(format: 'json' | 'csv', data: string) {
+    const preview = previewArchive(format, data);
+    return {
+      validRows: preview.rows.length,
+      invalidRows: preview.errors.length,
+      rows: preview.rows.slice(0, 20),
+      errors: preview.errors,
+      note: 'Imported archive rows are private and never affect ranked results, XP, achievements, or leaderboards.',
+    };
+  }
+
+  async importGameArchive(
+    userId: string,
+    format: 'json' | 'csv',
+    data: string,
+  ) {
+    const preview = previewArchive(format, data);
+    if (preview.errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Archive contains invalid rows',
+        errors: preview.errors,
+      });
+    }
+    if (preview.rows.length === 0) return { imported: 0 };
+    const result = await this.prisma.importedGameArchive.createMany({
+      data: preview.rows.map((row) => ({
+        userId,
+        ...row,
+        sourceFormat: format,
+      })),
+    });
+    return { imported: result.count };
+  }
+
+  listGameArchive(userId: string) {
+    return this.prisma.importedGameArchive.findMany({
+      where: { userId },
+      orderBy: [{ playedAt: 'desc' }, { id: 'desc' }],
+      take: 500,
+    });
   }
 }

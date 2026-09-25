@@ -1,0 +1,124 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-transcendence}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-transcendence_db}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [data]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    secrets:
+      - redis_password
+    command:
+      - sh
+      - -ec
+      - exec redis-server --requirepass "$$(cat /run/secrets/redis_password)"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [data]
+
+  vault:
+    image: hashicorp/vault:1.18
+    restart: unless-stopped
+    command: vault server -config=/vault/config/config.hcl
+    cap_add: [IPC_LOCK]
+    volumes:
+      - ./vault/config.hcl:/vault/config/config.hcl:ro
+      - vault_data:/vault/file
+    networks: [data]
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: production
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      VAULT_ADDR: http://vault:8200
+      VAULT_REQUIRED: "true"
+      VAULT_TOKEN_FILE: /run/secrets/vault_token
+      VAULT_SECRET_PATH: secret/data/transcendence
+      ALLOWED_ORIGINS: https://localhost:8443
+      AI_AGENT_PATH: /usr/local/bin/ai_agent
+      UPLOAD_DIR: /app/uploads
+    secrets:
+      - vault_token
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_started
+    networks: [edge, data]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      target: production
+    restart: unless-stopped
+    networks: [edge]
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NGINX_HTTPS_PORT: ${NGINX_PORT:-8443}
+      FRONTEND_UPSTREAM_PORT: 80
+      BLOCKING_PARANOIA: "2"
+      DETECTION_PARANOIA: "2"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+      ALLOWED_METHODS: "GET HEAD POST PUT PATCH DELETE OPTIONS"
+    ports:
+      - "${NGINX_HTTP_PORT:-8080}:8080"
+      - "${NGINX_PORT:-8443}:8443"
+    depends_on:
+      - backend
+      - frontend
+    networks: [edge]
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:-./secrets/postgres_password.txt}
+  redis_password:
+    file: ${REDIS_PASSWORD_FILE:-./secrets/redis_password.txt}
+  vault_token:
+    file: ${VAULT_TOKEN_FILE_HOST:-./secrets/vault_token.txt}
+
+volumes:
+  postgres_data:
+  redis_data:
+  vault_data:
+  uploads_data:
+
+networks:
+  edge:
+    driver: bridge
+  data:
+    internal: true

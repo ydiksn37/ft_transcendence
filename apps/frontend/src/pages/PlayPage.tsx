@@ -114,7 +114,7 @@ const PlayPage = () => {
 
   const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
 
-  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction, showGhost, minoSkin } = useConfig();
+  const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction, showGhost, minoSkin, mapStyle, backgroundStyle } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
 
   // ── Score / Level / Speed ───────────────────────────────────────────────
@@ -892,6 +892,8 @@ const PlayPage = () => {
     <TetrisUI
       showGhost={showGhost}
       minoSkin={minoSkin}
+      mapStyle={mapStyle}
+      backgroundStyle={backgroundStyle}
       stage={shownStage}
       player={shownPlayer}
       ghostYOverride={serverMatch ? serverState?.ghostY : undefined}

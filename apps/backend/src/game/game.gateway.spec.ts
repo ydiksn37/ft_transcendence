@@ -5,6 +5,7 @@ import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
 import { AiAgentService } from './engine/ai-agent.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TournamentService } from '../tournament/tournament.service';
 
 describe('GameGateway', () => {
   let gateway: GameGateway;
@@ -26,6 +27,7 @@ describe('GameGateway', () => {
         { provide: AiAgentService, useValue: {} },
         { provide: JwtService, useValue: { verify: jest.fn() } },
         { provide: PrismaService, useValue: {} },
+        { provide: TournamentService, useValue: {} },
       ],
     }).compile();
 
@@ -110,12 +112,8 @@ describe('GameGateway', () => {
     const otherSession = other.emit.mock.calls.find(
       ([event]: [string]) => event === 'session:ready',
     )?.[1];
-    expect(firstSession.guestSessionId).not.toBe(
-      otherSession.guestSessionId,
-    );
-    expect(firstSession.reconnectToken).not.toBe(
-      otherSession.reconnectToken,
-    );
+    expect(firstSession.guestSessionId).not.toBe(otherSession.guestSessionId);
+    expect(firstSession.reconnectToken).not.toBe(otherSession.reconnectToken);
 
     const player = { socketId: first.id, isGameOver: false };
     const players = new Map([[first.id, player]]);

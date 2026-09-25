@@ -36,6 +36,24 @@ enum MinoSkin {
   MINIMAL
 }
 
+enum DisplayTheme {
+  CYBER
+  ARCADE
+  MONO
+}
+
+enum MapStyle {
+  GRID
+  VOID
+  ARENA
+}
+
+enum BackgroundStyle {
+  MATRIX
+  STARS
+  SOLID
+}
+
 enum AiDifficulty {
   EASY
   HARD
@@ -92,8 +110,6 @@ enum MatchStatus {
   BYE
 }
 
-
-
 enum AchievementCategory {
   GAME
   SOCIAL
@@ -106,8 +122,6 @@ enum FilePurpose {
   CHAT_ATTACHMENT
   EXPORT
 }
-
-
 
 // ─────────────────────────────────────────────
 //  User（全機能の中心エンティティ）
@@ -137,27 +151,28 @@ model User {
   // ─ リレーション ─
   stats                  UserStats?
   gameSettings           UserGameSettings?
-  gameResultsAsP1        GameResult[]         @relation("Player1")
-  gameResultsAsP2        GameResult[]         @relation("Player2")
-  gameResultsWon         GameResult[]         @relation("Winner")
+  gameResultsAsP1        GameResult[]          @relation("Player1")
+  gameResultsAsP2        GameResult[]          @relation("Player2")
+  gameResultsWon         GameResult[]          @relation("Winner")
   analytics              GameAnalytic[]
-  friendRequestsSent     Friendship[]         @relation("Requester")
-  friendRequestsReceived Friendship[]         @relation("Addressee")
-  blocksSent             Block[]              @relation("Blocker")
-  blocksReceived         Block[]              @relation("Blocked")
+  friendRequestsSent     Friendship[]          @relation("Requester")
+  friendRequestsReceived Friendship[]          @relation("Addressee")
+  blocksSent             Block[]               @relation("Blocker")
+  blocksReceived         Block[]               @relation("Blocked")
   chatMemberships        ChatRoomMembership[]
   chatMessages           ChatMessage[]
   notifications          Notification[]
   tournamentEntries      TournamentEntry[]
-  tournamentsCreated     Tournament[]         @relation("TournamentCreator")
-  tournamentsWon         Tournament[]         @relation("TournamentWinner")
+  tournamentsCreated     Tournament[]          @relation("TournamentCreator")
+  tournamentsWon         Tournament[]          @relation("TournamentWinner")
   achievements           UserAchievement[]
   apiKeys                ApiKey[]
   fileUploads            FileUpload[]
-  tmatchAsP1             TournamentMatch[]    @relation("TMatchP1")
-  tmatchAsP2             TournamentMatch[]    @relation("TMatchP2")
-  tmatchWon              TournamentMatch[]    @relation("TMatchWinner")
+  tmatchAsP1             TournamentMatch[]     @relation("TMatchP1")
+  tmatchAsP2             TournamentMatch[]     @relation("TMatchP2")
+  tmatchWon              TournamentMatch[]     @relation("TMatchWinner")
   sprintRecords          SprintRecord[]
+  importedGameArchives   ImportedGameArchive[]
 
   @@index([username])
   @@index([email])
@@ -201,20 +216,23 @@ model UserStats {
 // ─────────────────────────────────────────────
 
 model UserGameSettings {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  minoSkin     MinoSkin @default(NEON)
-  showGhost    Boolean  @default(true)
-  arr          Int      @default(33) // ms
-  das          Int      @default(170) // ms
-  dcd          Int      @default(0) // ms
-  sdf          Int      @default(6) // 0 = Infinity
-  keyBindings  Json? // カスタムキーバインド
-  volume       Int      @default(100)
-  sfxEnabled   Boolean  @default(true)
-  musicEnabled Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  minoSkin        MinoSkin        @default(NEON)
+  showGhost       Boolean         @default(true)
+  displayTheme    DisplayTheme    @default(CYBER)
+  mapStyle        MapStyle        @default(GRID)
+  backgroundStyle BackgroundStyle @default(MATRIX)
+  arr             Int             @default(33) // ms
+  das             Int             @default(170) // ms
+  dcd             Int             @default(0) // ms
+  sdf             Int             @default(6) // 0 = Infinity
+  keyBindings     Json? // カスタムキーバインド
+  volume          Int             @default(100)
+  sfxEnabled      Boolean         @default(true)
+  musicEnabled    Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -456,8 +474,6 @@ model TournamentMatch {
   @@index([player2Id])
 }
 
-
-
 // ─────────────────────────────────────────────
 //  Achievement / UserAchievement（中間テーブル）
 // ─────────────────────────────────────────────
@@ -533,8 +549,6 @@ model FileUpload {
   @@index([uploaderId])
 }
 
-
-
 // ─────────────────────────────────────────────
 //  SprintRecord（40 Lines等のソロプレイ記録）
 // ─────────────────────────────────────────────
@@ -553,4 +567,23 @@ model SprintRecord {
   @@index([lines, timeMs])
   // 個人の 40 Lines ランキングを高速に取得するためのインデックス
   @@index([userId, lines, timeMs])
+}
+
+model ImportedGameArchive {
+  id           String   @id @default(uuid())
+  userId       String
+  playedAt     DateTime
+  mode         String
+  result       String
+  opponent     String?
+  score        Int?
+  apm          Decimal? @db.Decimal(8, 2)
+  pps          Decimal? @db.Decimal(6, 3)
+  lines        Int?
+  sourceFormat String
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt(sort: Desc)])
 }

@@ -1,6 +1,4 @@
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type { UserStats, GameRecordView } from '../../lib/types';
 import { HISTORY_COLUMNS, historyCsv, historyRows } from '../../lib/historyExport';
 
@@ -31,7 +29,11 @@ export function DataExportButtons({ stats, games, username }: DataExportButtonsP
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF();
     
     // Title

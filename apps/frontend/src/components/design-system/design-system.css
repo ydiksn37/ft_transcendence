@@ -1,0 +1,33 @@
+.ds-button,
+.ds-icon-button,
+.ds-input,
+.ds-select {
+  border: var(--border-width-strong) solid var(--color-neon-cyan);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 0.75rem/1.5 var(--font-display);
+}
+
+.ds-button { padding: var(--space-2) var(--space-4); cursor: pointer; box-shadow: var(--shadow-glow-cyan); }
+.ds-button:disabled { opacity: .45; cursor: not-allowed; }
+.ds-icon-button { inline-size: 2.75rem; block-size: 2.75rem; display: inline-grid; place-items: center; cursor: pointer; }
+.ds-panel { padding: var(--space-5); border: var(--border-width) solid var(--color-neon-cyan); background: color-mix(in srgb, var(--color-surface) 92%, transparent); box-shadow: var(--shadow-glow-cyan); }
+.ds-heading { margin: 0 0 var(--space-4); color: var(--color-neon-cyan); font-family: var(--font-display); line-height: 1.35; }
+.ds-input, .ds-select { min-height: 2.75rem; padding: var(--space-2) var(--space-3); }
+.ds-checkbox, .ds-field { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-body); }
+.ds-field { flex-direction: column; align-items: flex-start; }
+.ds-badge { display: inline-block; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); font: .7rem var(--font-display); }
+.ds-badge-info { background: var(--color-neon-cyan); color: #001014; }
+.ds-badge-success { background: var(--color-neon-green); color: #001408; }
+.ds-badge-warning { background: var(--color-neon-yellow); color: #171000; }
+.ds-badge-danger { background: var(--color-neon-red); color: white; }
+.ds-alert { padding: var(--space-3); border-left: var(--border-width-strong) solid currentColor; background: var(--color-surface-2); }
+.ds-alert-info { color: var(--color-neon-cyan); }
+.ds-alert-success { color: var(--color-neon-green); }
+.ds-alert-warning { color: var(--color-neon-yellow); }
+.ds-alert-danger { color: var(--color-neon-red); }
+.ds-spinner { display: inline-block; inline-size: 1.5rem; block-size: 1.5rem; border: 3px solid var(--color-surface-2); border-top-color: var(--color-neon-cyan); border-radius: 50%; animation: ds-spin .8s linear infinite; }
+.ds-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: var(--space-4); background: rgb(0 0 0 / .75); }
+.ds-modal { inline-size: min(36rem, 100%); max-block-size: 90dvh; overflow: auto; padding: var(--space-5); border: var(--border-width-strong) solid var(--color-neon-cyan); background: var(--color-surface); }
+@keyframes ds-spin { to { transform: rotate(360deg); } }

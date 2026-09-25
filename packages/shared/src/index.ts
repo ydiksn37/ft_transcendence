@@ -295,10 +295,16 @@ export interface TournamentMatchView {
 //  ゲームカスタマイズ設定
 // ───────────────────────────────────────────────
 export type MinoSkin = 'NEON' | 'RETRO' | 'MINIMAL';
+export type DisplayTheme = 'CYBER' | 'ARCADE' | 'MONO';
+export type MapStyle = 'GRID' | 'VOID' | 'ARENA';
+export type BackgroundStyle = 'MATRIX' | 'STARS' | 'SOLID';
 
 export interface GameSettings {
   minoSkin: MinoSkin;
   showGhost: boolean;
+  displayTheme: DisplayTheme;
+  mapStyle: MapStyle;
+  backgroundStyle: BackgroundStyle;
   arr: number; // ms
   das: number; // ms
   dcd: number; // ms

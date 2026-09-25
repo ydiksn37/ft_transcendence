@@ -36,12 +36,22 @@ export class GameService {
   }) {
     const completedAt = new Date();
     const solo = data.gameMode === 'MARATHON' || data.gameMode === 'LINES_40';
-    const winner = data.winnerPlayer !== undefined ? data.winnerPlayer
-      : data.winnerId === data.player1Id && data.player1Id ? 1
-      : data.winnerId === data.player2Id && data.player2Id ? 2 : null;
+    const winner =
+      data.winnerPlayer !== undefined
+        ? data.winnerPlayer
+        : data.winnerId === data.player1Id && data.player1Id
+          ? 1
+          : data.winnerId === data.player2Id && data.player2Id
+            ? 2
+            : null;
     const outcome = (player: 1 | 2): 'win' | 'loss' | 'neutral' =>
       solo || winner === null ? 'neutral' : winner === player ? 'win' : 'loss';
-    const ranked = !data.isAiGame && !solo && !!data.player1Id && !!data.player2Id && data.player1Id !== data.player2Id;
+    const ranked =
+      !data.isAiGame &&
+      !solo &&
+      !!data.player1Id &&
+      !!data.player2Id &&
+      data.player1Id !== data.player2Id;
     // Retry serialization conflicts, never leave a result with partial statistics.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -122,6 +132,10 @@ export class GameService {
           );
       }
     }
+
+    throw new ConflictException(
+      '試合結果の保存が競合しました。再試行してください',
+    );
   }
 
   /** ユーザー統計を更新 */
@@ -165,20 +179,35 @@ export class GameService {
     const bestApm = Math.max(safeNum(stats.bestApm), isNaN(apm) ? 0 : apm);
     const bestPps = Math.max(safeNum(stats.bestPps), isNaN(pps) ? 0 : pps);
 
-    const currentWinStreak = won ? stats.currentWinStreak + 1 : lost ? 0 : stats.currentWinStreak;
+    const currentWinStreak = won
+      ? stats.currentWinStreak + 1
+      : lost
+        ? 0
+        : stats.currentWinStreak;
     const bestWinStreak = Math.max(stats.bestWinStreak, currentWinStreak);
 
     // XP計算
     const xpGain = won ? 50 : 20;
     const rewardXp = await awardGameAchievements(tx, userId, {
-      wins, totalGames,
+      wins,
+      totalGames,
       totalTSpins: stats.totalTSpins + tSpins,
       totalTetrises: stats.totalTetrises + tetrises,
     });
     const newXp = stats.xp + xpGain + rewardXp;
     const newLevel = Math.floor(newXp / 1000) + 1;
-    const rankPoints = Math.max(0, stats.rankPoints + (ranked ? won ? 25 : lost ? -15 : 0 : 0));
-    const ranks: Rank[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER'];
+    const rankPoints = Math.max(
+      0,
+      stats.rankPoints + (ranked ? (won ? 25 : lost ? -15 : 0) : 0),
+    );
+    const ranks: Rank[] = [
+      'BRONZE',
+      'SILVER',
+      'GOLD',
+      'PLATINUM',
+      'DIAMOND',
+      'MASTER',
+    ];
 
     await tx.userStats.update({
       where: { userId },
@@ -198,7 +227,12 @@ export class GameService {
         bestWinStreak,
         xp: newXp,
         level: newLevel,
-        ...(ranked ? { rankPoints, rank: ranks[Math.min(5, Math.floor(rankPoints / 500))] } : {}),
+        ...(ranked
+          ? {
+              rankPoints,
+              rank: ranks[Math.min(5, Math.floor(rankPoints / 500))],
+            }
+          : {}),
       },
     });
 
@@ -210,8 +244,10 @@ export class GameService {
       where: { userId_date: { userId, date: today } },
     });
     const gamesToday = daily?.gamesPlayed ?? 0;
-    const dailyApm = (safeNum(daily?.avgApm ?? 0) * gamesToday + apm) / (gamesToday + 1);
-    const dailyPps = (safeNum(daily?.avgPps ?? 0) * gamesToday + pps) / (gamesToday + 1);
+    const dailyApm =
+      (safeNum(daily?.avgApm ?? 0) * gamesToday + apm) / (gamesToday + 1);
+    const dailyPps =
+      (safeNum(daily?.avgPps ?? 0) * gamesToday + pps) / (gamesToday + 1);
     await tx.gameAnalytic.upsert({
       where: { userId_date: { userId, date: today } },
       update: {

@@ -21,6 +21,8 @@ const backgroundModules = import.meta.glob<string>(
 type TetrisUIProps = {
   showGhost?: boolean;
   minoSkin?: 'NEON' | 'RETRO' | 'MINIMAL';
+  mapStyle?: 'GRID' | 'VOID' | 'ARENA';
+  backgroundStyle?: 'MATRIX' | 'STARS' | 'SOLID';
   stage: Cell[][];
   player: Player;
   gameOver: boolean;
@@ -69,7 +71,7 @@ type TetrisUIProps = {
 };
 
 export const TetrisUI: React.FC<TetrisUIProps> = ({
-  stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo, showGhost = true, minoSkin,
+  stage, player, gameOver, gameMode, score, level, lines, nextPieceKeys, holdInfo, showGhost = true, minoSkin, mapStyle = 'GRID', backgroundStyle = 'MATRIX',
   isWaiting, connectionError, matchResult, opponentStage, opponentScore, opponentNextPieceKeys, opponentHoldMino, opponents, pendingGarbage, actionText, combo,
   lockEvent, serverPiecesPlaced,
   countdown, finalTime, elapsedTime, piecesPlaced, attackLines, socketRef, setSocket, setIsWaiting, setDropTime,
@@ -431,8 +433,12 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
   };
 
   return (
-    <div className="tetris-ui-container" style={{
-      backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`
+    <div className={`tetris-ui-container map-${mapStyle.toLowerCase()} background-${backgroundStyle.toLowerCase()}`} style={{
+      backgroundImage: backgroundStyle === 'SOLID'
+        ? 'none'
+        : backgroundStyle === 'STARS'
+          ? 'radial-gradient(circle at 20% 30%, rgba(255,255,255,.7) 0 1px, transparent 2px), radial-gradient(circle at 75% 65%, rgba(0,245,255,.7) 0 1px, transparent 2px), linear-gradient(#02020a, #080018)'
+          : `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`
      }}>
       <div className="tetris-ui-content">
         <div className="tetris-ui-scaling-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: isMobileView ? 'top center' : 'center center' }}>

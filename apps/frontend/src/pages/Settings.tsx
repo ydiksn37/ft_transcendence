@@ -12,12 +12,34 @@ interface ApiKey {
   createdAt: string;
 }
 
+interface ImportedArchiveRow {
+  id: string;
+  playedAt: string;
+  mode: string;
+  result: string;
+  opponent: string | null;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
   const mode = new URLSearchParams(location.search).get('mode');
-  const { keyConfig, showGhost, setShowGhost, minoSkin, setMinoSkin, settingsError, reloadSettings } = useConfig();
+  const {
+    keyConfig,
+    showGhost,
+    setShowGhost,
+    minoSkin,
+    setMinoSkin,
+    displayTheme,
+    setDisplayTheme,
+    mapStyle,
+    setMapStyle,
+    backgroundStyle,
+    setBackgroundStyle,
+    settingsError,
+    reloadSettings,
+  } = useConfig();
 
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -27,6 +49,7 @@ export default function Settings() {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(user?.twoFactorEnabled || false);
+  const [archiveRows, setArchiveRows] = useState<ImportedArchiveRow[]>([]);
 
   const handleGenerate2FA = async () => {
     try {
@@ -135,6 +158,15 @@ export default function Settings() {
 
   useEffect(() => {
     fetchApiKeys();
+    const token = localStorage.getItem('token');
+    if (token) {
+      void fetch('/api/users/me/export/archive', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(response => response.ok ? response.json() : [])
+        .then(rows => setArchiveRows(Array.isArray(rows) ? rows : []))
+        .catch(() => setArchiveRows([]));
+    }
   }, []);
 
   const handleCreateApiKey = async () => {
@@ -195,7 +227,7 @@ export default function Settings() {
             return;
           }
           const token = localStorage.getItem('token');
-          const allowed = ['minoSkin', 'showGhost', 'arr', 'das', 'dcd', 'sdf', 'keyBindings', 'volume', 'sfxEnabled', 'musicEnabled'];
+          const allowed = ['minoSkin', 'showGhost', 'displayTheme', 'mapStyle', 'backgroundStyle', 'arr', 'das', 'dcd', 'sdf', 'keyBindings', 'volume', 'sfxEnabled', 'musicEnabled'];
           const settings = Object.fromEntries(Object.entries(json.settings).filter(([key]) => allowed.includes(key)));
           if (Object.keys(settings).length === 0) {
             alert('No supported preferences found.');
@@ -258,6 +290,48 @@ export default function Settings() {
       console.error(e);
       alert('Failed to export data.');
     }
+  };
+
+  const handleImportArchive = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.csv,application/json,text/csv';
+    input.onchange = async event => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const format = file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
+      const data = await file.text();
+      const token = localStorage.getItem('token');
+      try {
+        const previewResponse = await fetch('/api/users/me/export/archive/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ format, data }),
+        });
+        const preview = await previewResponse.json();
+        if (!previewResponse.ok || preview.invalidRows > 0) {
+          const errors = Array.isArray(preview.errors)
+            ? preview.errors.map((item: { row: number; errors: string[] }) => `Row ${item.row}: ${item.errors.join(', ')}`).join('\n')
+            : preview.message;
+          alert(`Archive validation failed:\n${errors || previewResponse.status}`);
+          return;
+        }
+        if (!window.confirm(`Import ${preview.validRows} private archive rows?\n\n${preview.note}`)) return;
+        const response = await fetch('/api/users/me/export/archive/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ format, data }),
+        });
+        if (!response.ok) throw new Error('Archive import failed');
+        const rowsResponse = await fetch('/api/users/me/export/archive', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setArchiveRows(rowsResponse.ok ? await rowsResponse.json() : []);
+      } catch {
+        alert('Archive import failed. Check the file and connection.');
+      }
+    };
+    input.click();
   };
 
   const handleDeleteAccount = async () => {
@@ -369,11 +443,43 @@ export default function Settings() {
         <div style={panelStyle}>
           <h2>GAME DISPLAY</h2>
           {settingsError && <p role="alert">{settingsError} <button onClick={reloadSettings}>RELOAD SAVED SETTINGS</button></p>}
-          <label>MINO SKIN <select value={minoSkin} onChange={event => setMinoSkin(event.target.value as typeof minoSkin)}>
-            <option value="NEON">NEON</option><option value="RETRO">RETRO</option><option value="MINIMAL">MINIMAL</option>
-          </select></label>
-          <label><input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} /> SHOW GHOST PIECE</label>
-          <p>Changes your board display only. Does not change game rules or your opponent’s settings.</p>
+          <label className="retro-select-label">MINO SKIN
+            <select className="retro-select" value={minoSkin} onChange={event => setMinoSkin(event.target.value as typeof minoSkin)}>
+              <option value="NEON">NEON</option><option value="RETRO">RETRO</option><option value="MINIMAL">MINIMAL</option>
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0', fontSize: '12px' }}>
+            <input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} style={{ transform: 'scale(1.5)', accentColor: '#00ffff' }} /> 
+            SHOW GHOST PIECE
+          </label>
+          <label className="retro-select-label">THEME
+            <select className="retro-select" value={displayTheme} onChange={event => setDisplayTheme(event.target.value as typeof displayTheme)}>
+              <option value="CYBER">CYBER</option><option value="ARCADE">ARCADE</option><option value="MONO">MONO</option>
+            </select>
+          </label>
+          <label className="retro-select-label">MAP
+            <select className="retro-select" value={mapStyle} onChange={event => setMapStyle(event.target.value as typeof mapStyle)}>
+              <option value="GRID">GRID</option><option value="VOID">VOID</option><option value="ARENA">ARENA</option>
+            </select>
+          </label>
+          <label className="retro-select-label">BACKGROUND
+            <select className="retro-select" value={backgroundStyle} onChange={event => setBackgroundStyle(event.target.value as typeof backgroundStyle)}>
+              <option value="MATRIX">MATRIX</option><option value="STARS">STARS</option><option value="SOLID">SOLID</option>
+            </select>
+          </label>
+          <p>These visual customizations affect your display only. They do not alter game rules, mechanics, or your opponent's view.</p>
+        </div>
+
+        <div style={panelStyle}>
+          <h2>PRIVATE GAME ARCHIVE</h2>
+          <p>Import up to 500 JSON/CSV rows. Archive rows never affect rank, XP, achievements, or official match history.</p>
+          <button style={buttonStyle} onClick={handleImportArchive}>PREVIEW &amp; IMPORT ARCHIVE</button>
+          <p>{archiveRows.length} archived match{archiveRows.length === 1 ? '' : 'es'}</p>
+          {archiveRows.slice(0, 5).map(row => (
+            <div key={row.id} style={{ fontSize: '10px', marginTop: '8px' }}>
+              {new Date(row.playedAt).toLocaleDateString()} · {row.mode} · {row.result}{row.opponent ? ` · ${row.opponent}` : ''}
+            </div>
+          ))}
         </div>
         
         {/* PUBLIC API KEYS SECTION */}

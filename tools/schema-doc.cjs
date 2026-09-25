@@ -69,7 +69,10 @@ out.push('## 解釈上の注意', '',
   '- schemaのonDeleteとサービスの削除処理は別です。アカウント削除サービスはChatMessage等を明示的に削除するため、SetNullだけが行われるとは限りません。',
   '- UserStats.winRateは現在の保存処理でwins / (wins + losses) × 100（分母0なら0）。GameAnalyticはUTC日次集計です。これらはschemaの制約ではなくアプリケーションの更新規則です。', '');
 const document = out.join('\n');
-if (process.argv.includes('--check')) {
+if (process.argv.includes('--write')) {
+  fs.writeFileSync(path.join(root, 'ER.md'), document);
+  console.log(`ER.md updated: ${models.length} tables, ${enums.length} enums, ${relationCount} relations.`);
+} else if (process.argv.includes('--check')) {
   if (fs.readFileSync(path.join(root, 'ER.md'), 'utf8') !== document) {
     console.error('ER.md is out of date; regenerate with node tools/schema-doc.cjs');
     process.exitCode = 1;

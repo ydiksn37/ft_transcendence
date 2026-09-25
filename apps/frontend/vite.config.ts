@@ -1,14 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
+import { fileURLToPath } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@transcendence/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@transcendence/shared': fileURLToPath(new URL('../../packages/shared/src', import.meta.url)),
     },
   },
   server: {
@@ -34,6 +34,19 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'pixi',
+              test: /node_modules[\\/](@pixi|pixi\.js|@pixi\/react)/,
+              includeDependenciesRecursively: false,
+              maxSize: 350 * 1024,
+            },
+          ],
+        },
+      },
+    },
   },
 })
-

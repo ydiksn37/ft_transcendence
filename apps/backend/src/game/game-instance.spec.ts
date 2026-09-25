@@ -37,8 +37,17 @@ describe('GameInstance AI matches', () => {
   });
 
   it('waits for the human READY completion, ignoring spectators and duplicate acknowledgements', async () => {
-    const aiAgent = { releaseMatch: jest.fn(), getDecision: jest.fn(() => new Promise(() => undefined)) };
-    const game = new GameInstance('ready_ai', server, 42, undefined, aiAgent as unknown as AiAgentService);
+    const aiAgent = {
+      releaseMatch: jest.fn(),
+      getDecision: jest.fn(() => new Promise(() => undefined)),
+    };
+    const game = new GameInstance(
+      'ready_ai',
+      server,
+      42,
+      undefined,
+      aiAgent as unknown as AiAgentService,
+    );
     game.addPlayer('human', null);
     game.addPlayer('ai_ready_ai', null);
     game.start('EXPERT');
@@ -59,7 +68,13 @@ describe('GameInstance AI matches', () => {
 
   it('stopping during READY cancels a delayed start acknowledgement', async () => {
     const aiAgent = { releaseMatch: jest.fn(), getDecision: jest.fn() };
-    const game = new GameInstance('cancel_ready', server, 42, undefined, aiAgent as unknown as AiAgentService);
+    const game = new GameInstance(
+      'cancel_ready',
+      server,
+      42,
+      undefined,
+      aiAgent as unknown as AiAgentService,
+    );
     game.addPlayer('human', null);
     game.addPlayer('ai_cancel_ready', null);
     game.start('EXPERT');
@@ -357,9 +372,20 @@ describe('GameInstance AI matches', () => {
   it('releases the room AI and treats stopped pending work as normal cancellation', async () => {
     let cancel: ((error: Error) => void) | undefined;
     const releaseMatch = jest.fn(() => cancel?.(new Error('AI match ended')));
-    const getDecision = jest.fn(() => new Promise((_, reject) => { cancel = reject; }));
+    const getDecision = jest.fn(
+      () =>
+        new Promise((_, reject) => {
+          cancel = reject;
+        }),
+    );
     const aiAgent = { releaseMatch, getDecision } as unknown as AiAgentService;
-    const game = new GameInstance('cancel_room', server, 42, undefined, aiAgent);
+    const game = new GameInstance(
+      'cancel_room',
+      server,
+      42,
+      undefined,
+      aiAgent,
+    );
     game.addPlayer('human', null);
     game.addPlayer('ai_cancel_room', null);
     game.start('EXPERT');

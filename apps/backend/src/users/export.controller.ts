@@ -20,7 +20,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { ImportUserSettingsDto } from './dto/user.dto';
 import type { AuthenticatedRequest } from '../auth/decorators/current-user.decorator';
 import type { Response } from 'express';
-import { ExportQueryDto } from './dto/export.dto';
+import { ArchiveImportDto, ExportQueryDto } from './dto/export.dto';
 import { accountExportCsv } from './export-csv';
 
 @ApiTags('Data Export/Import')
@@ -72,5 +72,32 @@ export class ExportController {
     @Body() body: ImportUserSettingsDto,
   ) {
     return this.exportService.previewUserSettings(req.user.id, body.settings);
+  }
+
+  @Post('archive/preview')
+  @HttpCode(200)
+  @ApiOperation({ summary: '個人戦績アーカイブの一括取込を検証する' })
+  previewArchive(@Body() body: ArchiveImportDto) {
+    return this.exportService.previewGameArchive(body.format, body.data);
+  }
+
+  @Post('archive/import')
+  @HttpCode(200)
+  @ApiOperation({ summary: '検証済みの個人戦績アーカイブを一括取込する' })
+  importArchive(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: ArchiveImportDto,
+  ) {
+    return this.exportService.importGameArchive(
+      req.user.id,
+      body.format,
+      body.data,
+    );
+  }
+
+  @Get('archive')
+  @ApiOperation({ summary: '個人戦績アーカイブを取得する' })
+  listArchive(@Request() req: AuthenticatedRequest) {
+    return this.exportService.listGameArchive(req.user.id);
   }
 }

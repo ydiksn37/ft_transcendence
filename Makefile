@@ -196,7 +196,7 @@ vault-init: ## Vault開発環境に初期テストシークレットを投入す
 	docker compose exec -e VAULT_TOKEN=dev-root-token vault vault kv put secret/transcendence JWT_SECRET="vault_test_secret_12345"
 
 waf-test: ## WAF (ModSecurity) がXSS攻撃を遮断(403)するかテストする
-	curl -i -k -X POST https://localhost:8443/api/auth/login -H "Content-Type: application/json" -d '{"username": "<script>alert(1)</script>"}'
+	./tools/test-waf.sh
 
 # --- コンテナ内シェル ---
 exec-backend: ## backendコンテナの中に入る (シェル)
