@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PublicGameSettingsDto } from './dto/public-api.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,7 +13,9 @@ export class PublicApiService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSettings(userId: string) {
-    const settings = await this.prisma.userGameSettings.findUnique({ where: { userId } });
+    const settings = await this.prisma.userGameSettings.findUnique({
+      where: { userId },
+    });
     if (!settings) throw new NotFoundException('ゲーム設定が見つかりません');
     return settings;
   }
@@ -17,30 +23,47 @@ export class PublicApiService {
   private settingsData(dto: PublicGameSettingsDto) {
     // PUT replaces the resource: omitted/null fields reset to schema defaults.
     return {
-      minoSkin: dto.minoSkin ?? 'NEON' as const,
+      minoSkin: dto.minoSkin ?? ('NEON' as const),
       showGhost: dto.showGhost ?? true,
-      arr: dto.arr ?? 33, das: dto.das ?? 170, dcd: dto.dcd ?? 0, sdf: dto.sdf ?? 6,
+      arr: dto.arr ?? 33,
+      das: dto.das ?? 170,
+      dcd: dto.dcd ?? 0,
+      sdf: dto.sdf ?? 6,
       keyBindings: dto.keyBindings ? { ...dto.keyBindings } : Prisma.DbNull,
       volume: dto.volume ?? 100,
-      sfxEnabled: dto.sfxEnabled ?? true, musicEnabled: dto.musicEnabled ?? true,
+      sfxEnabled: dto.sfxEnabled ?? true,
+      musicEnabled: dto.musicEnabled ?? true,
     };
   }
 
   async createSettings(userId: string, dto: PublicGameSettingsDto) {
     try {
-      return await this.prisma.userGameSettings.create({ data: { userId, ...this.settingsData(dto) } });
+      return await this.prisma.userGameSettings.create({
+        data: { userId, ...this.settingsData(dto) },
+      });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        throw new ConflictException('設定は既に存在します。PUTで置き換えてください');
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException(
+          '設定は既に存在します。PUTで置き換えてください',
+        );
       throw error;
     }
   }
 
   async replaceSettings(userId: string, dto: PublicGameSettingsDto) {
     try {
-      return await this.prisma.userGameSettings.update({ where: { userId }, data: this.settingsData(dto) });
+      return await this.prisma.userGameSettings.update({
+        where: { userId },
+        data: this.settingsData(dto),
+      });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025')
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      )
         throw new NotFoundException('設定がありません。POSTで作成してください');
       throw error;
     }

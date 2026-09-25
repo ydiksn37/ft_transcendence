@@ -575,6 +575,13 @@ CSVのscalar保持・非対応値拒否、Sprintの日付形式・個人/全体�
 Backend全体のlintは未完了。診断中、backend直下のeslint実行パスが存在せずexit127となり、
 workspaceルートのnode_modules/.binへ修正して実行した。後回しの復帰・Tournamentは変更していない。
 
+2026-09-25チェックポイント: 認証・ユーザー管理・Public APIの3ディレクトリを整形し、
+テスト内transaction callbackの型を明示。対象範囲のESLint（max-warnings 0）とbackend型チェック成功。
+関連128テストは122件が通常環境で成功、HTTP6件は127.0.0.1待受のEPERMで一旦失敗した後、
+許可付きの再実行で全6件成功。HTTPテストはDB/Redisをmockし、実DB統合試験ではない。
+他領域のBackend lint、Vite chunk警告、実ブラウザ/実DB検証などは引き続き未完了。
+ユーザーの「キリいいところまで」に合わせ、今回はこの検証済み範囲で一区切りとする。
+
 ### 28. 負荷・同期試験
 
 - [ ] 複数試合を同時実行して状態が混ざらないことを確認

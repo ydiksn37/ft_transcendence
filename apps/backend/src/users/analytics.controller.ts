@@ -24,7 +24,8 @@ export class AnalyticsController {
     name: 'days',
     required: false,
     type: Number,
-    description: 'UTCの当日を含む取得日数 (デフォルト: 30)。試合のない日は省略。',
+    description:
+      'UTCの当日を含む取得日数 (デフォルト: 30)。試合のない日は省略。',
   })
   @ApiResponse({
     status: 200,

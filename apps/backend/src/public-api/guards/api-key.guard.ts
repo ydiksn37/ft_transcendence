@@ -33,8 +33,12 @@ export class ApiKeyGuard implements CanActivate {
     // プレフィックスでキーを検索
     const keyRecord = await this.prisma.apiKey.findFirst({
       where: {
-        keyPrefix: prefix, isActive: true,
-        user: { deletedAt: null, OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }] },
+        keyPrefix: prefix,
+        isActive: true,
+        user: {
+          deletedAt: null,
+          OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }],
+        },
       },
     });
 
@@ -55,7 +59,10 @@ export class ApiKeyGuard implements CanActivate {
 
     // レート制限 (1時間あたり)
     const rateLimitKey = `ratelimit:apikey:${keyRecord.id}`;
-    const { count: current, ttl } = await this.redis.incrementWindow(rateLimitKey, 3600);
+    const { count: current, ttl } = await this.redis.incrementWindow(
+      rateLimitKey,
+      3600,
+    );
 
     if (current > keyRecord.rateLimit) {
       throw new HttpException(

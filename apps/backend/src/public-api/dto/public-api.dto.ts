@@ -24,7 +24,12 @@ export class PaginationQueryDto {
   @Min(1)
   page = 1;
 
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100, type: 'integer' })
+  @ApiPropertyOptional({
+    default: 20,
+    minimum: 1,
+    maximum: 100,
+    type: 'integer',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -90,4 +95,6 @@ export class CreateApiKeyDto {
 }
 
 // Only persisted preferences are exposed. No user ID, role, score or game rules.
-export class PublicGameSettingsDto extends OmitType(UpdateGameSettingsDto, ['touchFlick'] as const) {}
+export class PublicGameSettingsDto extends OmitType(UpdateGameSettingsDto, [
+  'touchFlick',
+] as const) {}

@@ -309,13 +309,19 @@ export class AdminUsersQueryDto {
 }
 
 export class SearchHistoryDto {
-  @ApiPropertyOptional({ example: '2026-09-01', description: 'Inclusive UTC date (YYYY-MM-DD).' })
+  @ApiPropertyOptional({
+    example: '2026-09-01',
+    description: 'Inclusive UTC date (YYYY-MM-DD).',
+  })
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })
   from?: string;
 
-  @ApiPropertyOptional({ example: '2026-09-24', description: 'Inclusive UTC date (YYYY-MM-DD).' })
+  @ApiPropertyOptional({
+    example: '2026-09-24',
+    description: 'Inclusive UTC date (YYYY-MM-DD).',
+  })
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })

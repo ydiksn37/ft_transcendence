@@ -81,9 +81,12 @@ describe('UsersService admin operations', () => {
 
   it('converts durationDays to an absolute BAN expiry', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-14T00:00:00.000Z'));
-    prisma.user.findUnique.mockResolvedValueOnce({ role: 'ADMIN', bannedUntil: null })
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ role: 'ADMIN', bannedUntil: null })
       .mockResolvedValueOnce({ role: 'USER' });
-    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
+    prisma.$transaction.mockImplementationOnce(
+      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+    );
 
     await service.adminBanUser('admin-user', 'target-user', {
       reason: 'Violation of terms',
@@ -191,7 +194,9 @@ describe('UsersService admin operations', () => {
   });
 
   it('permanently deletes personal data and sends completion email', async () => {
-    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
+    prisma.$transaction.mockImplementationOnce(
+      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+    );
     redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
     prisma.user.findUnique.mockResolvedValue({
       email: 'player@example.com',
@@ -225,13 +230,21 @@ describe('UsersService admin operations', () => {
   it('refuses GDPR deletion of the last usable administrator without deleting personal data', async () => {
     redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
     prisma.user.findUnique.mockResolvedValue({
-      role: 'ADMIN', email: 'admin@example.com', displayName: 'Admin', fileUploads: [],
+      role: 'ADMIN',
+      email: 'admin@example.com',
+      displayName: 'Admin',
+      fileUploads: [],
     });
     prisma.user.count.mockResolvedValue(0);
-    prisma.$transaction.mockImplementationOnce(callback => callback(prisma));
-    await expect(service.deleteMe('last-admin', {
-      confirmation: 'DELETE MY ACCOUNT', code: '123456',
-    })).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.$transaction.mockImplementationOnce(
+      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+    );
+    await expect(
+      service.deleteMe('last-admin', {
+        confirmation: 'DELETE MY ACCOUNT',
+        code: '123456',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.chatMessage.deleteMany).not.toHaveBeenCalled();
     expect(prisma.fileUpload.deleteMany).not.toHaveBeenCalled();
     expect(prisma.user.delete).not.toHaveBeenCalled();

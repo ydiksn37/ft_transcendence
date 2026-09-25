@@ -248,22 +248,37 @@ export class AdminUsersController {
 
   @Delete(':id')
   @Roles('ADMIN')
-  @ApiOperation({ summary: '[ADMIN] 他ユーザーを永久削除（個人データ削除・履歴匿名化）' })
-  adminDeleteUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminDeleteUserDto) {
+  @ApiOperation({
+    summary: '[ADMIN] 他ユーザーを永久削除（個人データ削除・履歴匿名化）',
+  })
+  adminDeleteUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminDeleteUserDto,
+  ) {
     return this.usersService.adminDeleteUser(user.id, id, dto.confirmation);
   }
 
   @Post()
   @Roles('ADMIN')
   @ApiOperation({ summary: '[ADMIN] 通常ユーザーを作成（ロールはUSER固定）' })
-  adminCreateUser(@CurrentUser() user: AuthenticatedUser, @Body() dto: AdminCreateUserDto) {
+  adminCreateUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AdminCreateUserDto,
+  ) {
     return this.usersService.adminCreateUser(user.id, dto);
   }
 
   @Patch(':id')
   @Roles('ADMIN')
-  @ApiOperation({ summary: '[ADMIN] 表示名・自己紹介を編集（資格情報・権限は変更しない）' })
-  adminEditUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminEditUserDto) {
+  @ApiOperation({
+    summary: '[ADMIN] 表示名・自己紹介を編集（資格情報・権限は変更しない）',
+  })
+  adminEditUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminEditUserDto,
+  ) {
     return this.usersService.adminEditUser(user.id, id, dto);
   }
 
