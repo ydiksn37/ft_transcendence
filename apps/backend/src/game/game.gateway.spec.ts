@@ -51,6 +51,101 @@ describe('GameGateway', () => {
     expect(gateway).toBeDefined();
   });
 
+  it.each([1, 3, 4])(
+    'allows a four-player tournament with %s guests, including a guest owner',
+    async (guestCount) => {
+      const clients = Array.from({ length: 4 }, (_, i) => ({
+        id: `socket-${i}`,
+        data: {},
+        emit: jest.fn(),
+        join: jest.fn(),
+      }));
+      const room: any = {
+        roomId: 'guest-cup',
+        name: 'Guest Cup',
+        ownerSocketId: clients[0].id,
+        players: clients.map((socket, i) => ({
+          socket,
+          userId: i < guestCount ? null : `user-${i}`,
+          username: null,
+          wins: 0,
+        })),
+        isPlaying: false,
+        isTournamentActive: false,
+        databaseTournamentId: 'previous-cup',
+        databaseMatchIds: { old: 'old' },
+      };
+      const persistence = jest.fn();
+      (gateway as any).tournamentService.createLiveTournament = persistence;
+      (gateway as any).customRooms.set(room.roomId, room);
+      (gateway as any).clientRoom.set(clients[0].id, room.roomId);
+      await gateway.handleCreateTournament(clients[0] as any);
+      expect(persistence).not.toHaveBeenCalled();
+      expect(room.databaseTournamentId).toBeUndefined();
+      expect(room.databaseMatchIds).toBeUndefined();
+      expect(room.isTournamentActive).toBe(true);
+      expect(room.tournament.matches).toHaveLength(3);
+      expect(
+        room.tournament.matches.flatMap((m: any) => m.playerIds).sort(),
+      ).toEqual(clients.map((c) => c.id).sort());
+      clients.forEach((c) =>
+        expect(c.emit).toHaveBeenCalledWith('tournament_state', {
+          tournament: room.tournament,
+        }),
+      );
+      const bracket = room.tournament;
+      await gateway.handleCreateTournament(clients[0] as any);
+      expect(room.tournament).toBe(bracket);
+    },
+  );
+
+  it('still persists a tournament of four distinct registered accounts', async () => {
+    const client: any = {
+      id: 'owner',
+      data: { userId: 'u0' },
+      emit: jest.fn(),
+    };
+    const players = [
+      client,
+      ...[1, 2, 3].map((i) => ({ id: `s${i}`, emit: jest.fn() })),
+    ].map((socket, i) => ({ socket, userId: `u${i}`, username: `P${i}` }));
+    const room: any = {
+      roomId: 'cup',
+      name: 'Cup',
+      ownerSocketId: 'owner',
+      players,
+    };
+    const save = jest
+      .fn()
+      .mockResolvedValue({ tournamentId: 'db-cup', matchIds: {} });
+    (gateway as any).tournamentService.createLiveTournament = save;
+    (gateway as any).customRooms.set('cup', room);
+    (gateway as any).clientRoom.set('owner', 'cup');
+    await gateway.handleCreateTournament(client);
+    expect(save).toHaveBeenCalledWith(
+      'Cup',
+      'u0',
+      ['u0', 'u1', 'u2', 'u3'],
+      expect.any(Array),
+    );
+    expect(room.databaseTournamentId).toBe('db-cup');
+  });
+
+  it('rejects duplicate registered accounts, not multiple null guest IDs', async () => {
+    const client: any = { id: 'owner', emit: jest.fn() };
+    const room: any = {
+      ownerSocketId: 'owner',
+      players: ['same', 'same', null, null].map((userId) => ({ userId })),
+    };
+    (gateway as any).customRooms.set('cup', room);
+    (gateway as any).clientRoom.set('owner', 'cup');
+    await gateway.handleCreateTournament(client);
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      message: '同じアカウントでトーナメントに複数参加することはできません',
+    });
+    expect(room.tournament).toBeUndefined();
+  });
+
   it('creates isolated matches for concurrent pairs without leaking queue state', () => {
     jest.useFakeTimers();
     const broadcasts: Array<{ roomId: string; event: string; payload: any }> =

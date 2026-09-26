@@ -172,79 +172,91 @@ describe('WebSocket JWT authentication and chat authorization (e2e)', () => {
     socket.disconnect();
   });
 
-  it('runs a four-user tournament round and attaches an outside spectator', async () => {
-    const players = await Promise.all(
-      Array.from({ length: 4 }, (_, index) =>
-        connect(
-          jwt.sign({
-            sub: `tournament-user-${index + 1}`,
-            email: `player${index + 1}@example.com`,
-            role: 'USER',
-          }),
+  it.each([0, 1, 4])(
+    'runs a four-player tournament with %s guests and an outside spectator',
+    async (guestCount) => {
+      tournamentService.createLiveTournament.mockClear();
+      const players = await Promise.all(
+        Array.from({ length: 4 }, (_, index) =>
+          connect(
+            index < guestCount
+              ? undefined
+              : jwt.sign({
+                  sub: `tournament-user-${index + 1}`,
+                  email: `player${index + 1}@example.com`,
+                  role: 'USER',
+                }),
+          ),
         ),
-      ),
-    );
-    const owner = players[0];
-    const created = eventFrom<{ roomId: string }>(owner, 'custom_room_created');
-    owner.emit('game:create_custom_room', { name: 'Tournament E2E' });
-    const { roomId } = await created;
-
-    for (const [index, player] of players.slice(1).entries()) {
-      const joined = eventFrom<{ roomId: string; players: unknown[] }>(
-        player,
-        'custom_room_state',
-        (payload) =>
-          payload.roomId === roomId && payload.players.length === index + 2,
       );
-      player.emit('game:join_custom_room', { roomId });
-      await joined;
-    }
+      const owner = players[0];
+      const created = eventFrom<{ roomId: string }>(
+        owner,
+        'custom_room_created',
+      );
+      owner.emit('game:create_custom_room', { name: 'Tournament E2E' });
+      const { roomId } = await created;
 
-    const tournamentState = eventFrom<{ tournament?: unknown }>(
-      owner,
-      'tournament_state',
-      (payload) => !!payload.tournament,
-    );
-    owner.emit('game:create_tournament');
-    await tournamentState;
-    expect(tournamentService.createLiveTournament).toHaveBeenCalledWith(
-      'Tournament E2E',
-      'tournament-user-1',
-      expect.arrayContaining([
-        'tournament-user-1',
-        'tournament-user-2',
-        'tournament-user-3',
-        'tournament-user-4',
-      ]),
-      expect.any(Array),
-    );
+      for (const [index, player] of players.slice(1).entries()) {
+        const joined = eventFrom<{ roomId: string; players: unknown[] }>(
+          player,
+          'custom_room_state',
+          (payload) =>
+            payload.roomId === roomId && payload.players.length === index + 2,
+        );
+        player.emit('game:join_custom_room', { roomId });
+        await joined;
+      }
 
-    const matches = players.map((player) =>
-      eventFrom<{ roomId: string; players: string[] }>(player, 'match:found'),
-    );
-    owner.emit('game:start_tournament_match');
-    const found = await Promise.all(matches);
-    expect(found.every((match) => match.players.length === 2)).toBe(true);
-    expect(new Set(found.map((match) => match.roomId)).size).toBe(2);
+      const tournamentState = eventFrom<{ tournament?: unknown }>(
+        owner,
+        'tournament_state',
+        (payload) => !!payload.tournament,
+      );
+      owner.emit('game:create_tournament');
+      await tournamentState;
+      if (guestCount > 0) {
+        expect(tournamentService.createLiveTournament).not.toHaveBeenCalled();
+      } else
+        expect(tournamentService.createLiveTournament).toHaveBeenCalledWith(
+          'Tournament E2E',
+          'tournament-user-1',
+          expect.arrayContaining([
+            'tournament-user-1',
+            'tournament-user-2',
+            'tournament-user-3',
+            'tournament-user-4',
+          ]),
+          expect.any(Array),
+        );
 
-    const outsider = await connect(
-      jwt.sign({
-        sub: 'tournament-spectator',
-        email: 'spectator@example.com',
-        role: 'USER',
-      }),
-    );
-    const spectating = eventFrom<{ roomId: string; players: string[] }>(
-      outsider,
-      'spectating',
-      (payload) => payload.roomId.startsWith(`${roomId}_`),
-    );
-    const board = eventFrom(outsider, 'game:opponent');
-    outsider.emit('room:spectate', { roomId });
-    const [spectatorState] = await Promise.all([spectating, board]);
-    expect(spectatorState.players).toHaveLength(2);
+      const matches = players.map((player) =>
+        eventFrom<{ roomId: string; players: string[] }>(player, 'match:found'),
+      );
+      owner.emit('game:start_tournament_match');
+      const found = await Promise.all(matches);
+      expect(found.every((match) => match.players.length === 2)).toBe(true);
+      expect(new Set(found.map((match) => match.roomId)).size).toBe(2);
 
-    outsider.disconnect();
-    players.forEach((player) => player.disconnect());
-  });
+      const outsider = await connect(
+        jwt.sign({
+          sub: 'tournament-spectator',
+          email: 'spectator@example.com',
+          role: 'USER',
+        }),
+      );
+      const spectating = eventFrom<{ roomId: string; players: string[] }>(
+        outsider,
+        'spectating',
+        (payload) => payload.roomId.startsWith(`${roomId}_`),
+      );
+      const board = eventFrom(outsider, 'game:opponent');
+      outsider.emit('room:spectate', { roomId });
+      const [spectatorState] = await Promise.all([spectating, board]);
+      expect(spectatorState.players).toHaveLength(2);
+
+      outsider.disconnect();
+      players.forEach((player) => player.disconnect());
+    },
+  );
 });

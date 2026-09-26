@@ -131,6 +131,10 @@ not whether migrations have been applied to a running database.
 ## Features List
 - **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: sonakamu).
 - **Tournament System:** Single-elimination brackets with real-time progress (Responsible: sonakamu).
+  Custom-room tournaments accept 4, 8, or 16 players, including guests and guest hosts.
+  Brackets are persisted only when all players have distinct registered accounts;
+  guest-containing brackets remain in server memory. Existing per-match result
+  saving still applies. The same registered account cannot enter twice.
 - **AI Opponent:** Play against an intelligent bot with adjustable difficulties (Responsible: ssawa).
 - **Spectator Mode:** Watch live matches with real-time board updates (Responsible: sonakamu).
 - **Analytics Dashboard:** Visual graphs for APM, PPS, and win rates (Responsible: yukusano).

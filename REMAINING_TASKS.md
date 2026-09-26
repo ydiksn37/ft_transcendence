@@ -295,6 +295,15 @@ Mixed Contentも0件。検証用Tournament、GameResult、Userは成功・失敗
 
 ### 12. Tournament実装を一本化する（後回し）
 
+2026-09-26個別依頼対応: Custom Room大会でゲスト混在・全員ゲスト・ゲスト主催を許可。
+4/8/16名制限と登録アカウントの重複禁止は維持し、エラー文言を分離。
+全員登録済みのみ大会DB保存、ゲスト混在はメモリ上の大会表で進行（各試合の既存保存は維持）。
+前回大会のDB IDを開始時に破棄し、進行中の二重作成も拒否。
+Gateway・実Socket.IO接続の22テスト、対象lint、backend型チェック成功。
+直接tscではローカルPrisma Clientの古い生成物によりenum/model不足が発生したが、
+通常のnpm type-check（生成を含む）で解消。実ブラウザでの決勝完了は未確認。
+これはゲスト参加対応であり、第12項全体の一本化完了を意味しない。
+
 - [ ] DBベースのTournamentとインメモリCustom Room Tournamentの責務を整理
 - [x] bracket進行とGameResultをDBへ接続
 - [ ] BYE、切断、再戦、優勝確定を一つの状態遷移で処理

@@ -1202,89 +1202,106 @@ export class GameGateway
     if (
       !room ||
       room.ownerSocketId !== client.id ||
-      ![4, 8, 16].includes(room.players.length)
+      room.isPlaying ||
+      room.isTournamentActive
     )
       return;
 
-    const participantIds = room.players.map((player) => player.userId);
-    if (
-      participantIds.some((userId) => userId === null) ||
-      new Set(participantIds).size !== participantIds.length
-    ) {
+    if (![4, 8, 16].includes(room.players.length)) {
       client.emit(ServerEvent.ERROR, {
-        message:
-          'トーナメントは重複のない4、8、16名のログインユーザーが必要です',
+        message: 'トーナメントは4、8、16名で開始できます',
+      });
+      return;
+    }
+    const participantIds = room.players.map((player) => player.userId);
+    const registeredIds = participantIds.filter(
+      (id): id is string => id != null,
+    );
+    if (new Set(registeredIds).size !== registeredIds.length) {
+      client.emit(ServerEvent.ERROR, {
+        message: '同じアカウントでトーナメントに複数参加することはできません',
       });
       return;
     }
 
     room.isTournamentActive = true;
+    // A rematch containing guests must never reuse an earlier persisted bracket.
+    room.databaseTournamentId = undefined;
+    room.databaseMatchIds = undefined;
     const playerIds = room.players.map((p) => p.socket.id);
 
     // socketId → 表示名 のマップを開始時点で記録（退出後も名前を参照できるように）
     const playerNames: Record<string, string> = {};
-    room.players.forEach((p) => {
-      playerNames[p.socket.id] = p.username!;
+    room.players.forEach((p, index) => {
+      playerNames[p.socket.id] = p.username || `Player ${index + 1}`;
     });
 
     room.tournament = generateTournamentBracket(playerIds, playerNames);
 
-    const roundCache = new Map<string, number>();
-    const roundFor = (node: TournamentNode): number => {
-      const cached = roundCache.get(node.id);
-      if (cached) return cached;
-      const childMatches = node.children.filter(
-        (child) => child.type === 'MATCH',
-      );
-      const round =
-        childMatches.length === 0
-          ? 1
-          : Math.max(...childMatches.map(roundFor)) + 1;
-      roundCache.set(node.id, round);
-      return round;
-    };
-    const matchNumbers = new Map<number, number>();
-    const socketToUser = new Map(
-      room.players.map((player) => [player.socket.id, player.userId as string]),
-    );
-    const persistentMatches = room.tournament.matches.map((match) => {
-      const round = roundFor(match);
-      const matchNumber = (matchNumbers.get(round) ?? 0) + 1;
-      matchNumbers.set(round, matchNumber);
-      return {
-        clientMatchId: match.id,
-        round,
-        matchNumber,
-        player1Id: match.playerIds[0]
-          ? (socketToUser.get(match.playerIds[0]) ?? null)
-          : null,
-        player2Id: match.playerIds[1]
-          ? (socketToUser.get(match.playerIds[1]) ?? null)
-          : null,
-        status: 'PENDING' as const,
+    // TournamentEntry requires a real User FK. Guest identities remain scoped
+    // to the live room; don't invent DB accounts or save an incomplete bracket.
+    if (registeredIds.length === room.players.length) {
+      const roundCache = new Map<string, number>();
+      const roundFor = (node: TournamentNode): number => {
+        const cached = roundCache.get(node.id);
+        if (cached) return cached;
+        const childMatches = node.children.filter(
+          (child) => child.type === 'MATCH',
+        );
+        const round =
+          childMatches.length === 0
+            ? 1
+            : Math.max(...childMatches.map(roundFor)) + 1;
+        roundCache.set(node.id, round);
+        return round;
       };
-    });
-    try {
-      const persisted = await this.tournamentService.createLiveTournament(
-        room.name,
-        client.data.userId as string,
-        participantIds as string[],
-        persistentMatches,
+      const matchNumbers = new Map<number, number>();
+      const socketToUser = new Map(
+        room.players.map((player) => [
+          player.socket.id,
+          player.userId as string,
+        ]),
       );
-      room.databaseTournamentId = persisted.tournamentId;
-      room.databaseMatchIds = persisted.matchIds;
-    } catch (error: unknown) {
-      room.isTournamentActive = false;
-      room.tournament = undefined;
-      room.databaseTournamentId = undefined;
-      room.databaseMatchIds = undefined;
-      client.emit(ServerEvent.ERROR, {
-        message:
-          error instanceof Error
-            ? error.message
-            : 'トーナメントを保存できませんでした',
+      const persistentMatches = room.tournament.matches.map((match) => {
+        const round = roundFor(match);
+        const matchNumber = (matchNumbers.get(round) ?? 0) + 1;
+        matchNumbers.set(round, matchNumber);
+        return {
+          clientMatchId: match.id,
+          round,
+          matchNumber,
+          player1Id: match.playerIds[0]
+            ? (socketToUser.get(match.playerIds[0]) ?? null)
+            : null,
+          player2Id: match.playerIds[1]
+            ? (socketToUser.get(match.playerIds[1]) ?? null)
+            : null,
+          status: 'PENDING' as const,
+        };
       });
-      return;
+      try {
+        const persisted = await this.tournamentService.createLiveTournament(
+          room.name,
+          room.players.find((player) => player.socket.id === client.id)!
+            .userId!,
+          registeredIds,
+          persistentMatches,
+        );
+        room.databaseTournamentId = persisted.tournamentId;
+        room.databaseMatchIds = persisted.matchIds;
+      } catch (error: unknown) {
+        room.isTournamentActive = false;
+        room.tournament = undefined;
+        room.databaseTournamentId = undefined;
+        room.databaseMatchIds = undefined;
+        client.emit(ServerEvent.ERROR, {
+          message:
+            error instanceof Error
+              ? error.message
+              : 'トーナメントを保存できませんでした',
+        });
+        return;
+      }
     }
 
     // Broadcast tournament state
