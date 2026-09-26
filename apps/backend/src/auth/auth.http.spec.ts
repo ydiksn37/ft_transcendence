@@ -145,3 +145,65 @@ describe('Auth HTTP 2FA response contract', () => {
     expect(JSON.stringify(disabled.body)).not.toContain(secret);
   });
 });
+
+describe('42 OAuth callback with an email owned by another account', () => {
+  let app: INestApplication;
+  const update = jest.fn();
+  const create = jest.fn();
+
+  beforeAll(async () => {
+    const prisma = {
+      user: {
+        findFirst: async () => null,
+        findUnique: async ({ where }: { where: { email?: string } }) =>
+          where.email === 'victim@student.42tokyo.jp'
+            ? { id: 'password-account', email: where.email }
+            : null,
+        update,
+        create,
+      },
+    };
+    const module = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        AuthService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: {} },
+        { provide: JwtService, useValue: { sign: () => 'signed-token' } },
+      ],
+    })
+      .overrideGuard(FtOauthGuard)
+      .useValue({
+        canActivate(context: ExecutionContext) {
+          context.switchToHttp().getRequest().user = {
+            oauthId: '4242',
+            oauthProvider: '42',
+            username: 'victim',
+            displayName: 'Victim',
+            email: 'victim@student.42tokyo.jp',
+            avatarUrl: null,
+          };
+          return true;
+        },
+      })
+      .compile();
+    app = module.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('refuses to link or create an account and reports a stable error code', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/42/callback?code=test&state=%2Fmenu')
+      .expect(302);
+    expect(response.headers.location).toBe(
+      '/auth/callback?error=oauth_email_conflict',
+    );
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});

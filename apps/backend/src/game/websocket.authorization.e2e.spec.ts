@@ -139,7 +139,8 @@ describe('WebSocket JWT authentication and chat authorization (e2e)', () => {
     });
 
   it('rejects chat access when the socket has no valid JWT identity', async () => {
-    for (const token of [undefined, 'invalid-token']) {
+    const twoFactorChallenge = jwt.sign({ sub: 'user-1', isTwoFactor: true });
+    for (const token of [undefined, 'invalid-token', twoFactorChallenge]) {
       const socket = await connect(token);
       const error = errorFrom(socket);
       socket.emit('chat:join', { roomId: allowedRoom });

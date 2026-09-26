@@ -5,6 +5,11 @@ import { useConfig } from '../hooks/useConfig';
 import { DsAlert, DsButton, DsField, DsHeading, DsInput, DsPanel } from '../components/design-system';
 import './Login.css';
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_email_conflict:
+    'This 42 email is already used by a password account. Log in with your password instead.',
+};
+
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -30,6 +35,8 @@ export default function Login() {
       setTempToken(searchParams.get('tempToken') || '');
       setTempUserId(searchParams.get('userId') || '');
     }
+    const oauthError = searchParams.get('oauthError');
+    if (oauthError) setError(OAUTH_ERROR_MESSAGES[oauthError] ?? '42 login failed. Please try again.');
   }, [searchParams]);
 
   useEffect(() => {

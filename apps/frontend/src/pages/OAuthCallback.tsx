@@ -15,7 +15,10 @@ export const OAuthCallback: React.FC = () => {
     const tempToken = searchParams.get('tempToken');
     const userId = searchParams.get('userId');
 
-    if (require2FA === 'true' && tempToken && userId) {
+    const oauthError = searchParams.get('error');
+    if (oauthError) {
+      navigate(`/login?oauthError=${encodeURIComponent(oauthError)}`, { replace: true });
+    } else if (require2FA === 'true' && tempToken && userId) {
       navigate(`/login?require2FA=true&tempToken=${tempToken}&userId=${userId}`, { replace: true });
     } else if (accessToken && refreshToken) {
       fetch('/api/users/me', {

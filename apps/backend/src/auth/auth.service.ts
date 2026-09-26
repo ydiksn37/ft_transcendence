@@ -14,6 +14,8 @@ import { LoginDto } from './dto/login.dto';
 import { authenticator } from 'otplib';
 import { toDataURL } from 'qrcode';
 
+export const OAUTH_EMAIL_CONFLICT = 'oauth_email_conflict';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -108,10 +110,14 @@ export class AuthService {
     });
 
     if (!user) {
-      // メールアドレスの重複チェック
+      // Password sign-up does not verify email ownership, so linking by email
+      // would hand the 42 identity to whoever registered that address first.
       const emailExists = await this.prisma.user.findUnique({
         where: { email: profile.email },
       });
+      if (emailExists) {
+        throw new ConflictException(OAUTH_EMAIL_CONFLICT);
+      }
 
       // ユーザー名の重複を回避
       let username = profile.username;
@@ -120,31 +126,19 @@ export class AuthService {
       });
       if (usernameExists) username = `${username}_${Date.now()}`;
 
-      if (emailExists) {
-        // 既存アカウントにOAuthを紐付け
-        user = await this.prisma.user.update({
-          where: { id: emailExists.id },
-          data: {
-            oauthProvider: profile.oauthProvider,
-            oauthId: profile.oauthId,
-            avatarUrl: profile.avatarUrl ?? emailExists.avatarUrl,
-          },
-        });
-      } else {
-        user = await this.prisma.user.create({
-          data: {
-            email: profile.email,
-            username,
-            displayName: profile.displayName,
-            avatarUrl: profile.avatarUrl,
-            oauthProvider: profile.oauthProvider,
-            oauthId: profile.oauthId,
-            stats: { create: {} },
-            gameSettings: { create: {} },
-          },
-        });
-        this.logger.log(`42 OAuthで新規ユーザー登録: ${user.username}`);
-      }
+      user = await this.prisma.user.create({
+        data: {
+          email: profile.email,
+          username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          oauthProvider: profile.oauthProvider,
+          oauthId: profile.oauthId,
+          stats: { create: {} },
+          gameSettings: { create: {} },
+        },
+      });
+      this.logger.log(`42 OAuthで新規ユーザー登録: ${user.username}`);
     }
 
     if (user.deletedAt) {

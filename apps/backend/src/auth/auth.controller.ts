@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ConflictException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,7 +18,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Response } from 'express';
-import { AuthService } from './auth.service';
+import { AuthService, OAUTH_EMAIL_CONFLICT } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -83,6 +84,12 @@ export class AuthController {
     try {
       result = await this.authService.loginOrRegisterOauth(oauthUser);
     } catch (e) {
+      if (
+        e instanceof ConflictException &&
+        e.message === OAUTH_EMAIL_CONFLICT
+      ) {
+        return res.redirect(`/auth/callback?error=${OAUTH_EMAIL_CONFLICT}`);
+      }
       console.error('Error in loginOrRegisterOauth:', e);
       throw e;
     }

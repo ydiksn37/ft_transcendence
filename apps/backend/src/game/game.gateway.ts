@@ -150,8 +150,11 @@ export class GameGateway
     let authenticatedUserId: string | null = null;
     if (typeof token === 'string' && token.length > 0) {
       try {
-        const payload = this.jwtService.verify<{ sub: string }>(token);
-        if (typeof payload.sub === 'string') {
+        const payload = this.jwtService.verify<{
+          sub: string;
+          isTwoFactor?: boolean;
+        }>(token);
+        if (typeof payload.sub === 'string' && !payload.isTwoFactor) {
           authenticatedUserId = payload.sub;
           client.data.userId = payload.sub;
 

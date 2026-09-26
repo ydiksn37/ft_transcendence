@@ -67,7 +67,7 @@ describe('HTTP JWT authentication and role authorization', () => {
   const token = (role: string, expiresIn = 60) =>
     jwt.sign({ sub: actorId, email: 'actor@example.com', role }, { expiresIn });
 
-  it('rejects missing, malformed and expired bearer tokens before the service', async () => {
+  it('rejects missing, malformed, expired and 2FA challenge tokens before the service', async () => {
     const http = request(app.getHttpServer());
     await http.post('/api/admin/users').send(body).expect(401);
     await http
@@ -78,6 +78,15 @@ describe('HTTP JWT authentication and role authorization', () => {
     await http
       .post('/api/admin/users')
       .set('Authorization', `Bearer ${token('ADMIN', -1)}`)
+      .send(body)
+      .expect(401);
+    const twoFactorChallenge = jwt.sign(
+      { sub: actorId, isTwoFactor: true, role: 'ADMIN' },
+      { expiresIn: 300 },
+    );
+    await http
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${twoFactorChallenge}`)
       .send(body)
       .expect(401);
     expect(adminCreateUser).not.toHaveBeenCalled();

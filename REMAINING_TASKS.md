@@ -309,11 +309,14 @@ Tournament/Entry/全Matchを1 transactionで保存し、試合開始で `markLiv
 
 ### 13. OAuth・2FAを実環境で確認する
 
-- [ ] Prisma Client修正後に2FA登録・QR・ログイン・解除を確認
+- [x] Prisma Client修正後に2FA登録・QR・ログイン・解除を確認
 - [x] 実アカウントで42 OAuthの認可・callback・ログイン完了を確認
 - [x] OAuth callbackをHTTPS環境で確認
-- [ ] OAuthのみのユーザーとpasswordユーザーの両方を確認
+- [x] OAuthのみのユーザーとpasswordユーザーの両方を確認
 - [x] 2FA secretがどのAPIレスポンスにも含まれないことを統合テスト
+- [x] 2FA仮トークン（tempToken）をHTTP/WebSocketのアクセストークンとして使えないようにする
+- [x] 42初回ログイン時に同じemailのpasswordアカウントへ自動紐付けしない（事前登録による乗っ取り防止）
+- [x] 実端末の認証アプリでQRを読み取り、OAuthユーザーで2FA有効化→42ログイン→2FA入力を手動確認
 
 2026-09-24: 2FA有効化済みでもgenerateでsecretを置換できる問題を修正（409）。
 generate/有効化/解除は読み出したsecretと最新DB値が一致する場合のみ更新し、競合で409。
@@ -343,6 +346,29 @@ HTTPS通信自体は行われている。OAuth/password両アカウントの比�
 2026-09-26追記: 実Nest routing・DTO validation・`AuthService`を通すHTTP統合テストを追加。
 初期登録用のgenerate応答だけがsecret/QRを返し、有効化、2FA要求login、2FA認証、解除の各応答には
 保存secretが含まれないことを確認（DBとJWTのみテスト用fake）。
+
+2026-09-26追記: 実HTTPSスタック（nginx/WAF/Vault/DB/Redis）へ通す `npm run test:auth`（`tools/auth-smoke.mjs`）を追加。
+passwordユーザーの登録→2FA secret生成（未確定なら再生成可）→QR→誤コード拒否→有効化→有効中の再生成409→
+ログインで2FA要求→誤コード拒否→TOTPでログイン完了→誤コードでの解除拒否→解除→2FAなしログインを20項目で確認。
+QRはサーバー応答のdata URLが、backendと同じ `qrcode` で `otpauth://totp/ft_transcendence:<email>?secret=...` から
+生成した画像と完全一致することで検証。OAuthのみのユーザー（passwordHash null）は実42ログイン成功に加え、
+password loginが通常と同じ汎用エラーの401になることを確認。nginxの認証レート制限（5r/m, burst 10）は緩めず、
+429は待って再試行する。作成したテストユーザーはメール確認なしでは削除できないため、実行後に開発DBから削除した。
+
+この試験で重大な欠陥を発見・修正: 2FAの仮トークンは `JWT_SECRET` で署名されるが、`JwtStrategy` と
+WebSocket接続認証が `isTwoFactor` を拒否していなかったため、passwordだけで得た仮トークンをBearerや
+socket tokenに使うと2FAを通さずに5分間ログイン済みとして扱われた（実環境で `/api/users/me` 200とsocket認証を再現）。
+両方で `isTwoFactor` を拒否し、`JWT_SECRET` 未設定時の `'fallback-secret'` 予備値も起動時エラーへ変更。
+HTTP（実Passport）とWebSocket（実JwtModule）のe2eテストへ回帰ケースを追加し、backend 41 suites / 265 tests、
+type-check、lint成功。修正後の実環境で仮トークンがHTTP/WebSocketとも拒否されることを確認。
+実端末の認証アプリでの読み取りと、OAuthユーザーのcallbackでの2FA分岐（`require2FA=true` のredirect）は手動確認が残る。
+
+2026-09-26追記: password登録はemail所有を確認しないため、42初回ログイン時に同じemailの既存アカウントへ
+OAuthを自動紐付けすると、他人の42 emailで先にpassword登録した攻撃者が本人の42ログイン後もpasswordで
+入れてしまう。自動紐付けを廃止し、同じemailがあれば紐付け・作成せず `/auth/callback?error=oauth_email_conflict`
+へredirectし、ログイン画面にpasswordでログインするよう案内を表示する。既に42で紐付いたユーザーは
+`oauthProvider/oauthId` で検索されるため影響なし。HTTP統合テスト（update/create未呼び出しと302先）を追加し、
+backend 41 suites / 266 tests、type-check、lint、frontend type-check・node test 36件成功。実Chromeで案内表示を確認。
 
 ## P2: READMEで申告するなら完成が必要なモジュール
 
@@ -878,6 +904,7 @@ node --test apps/frontend/tests/*.test.cjs
 npm run build --workspace apps/frontend
 npm run test:browser
 npm run test:websocket
+npm run test:auth   # 実行ごとにauthsmoke_*ユーザーを作成する。OAuth確認は AUTH_SMOKE_OAUTH_EMAIL を指定
 make ai-build
 ctest --test-dir build/ai-agent --output-on-failure
 docker compose config --quiet
