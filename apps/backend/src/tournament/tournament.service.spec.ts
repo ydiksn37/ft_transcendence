@@ -1,4 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
 import { TournamentService } from './tournament.service';
 
 describe('TournamentService live tournament persistence', () => {
@@ -68,14 +67,32 @@ describe('TournamentService live tournament persistence', () => {
     });
   });
 
-  it('rejects duplicate or unsupported participant sets before writing', async () => {
-    const prisma = { $transaction: jest.fn() };
+  it('persists participant counts other than 4, 8, or 16', async () => {
+    const tx = {
+      tournament: { create: jest.fn().mockResolvedValue({ id: 'tournament' }) },
+      tournamentEntry: {
+        createMany: jest.fn().mockResolvedValue({ count: 5 }),
+      },
+      tournamentMatch: { create: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
     const service = new TournamentService(prisma as never);
 
-    await expect(
-      service.createLiveTournament('Cup', 'u1', ['u1', 'u1', 'u2', 'u3'], []),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    await service.createLiveTournament(
+      'Cup',
+      'u1',
+      ['u1', 'u2', 'u3', 'u4', 'u5'],
+      [],
+    );
+
+    expect(tx.tournament.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ maxPlayers: 5 }),
+    });
+    expect(tx.tournamentEntry.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ userId: 'u5', seed: 5 }),
+      ]),
+    });
   });
 
   it('completes a match and advances its winner into the correct next slot', async () => {

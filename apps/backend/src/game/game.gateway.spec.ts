@@ -131,19 +131,56 @@ describe('GameGateway', () => {
     expect(room.databaseTournamentId).toBe('db-cup');
   });
 
-  it('rejects duplicate registered accounts, not multiple null guest IDs', async () => {
+  it('runs duplicate registered accounts in memory without rejecting them', async () => {
     const client: any = { id: 'owner', emit: jest.fn() };
+    const sockets = [
+      client,
+      ...[1, 2, 3].map((i) => ({ id: `s${i}`, emit: jest.fn() })),
+    ];
     const room: any = {
+      roomId: 'cup',
+      name: 'Cup',
       ownerSocketId: 'owner',
-      players: ['same', 'same', null, null].map((userId) => ({ userId })),
+      players: ['same', 'same', null, null].map((userId, index) => ({
+        socket: sockets[index],
+        userId,
+        username: null,
+      })),
     };
+    const save = jest.fn();
+    (gateway as any).tournamentService.createLiveTournament = save;
     (gateway as any).customRooms.set('cup', room);
     (gateway as any).clientRoom.set('owner', 'cup');
     await gateway.handleCreateTournament(client);
-    expect(client.emit).toHaveBeenCalledWith('error', {
-      message: '同じアカウントでトーナメントに複数参加することはできません',
-    });
-    expect(room.tournament).toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
+    expect(room.isTournamentActive).toBe(true);
+    expect(room.tournament.matches).toHaveLength(3);
+  });
+
+  it('allows participant counts other than 4, 8, or 16', async () => {
+    const sockets = Array.from({ length: 5 }, (_, index) => ({
+      id: `s${index}`,
+      emit: jest.fn(),
+    }));
+    const room: any = {
+      roomId: 'five-player-cup',
+      name: 'Five Player Cup',
+      ownerSocketId: sockets[0].id,
+      players: sockets.map((socket, index) => ({
+        socket,
+        userId: null,
+        username: `P${index}`,
+      })),
+    };
+    (gateway as any).customRooms.set(room.roomId, room);
+    (gateway as any).clientRoom.set(sockets[0].id, room.roomId);
+
+    await gateway.handleCreateTournament(sockets[0] as any);
+
+    expect(room.isTournamentActive).toBe(true);
+    expect(
+      room.tournament.matches.flatMap((match: any) => match.playerIds),
+    ).toHaveLength(5);
   });
 
   it('creates isolated matches for concurrent pairs without leaking queue state', () => {

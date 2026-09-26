@@ -1202,27 +1202,18 @@ export class GameGateway
     if (
       !room ||
       room.ownerSocketId !== client.id ||
+      room.players.length < 4 ||
       room.isPlaying ||
       room.isTournamentActive
     )
       return;
 
-    if (![4, 8, 16].includes(room.players.length)) {
-      client.emit(ServerEvent.ERROR, {
-        message: 'トーナメントは4、8、16名で開始できます',
-      });
-      return;
-    }
     const participantIds = room.players.map((player) => player.userId);
     const registeredIds = participantIds.filter(
       (id): id is string => id != null,
     );
-    if (new Set(registeredIds).size !== registeredIds.length) {
-      client.emit(ServerEvent.ERROR, {
-        message: '同じアカウントでトーナメントに複数参加することはできません',
-      });
-      return;
-    }
+    const hasUniqueRegisteredPlayers =
+      new Set(registeredIds).size === registeredIds.length;
 
     room.isTournamentActive = true;
     // A rematch containing guests must never reuse an earlier persisted bracket.
@@ -1240,7 +1231,10 @@ export class GameGateway
 
     // TournamentEntry requires a real User FK. Guest identities remain scoped
     // to the live room; don't invent DB accounts or save an incomplete bracket.
-    if (registeredIds.length === room.players.length) {
+    if (
+      registeredIds.length === room.players.length &&
+      hasUniqueRegisteredPlayers
+    ) {
       const roundCache = new Map<string, number>();
       const roundFor = (node: TournamentNode): number => {
         const cached = roundCache.get(node.id);

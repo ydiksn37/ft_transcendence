@@ -190,28 +190,19 @@ export class TournamentService {
     participantIds: string[],
     matches: LiveTournamentMatch[],
   ) {
-    const uniqueParticipants = [...new Set(participantIds)];
-    if (
-      uniqueParticipants.length !== participantIds.length ||
-      ![4, 8, 16].includes(uniqueParticipants.length)
-    ) {
-      throw new BadRequestException(
-        'トーナメントは重複のない4、8、16名の認証ユーザーが必要です',
-      );
-    }
     return this.prisma.$transaction(async (tx) => {
       const tournament = await tx.tournament.create({
         data: {
           name,
           creatorId,
-          maxPlayers: uniqueParticipants.length,
+          maxPlayers: participantIds.length,
           minPlayers: 4,
           status: 'IN_PROGRESS',
           startedAt: new Date(),
         },
       });
       await tx.tournamentEntry.createMany({
-        data: uniqueParticipants.map((userId, index) => ({
+        data: participantIds.map((userId, index) => ({
           tournamentId: tournament.id,
           userId,
           seed: index + 1,
