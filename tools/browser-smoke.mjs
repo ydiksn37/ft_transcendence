@@ -370,9 +370,24 @@ try {
     ),
   );
   const duelDiagnostics = [];
+  // Own game:state frames as delivered by the server, recorded outside the
+  // page so a frozen renderer cannot hide or delay what the server sent.
+  const duelStateFrames = duelContexts.map(() => []);
   const duelPages = await Promise.all(
     duelContexts.map(async (duelContext, index) => {
       const duelPage = await duelContext.newPage();
+      duelPage.on('websocket', socket => {
+        socket.on('framereceived', ({ payload }) => {
+          if (typeof payload !== 'string' || !payload.startsWith('42["game:state"')) return;
+          const [, state] = JSON.parse(payload.slice(2));
+          duelStateFrames[index].push({
+            at: Date.now(),
+            started: state.started,
+            pieceId: state.pieceId,
+            y: state.activeMino.y,
+          });
+        });
+      });
       duelPage.on('console', message => {
         const isHeadlessGpuDiagnostic = message.type() === 'warning'
           && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
@@ -413,9 +428,47 @@ try {
     ),
   );
 
+  // Server gravity must keep the frozen player's piece falling at the same
+  // rate as the active player's. Nobody sends input during this window.
+  await duelOwnerPage.waitForTimeout(2500);
+  const latestState = (index, until = Infinity) =>
+    duelStateFrames[index].filter(frame => frame.started && frame.at <= until).at(-1);
+  const freezeMs = 4000;
+  const progressionCdp = await duelContexts[1].newCDPSession(duelSecondPage);
+  const progressionStart = Date.now();
+  const beforeFreeze = [latestState(0), latestState(1)];
+  await progressionCdp.send('Page.setWebLifecycleState', { state: 'frozen' });
+  await new Promise(resolve => setTimeout(resolve, freezeMs));
+  const framesWhileFrozen = duelStateFrames[1]
+    .filter(frame => frame.at > progressionStart && frame.at <= Date.now()).length;
+  await progressionCdp.send('Page.setWebLifecycleState', { state: 'active' });
+  await duelOwnerPage.waitForTimeout(700);
+  const progressionEnd = Date.now();
+  const afterFreeze = [latestState(0, progressionEnd), latestState(1, progressionEnd)];
+  await progressionCdp.detach();
+  if (beforeFreeze.some(state => !state) || afterFreeze.some(state => !state)) {
+    duelDiagnostics.push('no started game:state frames around background-tab window');
+  } else {
+    const [activeDelta, frozenDelta] = [0, 1].map(index => afterFreeze[index].y - beforeFreeze[index].y);
+    const minimumRows = Math.floor(freezeMs / 1000) - 1;
+    if (beforeFreeze[1].pieceId !== afterFreeze[1].pieceId) {
+      duelDiagnostics.push('frozen player piece changed without input');
+    }
+    if (frozenDelta < minimumRows) {
+      duelDiagnostics.push(`server gravity stalled while tab was frozen: ${frozenDelta} rows in ${freezeMs} ms`);
+    }
+    if (Math.abs(frozenDelta - activeDelta) > 1) {
+      duelDiagnostics.push(`frozen tab progressed ${frozenDelta} rows but active tab ${activeDelta}`);
+    }
+    if (framesWhileFrozen < minimumRows) {
+      duelDiagnostics.push(`server sent only ${framesWhileFrozen} game:state frames while frozen`);
+    }
+    console.log(`INFO background tab: frozen=${frozenDelta} active=${activeDelta} rows, frames while frozen=${framesWhileFrozen}`);
+  }
+
   // Freeze a real Chrome target to reproduce a background tab. The resumed
   // page must process the server snapshots that were produced while frozen.
-  await duelSecondPage.waitForTimeout(3500);
+  await duelSecondPage.waitForTimeout(1000);
   const board = duelSecondPage.locator('canvas').first();
   await board.waitFor({ state: 'visible' });
   const boardBeforeBackground = await board.screenshot();

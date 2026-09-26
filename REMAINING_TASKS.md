@@ -846,10 +846,10 @@ User件数不変、再起動時は `No pending migrations`。差分のある使�
 `_prisma_migrations` も作成されないことを確認（検証DBは削除済み）。backend 38 suite / 256テスト、
 lint、type-check成功。
 
-### 28. 負荷・同期試験
+### 28. 負荷・同期試験（完了）
 
 - [x] 複数試合を同時実行して状態が混ざらないことを確認
-- [ ] 非アクティブタブでもサーバー上の進行が変化しないことを確認
+- [x] 非アクティブタブでもサーバー上の進行が変化しないことを確認
 - [x] 遅延・切断・重複イベント・順序逆転を再現
 - [x] reconnect後に盤面、next、hold、garbage、scoreが一致することを確認
 
@@ -860,6 +860,14 @@ Gateway testを追加。2つの `GameInstance` を同時進行し、一方のhar
 合わせて対象2項目を完了。さらに実HTTPS/Socket.IOスタックへ4 guestを接続するsmoke testで、
 一意なsession、2試合のroom分離、不正payload拒否を確認。1 clientの切断・token再接続後に同一roomへ復帰し、
 `game:state` のboard、nextMinos、holdMino、garbageQueue、scoreを照合した。実ブラウザのbackground tabは未完了。
+
+2026-09-26追記: `tools/browser-smoke.mjs` の2人CUSTOM_ROOMS試合に、実Chromeの片方のタブを
+`Page.setWebLifecycleState: frozen` で4秒凍結する測定を追加（JS停止は通常のbackground tabのthrottlingより厳しい条件）。
+Playwrightがブラウザ外で記録した各自の `game:state` フレームから、無入力の間の `activeMino.y` の増分を比較し、
+凍結側の落下がサーバー重力で継続すること、同じpieceIdのままであること、アクティブ側と同じ行数進むこと、
+凍結中もサーバーからフレームが送られ続けることを検証。2回実行し、凍結側/アクティブ側が5/5行と4/4行で一致、
+凍結中のフレームは4件。既存の復帰後再描画・reload再接続・再戦も継続成功。
+対象はサーバー進行のONLINE_1V1/CUSTOM_ROOMS。VS_AIの人間側盤面はフロントエンドで計算する設計のため対象外。
 
 ## 現在の検証コマンド
 
