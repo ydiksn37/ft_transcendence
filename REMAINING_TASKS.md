@@ -307,7 +307,7 @@ Tournament/Entry/全Matchを1 transactionで保存し、試合開始で `markLiv
 全ラウンド生成とBYE勝者の繰り上げに対応。`tournament.service.spec.ts` 4件成功（代替DB）。
 インメモリ状態との二重管理は残り、実DB・実ブラウザでの大会進行は未検証。
 
-### 13. OAuth・2FAを実環境で確認する
+### 13. OAuth・2FAを実環境で確認する（完了）
 
 - [x] Prisma Client修正後に2FA登録・QR・ログイン・解除を確認
 - [x] 実アカウントで42 OAuthの認可・callback・ログイン完了を確認
