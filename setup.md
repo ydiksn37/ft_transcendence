@@ -44,8 +44,11 @@ make up
 ```
 
 起動後、ブラウザで以下のURLにアクセスして動作を確認してください。
-*   **フロントエンド (Tetris画面など)**: [http://localhost:5173/](http://localhost:5173/)
-*   **バックエンドAPI (Swagger UI)**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+*   **フロントエンド (Tetris画面など)**: [https://localhost:8443/](https://localhost:8443/)
+*   **バックエンドAPI (Swagger UI)**: [https://localhost:8443/api/docs](https://localhost:8443/api/docs)
+
+8080は8443へのHTTP redirect専用です。開発用の3000、5173、54320、63790は
+`127.0.0.1`だけにbindされ、他端末からは直接接続できません。
 
 ## 5. 初期データの投入（オプション）
 初めて環境を立ち上げた後など、テスト用のダミーユーザー等が必要な場合は以下のコマンドを実行してください。
@@ -60,17 +63,16 @@ make seed
 ### 42 API 連携のテスト
 42のIntraでアプリを登録し、取得した認証情報を `.env` に設定してください。
 1. `FT_CLIENT_ID` と `FT_CLIENT_SECRET` を自身のものに書き換える
-2. 42 Intra側の **Redirect URI** を `http://localhost:5173/api/auth/42/callback` に設定する
-3. ブラウザで `http://localhost:5173/` にアクセスし、「Login / Register」から「Login with 42」を実行する
+2. 42 Intra側の **Redirect URI** を `https://localhost:8443/api/auth/42/callback` に設定する
+3. ブラウザで `https://localhost:8443/` にアクセスし、「Login / Register」から「Login with 42」を実行する
 
 ### 2段階認証 (2FA) のテスト
-2段階認証はオプトイン方式のため、デフォルトではオフになっています。UI上にはまだ設定画面がありませんが、以下の手順でAPI経由で有効化してフローをテストできます。
+2段階認証はオプトイン方式のため、デフォルトではオフになっています。以下の手順でAuthenticatorアプリを使って確認できます。
 1. 一度任意の方法（ID/PASS または 42）でログインする
-2. バックエンドのSwagger UI（`http://localhost:3000/api/docs`）を開き、右上の「Authorize」ボタンから現在ログイン中のJWT（Access Token）をセットする
-3. `POST /api/auth/2fa/setup` を実行し、EmailベースでOTPを発行する
-4. **バックエンドのターミナル（`make dev` を実行している画面）** にテスト用のOTPコードが出力されるので確認する
-5. `POST /api/auth/2fa/confirm` を実行し、取得したOTPを送信して有効化を完了する
-6. アプリケーション（`http://localhost:5173/`）をリロードしてログアウトし、再ログインすると自動的に2段階認証画面 (`/auth/2fa`) へ遷移します。再度ターミナルに出力された新しいOTPを入力してログインを完了させてください。
+2. Settingsの「SECURITY & 2FA」で「SETUP 2FA」を選ぶ
+3. 表示されたQRコードをAuthenticatorアプリで読み取り、6桁コードを入力して有効化する
+4. ログアウト後に再ログインし、Login画面でAuthenticatorの6桁コードを入力する
+5. 解除時はSettingsで「DISABLE 2FA」を選び、現在の6桁コードを入力する
 
 ---
 
@@ -82,5 +84,5 @@ make seed
     npm install
     ```
 *   **ポートが競合して起動しない場合 (`bind: address already in use`)**
-    42のiMacなどの共有PC環境では、他の学生のプロセスがデフォルトポート（5432や6379）を占有していることがよくあります。
-    `.env` 内の `POSTGRES_PORT` や `REDIS_PORT` を、他の人が使っていなさそうな別の番号（例: `54321`, `63791` など）に変更してから、再度 `make up-infra` を実行してください。（※ `docker-compose.yml` 側は `.env` の値を読み取るようになっているため、`.env` を変更するだけで大丈夫です）
+    42のiMacなどの共有PC環境では、他の学生のプロセスがポートを占有していることがあります。
+    `.env` の `NGINX_HTTP_PORT` / `NGINX_PORT`（必要なら直接接続用の各port）を変更し、`make up`を再実行してください。

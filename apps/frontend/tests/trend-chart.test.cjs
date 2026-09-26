@@ -48,3 +48,10 @@ test('empty history shows an explicit no-data state', () => {
   assert.equal(tree.some(n => n.type === 'LineChart'), false);
   assert.ok(tree.some(n => n.props?.children === 'NO DATA AVAILABLE FOR TRENDS'));
 });
+
+test('chart prefers UTC daily analytics returned by the analytics API', () => {
+  const analytics = [{ date: '2026-09-25T00:00:00.000Z', gamesPlayed: 3, avgApm: '42.50', avgPps: '1.750' }];
+  const tree = nodes(exportsObject.TrendChart({ games: [{ apm: 99, pps: 4 }], analytics }));
+  const chart = tree.find(n => n.type === 'LineChart');
+  assert.deepEqual(JSON.parse(JSON.stringify(chart.props.data)), [{ name: '09-25', apm: 42.5, pps: 1.75 }]);
+});

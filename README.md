@@ -11,7 +11,10 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
 - **Docker** and **Docker Compose**
 - **Node.js 20 or later** and **npm 10 or later**
 - Web Browser (Latest stable version of Google Chrome recommended)
-- Port 80, 443, and 3000 available on your machine.
+- Ports 8080 and 8443 available on your machine (defaults; configurable with
+  `NGINX_HTTP_PORT` and `NGINX_PORT`). Development binds the optional direct
+  ports 3000, 5173, 54320, and 63790 to `127.0.0.1` only; remote clients must
+  use the Nginx HTTPS entry point.
 
 ### Setup and Execution
 1. Clone the repository:
@@ -27,6 +30,8 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
    Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and
    `SMTP_FROM`; account deletion uses email confirmation and cannot be
    requested without a working SMTP transport.
+   Register `https://localhost:8443/api/auth/42/callback` as the 42 OAuth
+   redirect URI (replace the host and port consistently for another deployment).
 3. Install dependencies and generate Prisma Client:
    ```bash
    make install
@@ -36,10 +41,13 @@ Project T is a modern, real-time multiplayer Tetris-like game web application bu
 4. Start the application using Docker Compose:
    ```bash
    make up
-   # or docker-compose up --build
+   # Use this instead when every image must be rebuilt:
+   make build
    ```
+   These targets also build the browser AI and initialize/unseal Vault before
+   starting the Compose stack.
 5. Access the application:
-   - Open your browser and navigate to `https://localhost` (or the appropriate domain/IP).
+   - Open your browser and navigate to `https://localhost:8443` (or the configured domain/IP and `NGINX_PORT`).
    - *Note: Since we use self-signed certificates for HTTPS, you may need to bypass the browser security warning.*
 
 ### Prisma Client generation
@@ -55,17 +63,41 @@ Backend builds and type checks also regenerate Prisma Client automatically. The
 backend Docker image uses the same npm script, and the development container
 regenerates the client before applying the schema and starting NestJS.
 
+### Quality checks
+
+```bash
+npm run type-check
+npm run lint
+npm test --workspace apps/backend -- --runInBand
+node --test apps/frontend/tests/*.test.cjs
+npm run build --workspace apps/frontend
+npm run test:browser # requires Chrome and the HTTPS stack on :8443
+npm run test:websocket # requires the HTTPS/Socket.IO stack on :8443
+```
+
+`BROWSER_BASE_URL` can point the browser smoke test at another deployment.
+
+### Secret checks and rotation
+
+Run `make secret-scan` before committing. `make secret-scan-history` can be used
+to audit every reachable Git revision; historical findings must be treated as
+compromised and their credentials rotated. If development credentials may have
+leaked, run `make rotate-dev-secrets`; this
+rotates JWT/session, PostgreSQL, Redis, Vault KV history, and the backend Vault
+token, then recreates the affected services. It invalidates existing sessions.
+OAuth, SMTP, and SMS credentials must be revoked and reissued by their providers.
+
 ## Technical Stack
 - **Frontend Framework:** React (Vite) + TypeScript
 - **Backend Framework:** NestJS + TypeScript
 - **Database:** PostgreSQL with Prisma ORM
-- **In-Memory Cache & Pub/Sub:** Redis
+- **Cache and short-lived security state:** Redis
 - **Real-Time Communication:** Socket.IO / WebSockets
 - **Game Rendering Engine:** PixiJS (WebGL)
 - **Security:** Nginx with ModSecurity (WAF), HashiCorp Vault (Secrets Management)
 
 **Justification:** 
-We chose React + Vite for its rapid development cycle and rich ecosystem, which easily integrates with PixiJS for high-performance 60FPS WebGL game rendering. NestJS provides a solid, modular architecture for our backend, making it easy to manage WebSocket gateways alongside REST APIs. PostgreSQL + Prisma ensures type-safe and relational data management, while Redis handles scalable session management and socket broadcasting. WAF and Vault were integrated to provide enterprise-level security for secrets and application defense.
+We chose React + Vite for its rapid development cycle and rich ecosystem, which integrates with PixiJS for WebGL game rendering. NestJS manages the REST API and WebSocket gateway. PostgreSQL + Prisma provides type-safe relational storage. Redis stores refresh-token revocation, deletion-confirmation hashes, and Public API rate-limit counters; Socket.IO rooms and reconnect state remain in one backend process and do not use a Redis adapter. WAF and Vault protect HTTP traffic and application secrets.
 
 ## Database Schema
 The database uses PostgreSQL and is managed via Prisma. The core entities and their relationships include:
@@ -74,13 +106,18 @@ The database uses PostgreSQL and is managed via Prisma. The core entities and th
 - **Tournament:** Manages tournament instances, state (registration, in-progress, completed).
 - **TournamentMatch:** Individual matches within a tournament, relating back to GameResult and Tournament.
 - **Friendship / Block:** Self-referential relations on the User model for social features.
-See the [schema-synchronized ER diagram](ER.md) for all 19 Prisma models,
-12 enums, field constraints, and foreign-key relationships. Verify it with
+See the [schema-synchronized ER diagram](ER.md) for all 20 Prisma models,
+15 enums, field constraints, and 30 foreign-key relationships. Verify it with
 `node tools/schema-doc.cjs --check`; regenerate its Markdown with
 `node tools/schema-doc.cjs` after changing the schema. This checks documentation,
 not whether migrations have been applied to a running database.
 
 ## Team Information
+- **Product Owner:** kaisuzuk
+- **Project Manager:** yukusano
+- **Technical Lead:** sonakamu
+- **Developers:** kaisuzuk, sonakamu, ssawa, yukusano
+
 - **sonakamu - Game Engine & Frontend Logic (Player 1)**: Responsible for PixiJS rendering, game state synchronization, local input handling.
 - **ssawa - AI & Multiplayer Logic (Player 2)**: Focused on the C++ headless AI integration, collision detection, and WebSocket real-time synchronization.
 - **kaisuzuk - UI/UX & React Developer (Player 3)**: Designed the neon-themed SPA, dashboard charts, tournament brackets, and overall responsive design.
@@ -101,8 +138,10 @@ not whether migrations have been applied to a running database.
 - **Social Features:** Friend lists, real-time chat, profile customization (Responsible: yukusano).
 - **Advanced Security:** ModSecurity WAF and HashiCorp Vault integration (Responsible: yukusano).
 
-## Modules (Total: 35 pts)
-*Note: Point calculation: Major = 2pts, Minor = 1pt*
+## Implemented Module Candidates
+*The 23 entries below total at most 35 points (Major = 2, Minor = 1), but this
+is not a score claim. A module is claimed for evaluation only after its complete
+requirement and live demonstration pass; see `REMAINING_TASKS.md`.*
 
 ### Web
 1. **Use a Framework as backend and frontend (Major - 2pts)**: React (Vite) and NestJS.
@@ -161,8 +200,10 @@ before deleting that account. Creation uses `POST /api/admin/users`, profile edi
 uses `PATCH /api/admin/users/:id`, and permanent deletion uses
 `DELETE /api/admin/users/:id` with `{"confirmation":"DELETE USER"}`.
 Deletion removes personal data and anonymizes retained match history; it cannot
-be undone. Persistent administrative audit logs and real-database/browser CRUD
-verification remain outstanding, so the advanced-permissions module is not yet complete.
+be undone. CRUD is covered at the service and HTTP boundaries and through a Chrome
+interaction smoke test. Persistent administrative audit storage is intentionally
+out of scope: it is not part of the module rubric and would require a separate
+GDPR retention/minimization policy for administrator and deleted-user identifiers.
 
 ### Public API usage
 
@@ -230,22 +271,22 @@ and playtime are summed. Existing incomplete daily aggregates are not backfilled
 
 ## Individual Contributions
 - **sonakamu**: 
-  - *Contributions:* Built the entire PixiJS rendering engine and handled local input latency mitigation.
-  - *Challenges:* Synchronizing high-speed 60FPS local inputs with server state without causing visual stutter. Overcame this by implementing client-side prediction and server reconciliation.
+  - *Contributions:* Built PixiJS board rendering, local controls, and multiplayer state presentation.
+  - *Challenges:* Kept READY, active-piece, Next/Hold, and spectator transitions consistent while applying authoritative server snapshots.
 - **ssawa**: 
   - *Contributions:* Developed the C++ headless AI and integrated it into the Node.js backend. Managed the core collision detection logic.
-  - *Challenges:* The AI was initially too perfect and unbeatable. Solved this by introducing artificial "think delay" and a probability matrix for suboptimal moves to simulate human error.
+  - *Challenges:* Integrated per-match C++ processes with bounded decision time and replayed the returned actions in the TypeScript game engine.
 - **kaisuzuk**: 
   - *Contributions:* Designed and developed the React SPA, custom UI components, and the analytics dashboard using chart libraries.
-  - *Challenges:* Managing complex state across multiple real-time components (chat, friend list, tournament bracket). Utilized React Context and custom hooks to decouple state management from the UI.
+  - *Challenges:* Kept chat, friend, tournament, and dashboard views maintainable through reusable components, Zustand stores, and custom hooks.
 - **yukusano**: 
   - *Contributions:* Architected the Docker infrastructure, NestJS backend, and implemented WAF/Vault security.
-  - *Challenges:* Configuring ModSecurity to not block high-frequency WebSocket packets while maintaining strict protection for REST endpoints. Solved by writing custom SecRules to bypass WAF for Socket.IO traffic.
+  - *Challenges:* Preserved strict OWASP CRS checks for REST while narrowly excluding Socket.IO and Vite development assets, and implemented persistent Vault initialization/unseal workflows.
 
 ## Resources and AI Usage
 - **NestJS Documentation**: https://docs.nestjs.com/
 - **PixiJS Documentation**: https://pixijs.com/
 - **Socket.IO Documentation**: https://socket.io/
 - **AI Usage**: 
-  - *Algorithm Assistance:* Consulted AI for optimizing and researching the Tetris AI evaluation function (calculating bumpiness and hole penalties).
-  - *Debugging:* Used AI to help trace and resolve complex Docker networking and Vault initialization errors.
+  - *Algorithm Assistance:* AI was used to research and review evaluation features such as height, holes, and bumpiness; final behavior is implemented in the checked-in C++ source and covered by CTest.
+  - *Engineering Assistance:* AI helped investigate Docker/Vault/WAF issues, generate candidate fixes, and draft tests and documentation. Changes were reviewed against source, builds, and automated tests before acceptance.

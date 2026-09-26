@@ -708,18 +708,6 @@ const PlayPage = () => {
     }
   }, [gameOver]);
 
-  // Handle BGM starting
-  useEffect(() => {
-    if (appState === 'PLAYING' || appState === 'ONLINE_1V1') {
-      if (!gameOver && countdown === null) {
-        soundManager.playBgm('/bgm.mp3'); // Fallback placeholder path
-      }
-    }
-    return () => {
-      soundManager.stopBgm();
-    };
-  }, [appState, gameOver, countdown]);
-
   const { joinOnline, setupCustomRoomConnection, startVsAi, customRoomIsPlaying, isSpectatingRef } = useMultiplayer({
     setServerState, setStartTime,
     appState, appStateRef, gameOverRef, setAppState, setGameMode, setStage, stageRef, resetPlayer, resetHold,

@@ -9,7 +9,8 @@ export class FtOauthStrategy extends PassportStrategy(Strategy, '42') {
       clientID: process.env.FT_CLIENT_ID ?? '',
       clientSecret: process.env.FT_CLIENT_SECRET ?? '',
       callbackURL:
-        process.env.FT_CALLBACK_URL ?? 'https://localhost/api/auth/42/callback',
+        process.env.FT_CALLBACK_URL ??
+        'https://localhost:8443/api/auth/42/callback',
       scope: ['public'],
     });
   }

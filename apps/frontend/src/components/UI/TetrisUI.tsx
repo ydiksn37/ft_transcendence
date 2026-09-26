@@ -702,7 +702,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               const oppHeight = 700; // 本来の高さ
 
               const renderOpponent = (id: string, opp: any, index: number, isFallback: boolean = false) => (
-                <div key={id} style={{ width: `${oppWidth * oppScale}px`, height: `${oppHeight * oppScale}px`, position: 'relative' }}>
+                <div data-testid="opponent-board" key={id} style={{ width: `${oppWidth * oppScale}px`, height: `${oppHeight * oppScale}px`, position: 'relative' }}>
                   <div style={{
                     transform: `scale(${oppScale})`, transformOrigin: 'top left',
                     display: 'flex', flexDirection: 'row', gap: '20px', position: 'absolute', top: 0, left: 0, width: `${oppWidth}px`, height: `${oppHeight}px`

@@ -162,6 +162,42 @@ describe('GameInstance AI matches', () => {
     game.stop();
   });
 
+  it('keeps delayed and duplicate inputs isolated across simultaneous rooms', () => {
+    const first = new GameInstance('first_room', server, 42);
+    const second = new GameInstance('second_room', server, 42);
+    for (const game of [first, second]) {
+      game.addPlayer('a', null);
+      game.addPlayer('b', null);
+      game.start();
+    }
+    const firstPlayer = first.getPlayers().get('a')!;
+    const secondPlayer = second.getPlayers().get('a')!;
+    const stalePieceId = firstPlayer.pieceId;
+    const secondInitialX = secondPlayer.activeX;
+
+    first.applyInput('a', ClientEvent.HARD_DROP, stalePieceId);
+    first.applyInput('a', ClientEvent.HARD_DROP, stalePieceId);
+    second.applyInput('a', ClientEvent.MOVE_LEFT, secondPlayer.pieceId);
+
+    expect(firstPlayer.piecesPlaced).toBe(1);
+    expect(secondPlayer.piecesPlaced).toBe(0);
+    expect(secondPlayer.activeX).toBe(secondInitialX - 1);
+    expect(
+      emissions.filter(
+        ({ target, payload }) =>
+          target === 'a' && payload?.roomId === 'first_room',
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      emissions.filter(
+        ({ target, payload }) =>
+          target === 'a' && payload?.roomId === 'second_room',
+      ).length,
+    ).toBeGreaterThan(0);
+    first.stop();
+    second.stop();
+  });
+
   it('changes the input identity on Hold and across rematches', () => {
     const game = new GameInstance('same_room', server, 42);
     game.addPlayer('a', null);

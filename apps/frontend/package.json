@@ -13,6 +13,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@pixi/react": "7.1.1",
+    "@pixi/unsafe-eval": "^7.4.3",
     "@transcendence/shared": "*",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

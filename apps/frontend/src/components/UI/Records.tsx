@@ -21,7 +21,7 @@ export const Records: React.FC<RecordsProps> = ({ records, title = "40 LINES TOP
           <p style={{ textAlign: 'center', color: '#888' }}>No records yet.</p>
         ) : (
           records.map((r, idx) => (
-            <div key={idx} style={{ 
+            <div key={r.record?.id ?? idx} style={{
               display: 'flex', 
               justifyContent: 'space-between', 
               alignItems: 'center',
@@ -29,7 +29,7 @@ export const Records: React.FC<RecordsProps> = ({ records, title = "40 LINES TOP
               borderBottom: '2px dashed #444',
               paddingBottom: '8px'
             }}>
-              <span style={{ width: '30px' }}>{idx + 1}.</span>
+              <span style={{ width: '30px' }}>{r.rank ?? idx + 1}.</span>
               <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '10px' }}>
                 {r.user?.displayName || r.user?.username || r.record?.user?.displayName || r.record?.user?.username || 'Guest'}
               </span>

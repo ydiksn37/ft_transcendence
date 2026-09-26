@@ -34,19 +34,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: 'pixi',
-              test: /node_modules[\\/](@pixi|pixi\.js|@pixi\/react)/,
-              includeDependenciesRecursively: false,
-              maxSize: 350 * 1024,
-            },
-          ],
-        },
-      },
-    },
+    // PixiJS is a tightly coupled renderer bundle. Splitting its circular
+    // modules manually broke production initialization; the gzip payload is
+    // ~217 kB, so use a limit that reflects the required renderer chunk.
+    chunkSizeWarningLimit: 750,
   },
 })

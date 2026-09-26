@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
+import { DsAlert, DsButton, DsField, DsHeading, DsInput, DsPanel } from '../components/design-system';
 import './Login.css';
 
 export default function Login() {
@@ -123,10 +124,10 @@ export default function Login() {
 
   return (
     <div className="login-container">
-      <div className="login-panel">
-        <h1 className="login-title">
+      <DsPanel className="login-panel">
+        <DsHeading level={1} className="login-title">
           TETRIS
-        </h1>
+        </DsHeading>
         
         {!require2FA && <div className="login-tabs">
           <button
@@ -158,16 +159,17 @@ export default function Login() {
         </div>}
 
         {error && (
-          <div className="error-message">
+          <DsAlert tone="danger" className="error-message">
             {error}
-          </div>
+          </DsAlert>
         )}
 
         {require2FA ? (
           <form onSubmit={handle2FASubmit} className="login-form">
-            <div className="form-group">
-              <label>2FA CODE</label>
-              <input 
+            <DsField label="2FA CODE" className="form-group">
+              <DsInput
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 type="text" 
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value)}
@@ -176,15 +178,14 @@ export default function Login() {
                 maxLength={6}
                 required 
               />
-            </div>
-            <button type="submit" className="submit-btn">VERIFY</button>
-            <button type="button" className="tab-btn" style={{marginTop: '10px'}} onClick={() => setRequire2FA(false)}>CANCEL</button>
+            </DsField>
+            <DsButton type="submit" className="submit-btn">VERIFY</DsButton>
+            <DsButton type="button" className="tab-btn" style={{marginTop: '10px'}} onClick={() => setRequire2FA(false)}>CANCEL</DsButton>
           </form>
         ) : (
           <form onSubmit={handleSubmit} className="login-form">
-                    <div className="form-group">
-                      <label>EMAIL</label>
-                      <input 
+                    <DsField label="EMAIL" className="form-group">
+                      <DsInput
                         type="email" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -192,13 +193,12 @@ export default function Login() {
                         placeholder="YOU@EXAMPLE.COM"
                         required 
                       />
-                    </div>
+                    </DsField>
           
                     {!isLogin && (
                       <>
-                        <div className="form-group">
-                          <label>USERNAME</label>
-                          <input 
+                        <DsField label="USERNAME" className="form-group">
+                          <DsInput
                             type="text" 
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
@@ -206,23 +206,21 @@ export default function Login() {
                             placeholder="PLAYER_ONE"
                             required 
                           />
-                        </div>
-                        <div className="form-group">
-                          <label>DISPLAY NAME (OPTIONAL)</label>
-                          <input 
+                        </DsField>
+                        <DsField label="DISPLAY NAME (OPTIONAL)" className="form-group">
+                          <DsInput
                             type="text" 
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             className="retro-input"
                             placeholder="PLAYER 1"
                           />
-                        </div>
+                        </DsField>
                       </>
                     )}
           
-                    <div className="form-group">
-                      <label>PASSWORD</label>
-                      <input 
+                    <DsField label="PASSWORD" className="form-group">
+                      <DsInput
                         type="password" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -230,14 +228,14 @@ export default function Login() {
                         placeholder="********"
                         required 
                       />
-                    </div>
+                    </DsField>
           
-                    <button 
+                    <DsButton
                       type="submit"
                       className="submit-btn"
                     >
                       {isLogin ? 'SIGN IN' : 'CREATE ACCOUNT'}
-                    </button>
+                    </DsButton>
                   </form>
         )}
 
@@ -245,7 +243,7 @@ export default function Login() {
           <span>OR CONTINUE WITH</span>
         </div>
 
-        <button 
+        <DsButton
           onClick={(e) => {
             e.preventDefault();
             localStorage.setItem('oauth_redirect', redirectTo);
@@ -255,8 +253,8 @@ export default function Login() {
           className="oauth-btn"
         >
           SCHOOL 42
-        </button></>}
-      </div>
+        </DsButton></>}
+      </DsPanel>
     </div>
   );
 }

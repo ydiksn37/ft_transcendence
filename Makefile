@@ -207,6 +207,15 @@ prod-down: ## 本番構成を停止する (volumeは残す)
 waf-test: ## WAF (ModSecurity) がXSS攻撃を遮断(403)するかテストする
 	./tools/test-waf.sh
 
+secret-scan: ## Git管理中ファイルに秘密情報がないことを検査する
+	npm run security:secrets
+
+secret-scan-history: ## 全Git履歴を含めて秘密情報を検査する
+	npm run security:secrets:history
+
+rotate-dev-secrets: ## 開発用JWT・DB・Redis・Vault資格情報をローテーションする
+	npm run security:rotate:dev
+
 # --- コンテナ内シェル ---
 exec-backend: ## backendコンテナの中に入る (シェル)
 	docker compose exec backend sh
@@ -230,4 +239,4 @@ lint: ## リンターを実行する
 type-check: ## 型チェックを実行する
 	npm run type-check
 
-.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init prod-vault-init prod-up prod-down waf-test exec-backend exec-frontend exec-db exec-vault ps lint type-check
+.PHONY: all help up down build logs logs-backend logs-frontend restart re clean fclean reset-db generate migrate migrate-dev seed studio install shared-build ai-build ai-web-toolchain ai-web-build ai-web-restart ai-run ai-versus cli-build cli cli-test test test-e2e test-cov vault-init prod-vault-init prod-up prod-down waf-test secret-scan secret-scan-history rotate-dev-secrets exec-backend exec-frontend exec-db exec-vault ps lint type-check

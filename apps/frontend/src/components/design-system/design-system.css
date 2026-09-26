@@ -12,6 +12,7 @@
 .ds-button { padding: var(--space-2) var(--space-4); cursor: pointer; box-shadow: var(--shadow-glow-cyan); }
 .ds-button:disabled { opacity: .45; cursor: not-allowed; }
 .ds-icon-button { inline-size: 2.75rem; block-size: 2.75rem; display: inline-grid; place-items: center; cursor: pointer; }
+.ds-icon { display: block; }
 .ds-panel { padding: var(--space-5); border: var(--border-width) solid var(--color-neon-cyan); background: color-mix(in srgb, var(--color-surface) 92%, transparent); box-shadow: var(--shadow-glow-cyan); }
 .ds-heading { margin: 0 0 var(--space-4); color: var(--color-neon-cyan); font-family: var(--font-display); line-height: 1.35; }
 .ds-input, .ds-select { min-height: 2.75rem; padding: var(--space-2) var(--space-3); }
@@ -30,4 +31,6 @@
 .ds-spinner { display: inline-block; inline-size: 1.5rem; block-size: 1.5rem; border: 3px solid var(--color-surface-2); border-top-color: var(--color-neon-cyan); border-radius: 50%; animation: ds-spin .8s linear infinite; }
 .ds-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: var(--space-4); background: rgb(0 0 0 / .75); }
 .ds-modal { inline-size: min(36rem, 100%); max-block-size: 90dvh; overflow: auto; padding: var(--space-5); border: var(--border-width-strong) solid var(--color-neon-cyan); background: var(--color-surface); }
+.ds-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.ds-button:focus-visible, .ds-icon-button:focus-visible, .ds-input:focus-visible, .ds-select:focus-visible, .ds-modal:focus-visible { outline: 3px solid var(--color-neon-yellow); outline-offset: 3px; }
 @keyframes ds-spin { to { transform: rotate(360deg); } }

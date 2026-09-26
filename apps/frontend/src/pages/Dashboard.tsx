@@ -5,11 +5,12 @@ import { WinRatePanel } from "@/components/dashboard/WinRatePanel"
 import { RecentBattles } from "@/components/dashboard/RecentBattles"
 import { TrendChart } from "@/components/dashboard/TrendChart"
 import { DataExportButtons } from "@/components/dashboard/DataExportButtons"
-import type { UserStats, GameRecordView } from "@/lib/types"
+import type { UserStats, GameRecordView, DailyAnalyticView } from "@/lib/types"
 import { TETROMINOS } from '../utils/tetrominos'
 import { useConfig } from '../hooks/useConfig'
 import { startVisibleRefresh } from '../lib/visibleRefresh'
 import { io } from 'socket.io-client'
+import { DsAlert, DsButton, DsIcon, DsInput, DsSelect, DsSpinner } from '../components/design-system'
 import './Dashboard.css'
 import '../pages/JoinPage.css'
 import './LobbyPage.css' // Reuse back-btn
@@ -22,6 +23,7 @@ export default function Dashboard() {
 	const [stats, setStats] = useState<UserStats | null>(null);
 	const [username, setUsername] = useState<string>("");
 	const [games, setGames] = useState<GameRecordView[]>([]);
+	const [analytics, setAnalytics] = useState<DailyAnalyticView[]>([]);
 	const [historyMode, setHistoryMode] = useState<'ALL' | 'VERSUS' | 'AI' | 'TOURNAMENT' | 'LINES_40' | 'MARATHON'>('ALL');
 	const [historyResult, setHistoryResult] = useState<'ALL' | 'WIN' | 'LOSE'>('ALL');
 	const [loading, setLoading] = useState(true);
@@ -79,6 +81,10 @@ export default function Dashboard() {
 				const historyRes = await fetch(`/api/users/me/history?${params}`, { headers, signal });
 				if (!historyRes.ok) throw new Error('Failed to fetch history');
 				const historyData = await historyRes.json();
+
+				const analyticsRes = await fetch('/api/users/me/analytics?days=30', { headers, signal });
+				if (!analyticsRes.ok) throw new Error('Failed to fetch analytics');
+				const analyticsData = await analyticsRes.json();
 				if (signal.aborted) return;
 
 				// Map history to GameRecordView
@@ -104,11 +110,21 @@ export default function Dashboard() {
 					winRate: Number(statsData.winRate),
 				});
 				setGames(mappedGames);
+				setAnalytics(analyticsData.map((day: any) => ({
+					date: day.date,
+					gamesPlayed: day.gamesPlayed,
+					wins: day.wins,
+					losses: day.losses,
+					avgApm: Number(day.avgApm),
+					avgPps: Number(day.avgPps),
+					totalLinesCleared: day.totalLinesCleared,
+				})));
 			} catch (error) {
 				if (signal.aborted) return;
 				console.error(error);
 				setError(true);
 				setGames([]);
+				setAnalytics([]);
 				// Optionally handle error, e.g. navigate to login if unauthorized
 			} finally {
 				if (!signal.aborted) setLoading(false);
@@ -163,6 +179,7 @@ export default function Dashboard() {
 						)}
 					</div>
 					<div className="loading-text">LOADING...</div>
+					<DsSpinner label="Loading dashboard" />
 				</div>
 			</div>
 		)
@@ -171,9 +188,9 @@ export default function Dashboard() {
 	return (
 		<div className="dashboard-container">
 			<div className="dashboard-header" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-				<button className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
+				<DsButton className="back-btn" onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}>
 					◀ BACK
-				</button>
+				</DsButton>
 				{stats && <DataExportButtons stats={stats} games={games} username={username} />}
 			</div>
 
@@ -199,7 +216,7 @@ export default function Dashboard() {
 
 					{/* ソーシャルボタン */}
 					<div style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'center', marginTop: '10px', marginBottom: '10px' }}>
-						<button 
+						<DsButton
 							onClick={() => navigate(`/chat?mode=${mode || ''}`)}
 							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#e91e63', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
 							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
@@ -207,8 +224,8 @@ export default function Dashboard() {
 							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
 						>
 							💬 GLOBAL CHAT
-						</button>
-						<button 
+						</DsButton>
+						<DsButton
 							onClick={() => navigate(`/friends?mode=${mode || ''}`)}
 							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#3498db', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
 							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
@@ -216,27 +233,27 @@ export default function Dashboard() {
 							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
 						>
 							👥 FRIENDS LIST
-						</button>
-						<button 
+						</DsButton>
+						<DsButton
 							onClick={() => navigate('/search')}
 							style={{ padding: '15px 30px', fontSize: '14px', backgroundColor: '#9b59b6', color: 'white', border: '4px solid #444', cursor: 'pointer', flex: 1, fontFamily: "'Press Start 2P', monospace", boxShadow: '4px 4px 0px rgba(0,0,0,1)', transition: 'transform 0.1s' }}
 							onMouseDown={(e) => e.currentTarget.style.transform = 'translate(2px, 2px)'}
 							onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
 							onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
 						>
-							🔍 SEARCH USERS
-						</button>
+							<DsIcon name="search" size={16} /> SEARCH USERS
+						</DsButton>
 					</div>
 
 					{/* History Filters */}
 					<p>History and trends: latest 50 matching games. Dates use UTC. Summary cards show lifetime statistics.</p>
 					<div style={{ display: 'flex', gap: 16 }}>
-						<label>FROM <input type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} /></label>
-						<label>TO <input type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} /></label>
+						<label>FROM <DsInput type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} /></label>
+						<label>TO <DsInput type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} /></label>
 					</div>
-					{error && <p role="alert">Could not load dashboard data. Check the date range and try again.</p>}
+					{error && <DsAlert tone="danger">Could not load dashboard data. Check the date range and try again.</DsAlert>}
 					<div style={{ display: 'flex', gap: '20px', width: '100%', justifyContent: 'flex-start', marginBottom: '10px' }}>
-						<select 
+						<DsSelect
 							value={historyMode} 
 							onChange={e => setHistoryMode(e.target.value as any)}
 							style={{ padding: '10px', backgroundColor: '#000', color: '#fff', border: '2px solid #333', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}
@@ -247,8 +264,8 @@ export default function Dashboard() {
 							<option value="TOURNAMENT">TOURNAMENT</option>
 							<option value="LINES_40">40 LINES</option>
 							<option value="MARATHON">MARATHON</option>
-						</select>
-						<select 
+						</DsSelect>
+						<DsSelect
 							value={historyResult} 
 							onChange={e => setHistoryResult(e.target.value as any)}
 							style={{ padding: '10px', backgroundColor: '#000', color: '#fff', border: '2px solid #333', fontFamily: "'Press Start 2P', monospace", fontSize: '10px' }}
@@ -256,11 +273,11 @@ export default function Dashboard() {
 							<option value="ALL">ALL RESULTS</option>
 							<option value="WIN">WINS</option>
 							<option value="LOSE">LOSSES</option>
-						</select>
+						</DsSelect>
 					</div>
 
 					{/* Trend Chart */}
-					<TrendChart games={games} />
+					<TrendChart games={games} analytics={analytics} />
 
 					{/* Recent Battles */}
 					<RecentBattles games={games} />

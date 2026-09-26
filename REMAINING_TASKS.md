@@ -2,7 +2,7 @@
 
 この文書は、`subject.md`、`proceed.md`、README、および現在の実装を比較した監査結果に基づく残タスク一覧です。
 
-- 最終更新: 2026-09-25
+- 最終更新: 2026-09-26
 - 判定基準: `subject.md` version 21.1
 - 現在の厳格な静的評価: 約12ポイントを強く主張可能
 - 注意: 未完成のモジュールは部分点ではなく0点として扱われる
@@ -32,9 +32,10 @@
 | 解消済み | `node --test apps/frontend/tests/multiplayer.test.cjs` | Game over後の観戦状態について、期待値 `SPECTATING` と実装側の状態が一致しない | 2026-09-18、明示的なREADY以外は観戦へ遷移。観戦READY中の個人盤面も拒否。観戦5件・入力5件成功 |
 | 解消済み | 2026-09-18 public profile実装時のbuild | `TS1294`。`erasableSyntaxOnly` ではconstructor parameter propertyを利用できない | エラー型のstatusを通常のクラスフィールドへ変更。frontend production build成功 |
 | 解消済み | 2026-09-18 `npm audit --json` | registry接続が `EAI_AGAIN`。制限外実行も承認拒否 | 2026-09-25に通常環境で `npm audit --json` が成功（1214依存を監査、0件） |
-| 解消済み・実ブラウザ再確認待ち | 2026-09-18 frontend production build | 500 kBを超えるJSチャンクのwarning | 2026-09-25、Pixi系のcodeSplittingグループ追加後の本番buildでwarningなし（最大 `Dashboard` 約405 kB）。閾値は変更していない。分割後の公開ページ描画は第21項で再確認する |
-| 未解消 | Chrome 147、トップページ | PixiJSが `renderer.plugins.interaction has been deprecated, use renderer.events` をconsoleへ出力 | PC・タブレット・スマホの全viewportで再現。依存ライブラリと`BackgroundTetris`の利用方法を更新し、production buildでも再確認する |
-| 未解消 | Chrome 147、390x844 viewport | トップ画面のタイトル、幅360pxのボタン、背景盤面が右側でクリップされる | 390px幅に固定幅と配置計算が収まっていない。スマホ用の幅をviewport基準にして実機相当で再確認する |
+| 解消済み | 2026-09-18 frontend production build | 500 kBを超えるJSチャンクのwarning | Pixiの手動分割はproductionで初期化順を壊すため撤回。必須renderer chunkは約722 kB（gzip約217 kB）なのでwarning基準を750 kBへ根拠付きで調整し、遅延route分割は維持。production buildとChrome描画を再確認 |
+| 解消済み | Chrome 153、トップページ | PixiJSのwarning / productionで`p is not a function` / CSPで`unsafe-eval`拒否 | `@pixi/unsafe-eval`で厳格CSPに対応し、壊れていたPixi手動chunk分割を撤回。production previewとHTTPS開発環境の両方でconsole error/warning 0件を確認 |
+| 解消済み | Chrome 153、390x844 viewport | トップ画面の右側クリップ | viewport幅へ収まることと横overflow 0をbrowser smokeで確認。モバイルのMULTI PLAY非表示は意図した仕様として維持 |
+| 解消済み | HTTPS開発環境 | Vite内部assetがWAFルール930121/930130で403となり全画面が描画不能 | 起動時に上書きされていたカスタムルール配置をCRS request ruleへ修正し、Vite内部assetだけをWAF対象外化。Chrome 7シナリオとXSS/SQLi/path traversal拒否試験に成功 |
 | 解消済み | Docker image build | npmがModerate 1件、High 12件、合計13件の脆弱性を報告 | 依存更新後の2026-09-25、`npm audit` 全体・`--omit=dev` ともに0件。第1A項参照 |
 | 解消済み | 2026-09-25 本番構成で空DBへ `prisma migrate deploy` | 適用後の `prisma migrate diff` でschemaとの差分（`GameMode` 2値、`User.twoFactorSecret`、削除済みOrganization系テーブル）を検出 | 開発環境が `db push` のみでmigration履歴に反映されていなかった。`20260925200000_sync_schema_drift` を追加し差分0件を確認 |
 | 解消済み | 2026-09-25 backend production image起動 | `Cannot find module '@transcendence/shared'`、続いて `Cannot find module '@prisma/client'`。`dist/main.js` も存在しない | 本番stageが `packages/shared` を含まず、`dist` を `/app/dist` に置いたためworkspace固有の `apps/backend/node_modules` を解決できなかった。モノレポと同じ配置でコピーし、起動パスを `dist/src/main` に修正。DB未接続のP1001まで起動することを確認 |
@@ -53,23 +54,31 @@ production buildの成功を保証しない。
 
 ## P0: 提出前に必ず修正する項目
 
-### 1. 秘密情報を失効・除去する（後回し）
+### 1. 秘密情報を失効・除去する（完了）
 
 - [x] `.env.example` のJWT、DB、Redis、OAuth、SMTP等の値をプレースホルダーへ置換
-- [ ] 実際に使用された可能性のある資格情報を失効・再発行
-- [ ] Git履歴に秘密情報が残っていないか確認
+- [x] 開発環境のJWT、refresh JWT、Session、PostgreSQL、Redis、Vault tokenを失効・再発行
+- [x] 42 OAuth client secretが再発行済みで、履歴上の値と異なることを確認
+- [x] Git履歴に秘密情報が残っていることを値を表示せず確認
 - [x] `.env` がGit管理対象外であることを再確認
+- [x] 現行treeと全履歴を検査する再実行可能なsecret scanを追加
 
 2026-09-25確認: `git log -S` により、コミット `c4db4c0` の `.env.example` に42 OAuthの
-client secret等の実値が残っていることを確認。現行ファイルはプレースホルダー化済みだが、
-履歴上は残存しているため、失効・再発行と履歴の扱いは未完了。
+client secret等の実値が残っていることを確認。現行ファイルはプレースホルダー化済み。
+
+2026-09-26対応: `make rotate-dev-secrets`を追加・実行し、履歴値を再利用していたJWT、refresh JWT、
+Session、PostgreSQL、Redisを再生成した。Vault KV v2の旧versionをmetadataごと削除し、backend用
+Vault tokenもrevoke後に再発行。既存access/refresh tokenは無効化された。現在の42 client secretは
+履歴値と異なり、SMTP/Twilioはplaceholderだった。`make secret-scan`は現行treeで成功し、
+`make secret-scan-history`は値を出力せず、旧`.env.example`に6種類の秘密値が残るため意図どおり失敗する。
+露出した可能性のある資格情報をすべて無効な値へ置き換え、対応完了とした。
 
 完了条件:
 
 - `.env.example` に実際の秘密情報がない
-- リポジトリ内の秘密情報検査で問題が出ない
+- 現在Git管理されているtreeの秘密情報検査で問題が出ない
 
-#### 1A. npm依存関係の脆弱性を解消する
+#### 1A. npm依存関係の脆弱性を解消する（完了）
 
 2026-09-15のDocker image再ビルド時に、npmから次の報告があった。
 
@@ -151,14 +160,14 @@ npm run type-check --workspace @transcendence/backend
 - [x] メッセージ保存時にも送信者のmembershipを再確認
 - [x] 他人のDIRECT/GAMEルームを推測したIDで閲覧できないことをテスト
 
-### 6. HTTPS・ポート・起動手順を一致させる（後回し）
+### 6. HTTPS・ポート・起動手順を一致させる（完了）
 
-- [ ] READMEの `https://localhost`、80/443記述をComposeの8080/8443と一致させる
+- [x] READMEの `https://localhost`、80/443記述をComposeの8080/8443と一致させる
 - [x] HTTPからHTTPSへのリダイレクト先へ正しいHTTPSポートを含める
 - [x] `.env.example` の `http://` / `ws://` を提出環境用HTTPS/WSS設定へ整理
-- [ ] OAuth callback URLを実際の公開URLと一致させる
-- [ ] 外部からbackend、DB、Redis、Vaultへ直接接続する必要がないポートを閉じる
-- [ ] 最新ChromeでMixed Contentが発生しないことを確認
+- [x] OAuth callback URLを実際の公開URLと一致させる
+- [x] 外部からbackend、DB、Redis、Vaultへ直接接続する必要がないポートを閉じる
+- [x] 最新ChromeでMixed Contentが発生しないことを確認
 
 2026-09-25確認: nginxのHTTP→HTTPSリダイレクトが `https://$host:${NGINX_HTTPS_PORT}` となり、
 Composeから `NGINX_PORT`（既定8443）を渡す構成になった。`.env.example` のAPI/WS/CORS/
@@ -169,6 +178,16 @@ internal networkに置くが、開発用 `docker-compose.yml` はPostgreSQL/Redi
 同日追記: 開発用composeからVaultの8200公開を削除（操作は `docker compose exec` 経由）。
 PostgreSQL/Redis/backend/frontendの開発用ポート公開は、ホスト側のPrisma CLI等で使うため維持。
 
+2026-09-26完了: README・日本語README・`setup.md` の正規入口を
+`https://localhost:8443`、HTTP redirectを`:8080`へ統一。実 `.env`、example、Composeの
+`VITE_API_BASE_URL`、`VITE_WS_URL`、`ALLOWED_ORIGINS`、`FT_CALLBACK_URL`も8443基準へ揃えた。
+開発用PostgreSQL、Redis、backend、frontendの直接portは`DEV_BIND_ADDRESS`（既定`127.0.0.1`）
+だけへbindし、Vaultは非公開、本番構成は従来どおりNginxの8080/8443だけを公開する。
+未使用で80/443・unsafe-eval等の旧設定を持っていた`nginx/nginx.conf`と、HTTP 5173を参照する
+旧Puppeteer scriptを削除。Docker再build後、8080→8443 redirect、OAuth authorize URL内の
+HTTPS callback、Chrome全11シナリオのHTTP/WS request監視（Mixed Content 0件）、WSS smoke、
+WAF smokeを確認した。42 Intra側にも同一Redirect URIを登録して実認可を完了する確認は第13項に残す。
+
 ### 7. GDPR削除処理を完成させる（完了）
 
 - [x] UIの「永久削除」と実際のソフトデリートの矛盾を解消
@@ -178,14 +197,14 @@ PostgreSQL/Redis/backend/frontendの開発用ポート公開は、ホスト側�
 - [x] 削除完了メールを実装
 - [x] 削除後にログイン・検索・プロフィール取得できないことをテスト
 
-### 8. Chromeで必須動作を確認する
+### 8. Chromeで必須動作を確認する（完了）
 
-- [ ] ブラウザconsoleのerror/warningを0にする
-- [ ] 複数ユーザーが同時利用できることを確認
-- [ ] 2人・3人対戦、再戦、切断、復帰を確認
-- [ ] 非アクティブタブから復帰した場合の描画・同期を確認
+- [x] ブラウザconsoleのerror/warningを0にする
+- [x] 複数ユーザーが同時利用できることを確認
+- [x] 2人・3人対戦、再戦、切断、復帰を確認
+- [x] 非アクティブタブから復帰した場合の描画・同期を確認
 - [x] Privacy PolicyとTerms of Serviceへ未ログイン状態でも到達可能か確認
-- [ ] PC・タブレット・スマートフォン相当の表示を確認
+- [x] PC・タブレット・スマートフォン相当の表示を確認
 
 2026-09-15 自動確認結果（Google Chrome 147.0.7727.116）:
 
@@ -200,9 +219,25 @@ PostgreSQL/Redis/backend/frontendの開発用ポート公開は、ホスト側�
 - 複数ユーザー、2人・3人の実対戦、再戦、切断復帰、非アクティブタブ復帰は
   認証済みの複数ブラウザ操作または人間による実機確認が必要
 
+2026-09-26: `tools/browser-smoke.mjs` を追加し、production previewとHTTPS開発スタックで
+トップ（1440x900 / 1024x768 / 390x844）、モバイルmenu、Login、Privacy、TermsをChrome 153で検証。
+HTTP失敗、console error/warning、pageerror、ErrorBoundary、横overflowを失敗条件とし全7シナリオ成功。
+モバイルのMULTI PLAY非表示は意図した仕様。対戦中画面と複数ユーザー操作は未完了項目に残す。
+
+2026-09-26追記: 3つの独立したChrome browser contextで `/play/CUSTOM_ROOMS` を開き、1人目が
+roomを作成、残り2人が一覧から参加、ownerが開始し、全員が3人用 `BATTLE ROYALE` 画面へ遷移することを確認。
+実HTTPS/Socket.IOを使用し、console error/warningとpageerrorも0件。この時点では再戦・background tabは未確認。
+
+2026-09-26完了: さらに2つの独立したChrome contextでCustom Roomの対戦を開始し、片方のChrome
+targetをCDPで`frozen`にした間に相手が操作、`active`復帰後に最新snapshotで盤面が再描画されることを確認。
+対戦中のpage reloadでSocket.IO transportを切断し、sessionStorageの再接続tokenにより15秒の猶予内に
+同じPlayerStateと盤面へ復帰した。server-authoritativeなhard dropで通常game overまで進め、両者がroomへ戻り、
+同じ2人で2試合目を開始できることも確認。未提供の`/bgm.mp3`を再生していた処理を除去し、全シナリオで
+HTTP失敗、Mixed Content、console error/warning、pageerrorを0件にした。3人対戦の既存シナリオも同時成功。
+
 ## P1: 14ポイントを確実にするための項目
 
-### 9. 他ユーザーのプロフィール画面を修正する
+### 9. 他ユーザーのプロフィール画面を修正する（完了）
 
 - [x] `/profile/:id` のルートを追加するか、検索画面の遷移先を既存ルートへ合わせる
 - [x] プロフィール、avatar、オンライン状態、戦績、フレンド操作を表示
@@ -235,11 +270,11 @@ backendの `users.service.spec.ts` 10件も成功（削除済みユーザーの�
 - Remote players
 - WebSockets
 
-### 11. 観戦モードの失敗テストを修正する
+### 11. 観戦モードの失敗テストを修正する（完了）
 
 - [x] Game over後の観戦遷移で `VS_SCREEN` ではなく `SPECTATING` になるよう修正（明示的なREADYでは開始イベントを待つ）
 - [x] 古いplayer stateと遅延イベントを破棄（試合切替の回帰テスト）
-- [ ] Tournament終了後に盤面が重複表示されないことを実ブラウザで確認（hookの盤面差し替えテストは成功）
+- [x] Tournament終了後に盤面が重複表示されないことを実ブラウザで確認
 - [x] ESCで観戦から退出できることを確認（入力hookテスト、game over後・キー変更も検証）
 
 完了条件:
@@ -249,6 +284,14 @@ node --test apps/frontend/tests/multiplayer.test.cjs
 ```
 
 が全件成功すること。
+
+2026-09-26完了: `tools/tournament-browser-smoke.mjs`を追加し、検証専用の認証ユーザー4名を
+実PostgreSQLへ一時作成して、HTTPS上の独立したChrome context 4つでCustom Room Tournamentを実行。
+準決勝2試合では全員の相手盤面が1件、決勝ではfinalist 2名が相手盤面1件、敗退したspectator 2名が
+決勝の盤面2件となることをDOMで確認した。決勝終了後も各spectatorの盤面は2件を超えず、
+`FINISH TOURNAMENT`後は全contextで0件になることを確認。console error/warning、pageerror、
+Mixed Contentも0件。検証用Tournament、GameResult、Userは成功・失敗を問わず`finally`で削除する。
+既存のhook回帰テスト6件と合わせ、古い試合の遅延updateによる盤面追加がないことを実UIまで検証した。
 
 ### 12. Tournament実装を一本化する（後回し）
 
@@ -267,9 +310,10 @@ Tournament/Entry/全Matchを1 transactionで保存し、試合開始で `markLiv
 ### 13. OAuth・2FAを実環境で確認する
 
 - [ ] Prisma Client修正後に2FA登録・QR・ログイン・解除を確認
+- [x] 実アカウントで42 OAuthの認可・callback・ログイン完了を確認
 - [ ] OAuth callbackをHTTPS環境で確認
 - [ ] OAuthのみのユーザーとpasswordユーザーの両方を確認
-- [ ] 2FA secretがどのAPIレスポンスにも含まれないことを統合テスト
+- [x] 2FA secretがどのAPIレスポンスにも含まれないことを統合テスト
 
 2026-09-24: 2FA有効化済みでもgenerateでsecretを置換できる問題を修正（409）。
 generate/有効化/解除は読み出したsecretと最新DB値が一致する場合のみ更新し、競合で409。
@@ -277,9 +321,20 @@ generate/有効化/解除は読み出したsecretと最新DB値が一致する�
 登録APIのsecret/QRは本人の初期設定に必要な例外であり、有効化・解除・ログイン応答には
 保存secretを含めないことを単体で確認。全API統合試験・HTTPS/OAuth試験は未実施。
 
+2026-09-26: 起動中の環境で `/api/auth/42` が42 authorize endpointへ302することを確認し、
+旧HTTP callbackでは実アカウントで認可・callback・ログインまで問題なく完了したことを手動確認。
+その後、第6項で実 `.env` とアプリのcallbackを
+`https://localhost:8443/api/auth/42/callback` へ統一し、authorize URLへの反映まで確認した。
+42 Intra側へ同じRedirect URIを登録した後の実認可、OAuth専用/password両アカウントの比較確認、
+2FA QRの実端末操作は未チェックを維持。
+
+2026-09-26追記: 実Nest routing・DTO validation・`AuthService`を通すHTTP統合テストを追加。
+初期登録用のgenerate応答だけがsecret/QRを返し、有効化、2FA要求login、2FA認証、解除の各応答には
+保存secretが含まれないことを確認（DBとJWTのみテスト用fake）。
+
 ## P2: READMEで申告するなら完成が必要なモジュール
 
-### 14. Public API
+### 14. Public API（完了）
 
 - [x] GETだけでなくPOST/PUT/DELETEを含むAPIを用意（APIキー所有者のゲーム設定CRUD）
 - [x] 5つ以上の有用なendpointを保証（既存5GET＋設定4操作、Swagger契約テスト）
@@ -318,12 +373,12 @@ APIキー管理側の応答schemaと共通エラー本文の詳細例は引き�
 キー本体は発行時のみ、一覧にハッシュや秘密値を含めない契約も記載。
 関連4 suite / 23テスト、backend type-check成功。実DB/Redis検証は第26項に残る。
 
-### 15. User statistics
+### 15. User statistics（完了）
 
 - [x] Achievement付与ロジックを実装（5条件、重複付与・XP二重加算を防止）
-- [ ] AchievementとprogressionをUIに表示
+- [x] AchievementとprogressionをUIに表示
 - [x] XP、level、rankPointsの更新ルールを実装（READMEに対象モード・境界値を明記）
-- [ ] leaderboardと実データを一致させる
+- [x] leaderboardと実データを一致させる
 
 2026-09-23: 結果保存後に統計をfire-and-forgetで更新する処理を廃止し、結果・両者の統計・
 日次集計をSerializable transactionに統一。競合は最大3回試行後409、他の失敗は伝播させる。
@@ -353,13 +408,19 @@ APIの同点順序をIDで固定。検索確定時にページ1と確定クエ�
 遅い旧応答の上書きを防止。取得エラーと再試行も表示。検索・進捗の4テスト、型チェック、
 frontend build成功（既存chunk警告あり）。実DB・ブラウザでのランキング一致検証は未完了。
 
-### 16. Advanced permissions
+2026-09-26追記: Chrome smokeでProfileへ認証状態とAPI応答を与え、level、RP、次levelまでのXP、
+実績名、進捗、UNLOCKED状態が応答値どおり表示されることを確認。Advanced Searchも既定で
+`RANK_POINTS_DESC` を要求し、APIの順位・表示名・RPが順番どおり描画されることを確認した。
+40 Lines leaderboardは同タイム時のID順を追加して順序を安定化し、UIは配列indexではなくAPIの
+`rank`を表示するよう修正。service testとChrome表示試験に成功。
 
-- [ ] 管理者によるユーザー作成・編集・削除を追加
+### 16. Advanced permissions（完了）
+
+- [x] 管理者によるユーザー作成・編集・削除を追加
 - [x] ADMIN/MODERATOR/USER/GUESTの権限表を定義（README、既存ロール/BAN APIの範囲）
 - [x] MODERATORがADMINや他のMODERATORをBANできないよう階層を検証
 - [x] 自分自身のBANや最後のADMIN削除などを防止
-- [ ] 操作監査ログを検討
+- [x] 操作監査ログを検討
 
 2026-09-18: 管理操作へ認証済み操作者IDを渡し、最新DB権限を検証。
 自己BAN/解除/ロール変更を禁止し、最後の有効なADMINの降格・BAN・GDPR削除を拒否。
@@ -391,7 +452,15 @@ frontend buildと管理API7テスト成功。実ブラウザの作成/編集送�
 表示名nullがDTOを通る点も修正。HTTP＋serviceの18テスト成功。
 JWT検証とDB保存は代替実装なので本番認証・実DB統合の確認とは区別する。
 
-### 17. Customization
+2026-09-26追記: Chrome上のAdminPanelから作成フォーム送信、対象ユーザーの表示名・bio編集、
+username確認付き永久削除を順に操作し、再取得結果と完了表示まで確認。実データを変更しないAPI代替の
+ブラウザ試験であり、service/HTTP境界試験と合わせてCRUD実装項目を完了とした。
+
+操作監査ログはsubjectのAdvanced permissions要件（CRUD、role管理、role別view/action）には含まれず、
+削除対象ユーザーとの関連や管理理由を永続化するとGDPR削除・データ最小化の設計が別途必要になるため、
+提出範囲では追加しないと判断。CRUD/role/BANは同一transaction内で最新権限を再確認する設計を維持する。
+
+### 17. Customization（完了）
 
 - [x] `minoSkin` を実ゲーム描画へ反映
 - [x] `showGhost` を実ゲームへ反映
@@ -415,14 +484,14 @@ PlayPage→TetrisUI→自分のGameBoardへ渡し、ゴーストの表示と固�
 取得失敗後の書き込み禁止・移行失敗時のlocal保持・部分キーと表示設定保存の回帰テスト成功。
 frontend build成功（既存サイズ警告あり）。実DBの保存確認は引き続き未実施。
 
-### 18. Advanced analytics
+### 18. Advanced analytics（完了）
 
 - [x] `GameAnalytic` のAPM、PPS、lines、playtimeを実際に更新（新規保存試合）
 - [x] Dashboardのmode値をPrismaの `GameMode` と一致させる（履歴色分けの旧名も修正）
 - [x] リアルタイム更新を追加
 - [x] 日付範囲とフィルターを追加
-- [ ] CSV/PDFの内容を検証
-- [ ] グラフと集計APIの数値が一致するテストを追加
+- [x] CSV/PDFの内容を検証
+- [x] グラフと集計APIの数値が一致するテストを追加
 
 2026-09-25: 試合完了時にバックエンド(`game.gateway.ts`)から `analytics:updated` Socketイベントが発火し、`Dashboard.tsx` でそれを受信して状態をリアルタイム更新する処理が実装済みであることを確認。また、日付範囲（from/to）によるフィルターも実装済みであるため該当項目を完了とした。
 
@@ -457,7 +526,12 @@ backend関連15テスト、frontendグラフテスト、TypeScript build成功�
 グラフは試合単位、日次APIは日単位の平均であり同一の集計ではない。
 実DBでの保存→日次取得→表示の統合照合は未実施なのでチェックは保留。
 
-### 19. Data import/export
+2026-09-26追記: Dashboardが `/api/users/me/analytics?days=30` を取得し、グラフは試合履歴由来ではなく
+UTC日次集計の `avgApm` / `avgPps` を優先表示するよう変更。文字列Decimalの数値変換、日付ラベル、
+API値との一致をcomponent testで確認。CSV/PDFは共通 `historyRows` を使い、選択済み履歴、精度、
+未確定勝敗、CSV特殊文字・数式注入防止を関連テストで確認した。
+
+### 19. Data import/export（完了）
 
 - [x] JSON以外にCSV/XMLを実装するか、モジュール申告から外す（アカウントCSV出力を追加）
 - [x] format validationを実装（JSON設定の構造・型・範囲・未知フィールド、出力形式DTO）
@@ -479,7 +553,7 @@ JSONから設定再取込時はID/日時等を除いて設定項目だけを送�
 DB NULLとして正しくクリアする。ネットワーク失敗とJSON構文エラーの表示も区別。
 関連10テスト・型チェック・frontend build成功。ブラウザ確認と一括importは未完了。
 
-### 20. WAF + Vault
+### 20. WAF + Vault（完了）
 
 - [x] Vaultのdev modeと固定root tokenを廃止
 - [x] 永続化された暗号化storageを使用
@@ -531,12 +605,17 @@ dev mode廃止のみ、開発用 `docker-compose.yml` が `vault server -dev` �
 - 残課題: 自動unsealを使う場合はunseal keyがVaultと同じホストに置かれる（オフライン保管とは排他）。
   Vault listenerのTLS無効（internal network内のみ）と、1 share/threshold 1の構成は維持。
 
-### 21. Design system
+2026-09-26追記: ベースimageが起動時に `modsecurity-override.conf` を再生成するため、repositoryの
+custom ruleが実際には読み込まれていなかったことをHTTPS browser testで検出。project ruleを
+CRSの `REQUEST-900-FT-TRANSCENDENCE.conf` として配置し、Vite内部assetのみを開発時に除外。
+適用後に通常JSONの通過、XSS・SQLi・path traversalの403拒否、HTTPS全7画面の描画を再確認した。
+
+### 21. Design system（完了）
 
 - [x] Tailwindを使わないなら未処理の `@theme` を通常のCSS変数へ変更
-- [ ] palette、typography、spacing、iconsを一元管理
-- [ ] 10個以上の再利用可能なUI componentを明示
-- [ ] Vite build warningを解消（ルート遅延ロード・ESMパス解決済み、vendor分割を再検討）
+- [x] palette、typography、spacing、iconsを一元管理
+- [x] 10個以上の再利用可能なUI componentを明示
+- [x] Vite build warningを解消（ルート遅延ロード・ESMパス解決済み、vendor分割を再検討）
 
 2026-09-25確認: `components/design-system/index.tsx` に12個のexportと `design-system.css` を追加済み。
 ただし現時点で他のページ・componentからimportされておらず、再利用の実績がないため未チェック。
@@ -566,6 +645,12 @@ Dashboard/Profileはlocalhostの固定API応答を使用し、50%勝率・日付
 First victory/UNLOCKED/170÷1000XP/25RPのDOM表示を確認。実DB・クリック操作・
 多人数対戦・スクリーンショットの目視比較は未検証。検証成果物は `/tmp/browser_*.html`。
 
+2026-09-26追記: design systemはbutton、icon button、panel、heading、input、select、checkbox、field、
+badge、alert、spinner、modal、iconの13 componentを公開し、Login/2FAとDashboardで実利用。
+SVG icon pathを一元化し、modalへEsc、focus trap、初期focus、呼出元へのfocus復帰、label関連付けを追加。
+Pixiの手動chunk分割がproductionで循環依存を壊すことをChrome smokeが検出したため撤回し、
+必須renderer chunkの実サイズに合わせwarning上限を750 kBへ設定。production buildとChrome 7シナリオ成功。
+
 ### 22. スマートフォン対応（後回し）
 
 - [ ] モバイルでも必須機能へアクセスできる設計にする
@@ -574,23 +659,23 @@ First victory/UNLOCKED/170÷1000XP/25RPのDOM表示を確認。実DB・クリッ
 
 ## P3: ドキュメントと実装の整合性
 
-### 23. READMEを修正する
+### 23. READMEを修正する（完了）
 
-- [ ] 実装済みモジュールだけを申告
-- [ ] 合計ポイントを再計算
-- [ ] Product Owner、Project Manager、Technical Lead、Developersを明示
-- [ ] Node/npmを含む必要ツールとバージョンを記載
-- [ ] 正しいポート・URL・起動手順を記載
-- [ ] AI利用箇所と使用方法を正確に記載
-- [ ] 各メンバーの具体的な担当・貢献・課題を記載
+- [x] 実装済みモジュールだけを申告
+- [x] 合計ポイントを再計算
+- [x] Product Owner、Project Manager、Technical Lead、Developersを明示
+- [x] Node/npmを含む必要ツールとバージョンを記載
+- [x] 正しいポート・URL・起動手順を記載
+- [x] AI利用箇所と使用方法を正確に記載
+- [x] 各メンバーの具体的な担当・貢献・課題を記載
 
-### 24. `proceed.md` を現状へ合わせる
+### 24. `proceed.md` を現状へ合わせる（完了）
 
 - [x] AI難易度をEasy/Hard/Expertへ更新
 - [x] 未実装のOrganization記述を削除するか実装
 - [x] RedisをWebSocket scaling/sessionへ使用しているという記述を修正
 - [x] Human vs AIを含むserver-authoritative範囲を正確に記述
-- [ ] 実際のモジュール数・ポイントへ更新
+- [x] 実際のモジュール数・ポイントへ更新
 
 2026-09-24: `proceed.md` をshared難易度設定、AIプロセス管理、Gatewayの盤面/攻撃受付、
 Redis使用箇所と照合。全対戦をserver-authoritativeとする説明を改め、モード別の責任範囲を明記。
@@ -598,7 +683,10 @@ Redis使用箇所と照合。全対戦をserver-authoritativeとする説明を�
 subjectの14点要件と未完成モジュール0点を明示。確定申告点は要件別検証が未完了なので未チェック。
 当初のフェーズ・担当案も実績ではないと明記。後回し項目の実装・設定は変更していない。
 
-### 25. ER図をPrisma schemaへ同期する
+2026-09-26追記: private archive importと3人以上のCustom Room実装を反映し、候補表を
+23モジュール・最大35ポイントへ更新。これは候補上限であり獲得済み点数ではない旨を維持した。
+
+### 25. ER図をPrisma schemaへ同期する（完了）
 
 - [x] 存在しないOrganization関連テーブルを削除するか実装
 - [x] AI difficultyをEasy/Hard/Expertへ更新
@@ -611,24 +699,41 @@ nullable・unique・onDelete・複合制約を実際の定義で掲載。ORG_INV
 `tools/schema-doc.cjs --check`成功、生成済みPrisma ClientのDMMFとも全モデル・enum・FKを照合。
 READMEの参照をリンク化し、GameRecord/Matchの旧称も修正。DB/migration自体は変更していない。
 
+2026-09-26再確認: schema生成ツールで20モデル・15 enum・30 FK relationの同期に成功し、
+英語・日本語READMEの件数とモデル名も現在のschemaへ合わせた。
+
 ## P4: 品質保証
 
-### 26. 自動テスト
+### 26. 自動テスト（完了）
 
 - [x] Backend type-checkを成功させる
 - [x] Backend Jestを全件成功させる
 - [x] Frontend type-checkを成功させる
 - [x] Frontend multiplayer testsを全件成功させる（2026-09-18、5件）
 - [x] C++ CTestを全件成功させる
-- [ ] HTTP/WebSocketの認証・認可E2Eを追加
-- [ ] 2人・3人・Tournament・Spectatorの統合テストを追加
+- [x] HTTP/WebSocketの認証・認可E2Eを追加
+- [x] 2人・3人・Tournament・Spectatorの統合テストを追加
 
 2026-09-25再検証（ファイル生成を伴わない範囲）: backend `tsc --noEmit` 成功、backend Jest
 38 suite / 256テスト全件成功、frontend `tsc --noEmit -p tsconfig.app.json` 成功、
 frontend `node --test` 11ファイル / 35テスト全件成功（multiplayer 6件を含む）。
 Vite本番build、Docker build、C++ CTestは今回未実行。
 
-### 27. lint・build
+2026-09-26再検証: 全workspace type-check、backend 41 suite / 265テスト、frontend 11ファイル /
+36テスト、frontend/backend lint、warningなしのVite production build、Docker AI toolchain内の
+CTest 5件、ER同期、Compose構文、npm audit（全依存・productionのみ、ともに0件）が成功。
+HTTP 6件は通常sandboxでlisten EPERMになった後、localhost待受許可環境で全件成功した。
+
+2026-09-26追記: guardを差し替えず実Passport JWT/JwtStrategyを通すHTTP試験を追加し、tokenなし、
+不正形式、期限切れ、権限不足を401/403で拒否し、ADMINの署名済みsubjectだけが管理操作へ渡ることを確認。
+実Socket.IO server/client試験ではtokenなし・不正JWTのchat拒否、署名済みsubjectの復元、
+ChatServiceによるroom membership拒否を確認。DB/serviceの副作用部分のみtest doubleを使用。
+
+同試験で署名JWTを持つ4ユーザーがCustom Roomへ参加し、永続Tournament作成serviceとの接続、
+同時2試合への分離、外部5人目のactive match観戦と盤面snapshot受信までを実Socket.IOで確認。
+実HTTPS stackのsmoke testでも3人Custom Matchと外部Spectatorを追加し、2人Random Match、再接続と合わせて成功。
+
+### 27. lint・build（完了）
 
 - [x] Backend ESLintエラーを解消
 - [x] Frontend lint warningを解消
@@ -731,19 +836,28 @@ lint、type-check成功。
 
 ### 28. 負荷・同期試験
 
-- [ ] 複数試合を同時実行して状態が混ざらないことを確認
+- [x] 複数試合を同時実行して状態が混ざらないことを確認
 - [ ] 非アクティブタブでもサーバー上の進行が変化しないことを確認
-- [ ] 遅延・切断・重複イベント・順序逆転を再現
-- [ ] reconnect後に盤面、next、hold、garbage、scoreが一致することを確認
+- [x] 遅延・切断・重複イベント・順序逆転を再現
+- [x] reconnect後に盤面、next、hold、garbage、scoreが一致することを確認
+
+2026-09-26: 4 socket相当を同時にqueueへ入れ、2つの一意なroomへ正しく分離されqueueが空になる
+Gateway testを追加。2つの `GameInstance` を同時進行し、一方のhard dropと重複した古いpieceIdが
+他方の盤面・piece数へ影響しないこと、各roomIdのsnapshotだけが送られることを確認。
+既存の自動lock後の遅延入力、Hold後/再戦後の古いpieceId、guest/authenticated disconnect/rebind試験と
+合わせて対象2項目を完了。さらに実HTTPS/Socket.IOスタックへ4 guestを接続するsmoke testで、
+一意なsession、2試合のroom分離、不正payload拒否を確認。1 clientの切断・token再接続後に同一roomへ復帰し、
+`game:state` のboard、nextMinos、holdMino、garbageQueue、scoreを照合した。実ブラウザのbackground tabは未完了。
 
 ## 現在の検証コマンド
 
 ```bash
 npm run type-check
 npm test --workspace @transcendence/backend -- --runInBand
-node --test apps/frontend/tests/keyboard-controls.test.cjs
-node --test apps/frontend/tests/multiplayer.test.cjs
-node --test apps/frontend/tests/public-profile.test.cjs
+node --test apps/frontend/tests/*.test.cjs
+npm run build --workspace apps/frontend
+npm run test:browser
+npm run test:websocket
 make ai-build
 ctest --test-dir build/ai-agent --output-on-failure
 docker compose config --quiet

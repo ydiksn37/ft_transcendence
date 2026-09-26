@@ -24,7 +24,7 @@ describe('GameGateway', () => {
         GameGateway,
         { provide: GameService, useValue: {} },
         { provide: ChatService, useValue: chatService },
-        { provide: AiAgentService, useValue: {} },
+        { provide: AiAgentService, useValue: { releaseMatch: jest.fn() } },
         { provide: JwtService, useValue: { verify: jest.fn() } },
         { provide: PrismaService, useValue: {} },
         { provide: TournamentService, useValue: {} },
@@ -49,6 +49,38 @@ describe('GameGateway', () => {
 
   it('should be defined', () => {
     expect(gateway).toBeDefined();
+  });
+
+  it('creates isolated matches for concurrent pairs without leaking queue state', () => {
+    jest.useFakeTimers();
+    const broadcasts: Array<{ roomId: string; event: string; payload: any }> =
+      [];
+    gateway.server = {
+      sockets: new Map(),
+      to: jest.fn((roomId: string) => ({
+        emit: (event: string, payload: any) =>
+          broadcasts.push({ roomId, event, payload }),
+      })),
+    } as any;
+    const clients = ['a', 'b', 'c', 'd'].map((id) => ({
+      id,
+      data: { username: id.toUpperCase() },
+      join: jest.fn(),
+      emit: jest.fn(),
+    })) as any[];
+
+    clients.forEach((client) => gateway.handleJoinQueue(client));
+
+    const matches = broadcasts.filter(({ event }) => event === 'match:found');
+    expect(matches).toHaveLength(2);
+    expect(matches[0].roomId).not.toBe(matches[1].roomId);
+    expect(new Set(matches[0].payload.players)).toEqual(new Set(['a', 'b']));
+    expect(new Set(matches[1].payload.players)).toEqual(new Set(['c', 'd']));
+    clients.forEach((client) => expect(client.join).toHaveBeenCalledTimes(1));
+    expect((gateway as any).matchmakingQueue).toHaveLength(0);
+    expect((gateway as any).rooms.size).toBe(2);
+    for (const room of (gateway as any).rooms.values()) room.stop();
+    jest.useRealTimers();
   });
 
   it('accepts AI READY only for the socket current room', () => {

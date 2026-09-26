@@ -20,7 +20,7 @@ export class SprintService {
   async getGlobalLeaderboard(limit = 10) {
     const records = await this.prisma.sprintRecord.findMany({
       where: { lines: 40 },
-      orderBy: { timeMs: 'asc' },
+      orderBy: [{ timeMs: 'asc' }, { id: 'asc' }],
       take: limit,
       include: {
         user: {
@@ -53,7 +53,7 @@ export class SprintService {
   async getMyRecords(userId: string, limit = 10) {
     const records = await this.prisma.sprintRecord.findMany({
       where: { userId, lines: 40 },
-      orderBy: { timeMs: 'asc' },
+      orderBy: [{ timeMs: 'asc' }, { id: 'asc' }],
       take: limit,
       include: {
         user: {

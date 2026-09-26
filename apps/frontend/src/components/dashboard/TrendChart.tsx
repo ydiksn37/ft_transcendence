@@ -9,14 +9,15 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import type { GameRecordView } from '../../lib/types';
+import type { DailyAnalyticView, GameRecordView } from '../../lib/types';
 
 interface TrendChartProps {
   games: GameRecordView[];
+  analytics?: DailyAnalyticView[];
 }
 
-export function TrendChart({ games }: TrendChartProps) {
-  if (!games || games.length === 0) {
+export function TrendChart({ games, analytics = [] }: TrendChartProps) {
+  if ((!games || games.length === 0) && analytics.length === 0) {
     return (
       <div className="arcade-panel" style={{ width: '100%', height: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <p style={{ color: '#888', fontSize: '12px' }}>NO DATA AVAILABLE FOR TRENDS</p>
@@ -24,14 +25,19 @@ export function TrendChart({ games }: TrendChartProps) {
     );
   }
 
-  // Reverse the games array to show chronological order (oldest to newest)
-  // Take only the last 30 games to keep the chart readable
-  const chartData = [...games].reverse().slice(-30).map((g, index) => ({
-    name: `M${index + 1}`,
-    apm: g.apm,
-    pps: g.pps,
-    result: g.result
-  }));
+  // Prefer the server's UTC daily aggregates. The history-derived fallback
+  // keeps the chart useful for older servers and isolated component tests.
+  const chartData = analytics.length > 0
+    ? analytics.slice(-30).map(day => ({
+        name: new Date(day.date).toISOString().slice(5, 10),
+        apm: Number(day.avgApm),
+        pps: Number(day.avgPps),
+      }))
+    : [...games].reverse().slice(-30).map((g, index) => ({
+        name: `M${index + 1}`,
+        apm: g.apm,
+        pps: g.pps,
+      }));
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -52,7 +58,7 @@ export function TrendChart({ games }: TrendChartProps) {
   return (
     <div className="arcade-panel" style={{ width: '100%', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <h2 style={{ fontSize: '14px', color: '#f1c40f', marginBottom: '20px', textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
-        PERFORMANCE TREND (LATEST 30 MATCHES)
+        PERFORMANCE TREND ({analytics.length > 0 ? 'UTC DAILY AVERAGES' : 'LATEST 30 MATCHES'})
       </h2>
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">

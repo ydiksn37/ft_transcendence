@@ -46,6 +46,16 @@ export interface GameRecordView {
 	lines: number;
 }
 
+export interface DailyAnalyticView {
+	date: string;
+	gamesPlayed: number;
+	wins: number;
+	losses: number;
+	avgApm: number;
+	avgPps: number;
+	totalLinesCleared: number;
+}
+
 /***************************************************************** */
 /* 				ユーザー統計 from  UserStats
 /***************************************************************** */

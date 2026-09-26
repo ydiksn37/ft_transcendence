@@ -30,7 +30,7 @@ describe('Sprint leaderboard views', () => {
       expect(findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: personal ? { userId: 'owner', lines: 40 } : { lines: 40 },
-          orderBy: { timeMs: 'asc' },
+          orderBy: [{ timeMs: 'asc' }, { id: 'asc' }],
           take: 5,
         }),
       );

@@ -167,6 +167,11 @@ fi
 # vault.ts の ALLOWED_SECRET_KEYS と対応させる
 secret_keys="DATABASE_URL REDIS_URL JWT_SECRET JWT_REFRESH_SECRET FT_CLIENT_ID FT_CLIENT_SECRET SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM SESSION_SECRET TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER"
 
+if [ "${VAULT_PURGE_SECRET_HISTORY:-false}" = true ]; then
+  # KV v2 keeps older secret versions unless metadata is removed explicitly.
+  vault_cmd kv metadata delete secret/transcendence > /dev/null 2>&1 || true
+fi
+
 if [ "$env_name" = development ]; then
   # 開発では .env から解決したbackendの環境変数を正とし、毎回同期する
   echo "Syncing secret/transcendence from docker-compose.yml environment..."
@@ -210,6 +215,12 @@ fi
 vault_cmd policy write transcendence - < vault/transcendence-policy.hcl > /dev/null
 
 backend_token="$(cat "$token_file")"
+if [ "${VAULT_ROTATE_BACKEND_TOKEN:-false}" = true ] && [ -n "$backend_token" ]; then
+  BACKEND_TOKEN="$backend_token" compose exec -T -e VAULT_ADDR=http://127.0.0.1:8200 -e BACKEND_TOKEN vault \
+    sh -c 'VAULT_TOKEN="$BACKEND_TOKEN" vault token revoke -self' > /dev/null 2>&1 || true
+  : > "$token_file"
+  backend_token=""
+fi
 if [ -z "$backend_token" ] ||
   ! BACKEND_TOKEN="$backend_token" compose exec -T -e VAULT_ADDR=http://127.0.0.1:8200 -e BACKEND_TOKEN vault \
     sh -c 'VAULT_TOKEN="$BACKEND_TOKEN" vault kv get secret/transcendence' > /dev/null 2>&1; then

@@ -11,7 +11,9 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 - **Docker** および **Docker Compose**
 - **Node.js 20以上** および **npm 10以上**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
-- マシン上でポート 80, 443, 3000 が利用可能であること。
+- マシン上でポート8080と8443が利用可能であること（既定値。`NGINX_HTTP_PORT` と
+  `NGINX_PORT` で変更可能）。開発構成の直接接続用ポート3000、5173、54320、63790は
+  `127.0.0.1` のみにbindし、リモートアクセスはNginxのHTTPS入口に限定します。
 
 ### セットアップと実行
 1. リポジトリをクローンします:
@@ -27,6 +29,8 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM` を設定して
    ください。アカウント削除はメール確認を必須とするため、SMTP未設定では
    削除を申請できません。
+   42 OAuthのRedirect URIには `https://localhost:8443/api/auth/42/callback` を登録します。
+   別のhost/portで提出する場合は、登録値と`.env`を同じURLへ変更してください。
 3. 依存関係をインストールし、Prisma Clientを生成します:
    ```bash
    make install
@@ -36,10 +40,12 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 4. Docker Composeを使用してアプリケーションを起動します:
    ```bash
    make up
-   # または docker-compose up --build
+   # 全イメージを再buildする場合はこちら:
+   make build
    ```
+   どちらもブラウザ用AIのbuildとVaultの初期化・unsealを行ってからCompose stackを起動します。
 5. アプリケーションにアクセスします:
-   - ブラウザを開き、`https://localhost` (または適切なドメイン/IP) にアクセスします。
+   - ブラウザを開き、`https://localhost:8443`（または設定したドメイン/IPと`NGINX_PORT`）にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
 
 ### Prisma Clientの生成
@@ -55,28 +61,55 @@ make generate
 imageも同じnpm scriptを使用し、開発コンテナはschema適用とNestJS起動の前に
 Clientを再生成します。
 
+### 品質確認
+
+```bash
+npm run type-check
+npm run lint
+npm test --workspace apps/backend -- --runInBand
+node --test apps/frontend/tests/*.test.cjs
+npm run build --workspace apps/frontend
+npm run test:browser # Chromeと:8443のHTTPS stackが必要
+npm run test:websocket # :8443のHTTPS/Socket.IO stackが必要
+```
+
+別環境を検証するときは`BROWSER_BASE_URL`を指定します。
+
+### 秘密情報の検査とローテーション
+
+commit前に`make secret-scan`を実行してください。`make secret-scan-history`では到達可能な
+全Git履歴を監査できます。履歴で検出された資格情報は漏えい済みとして扱い、失効・再発行します。
+開発用資格情報が漏えいした可能性がある場合は`make rotate-dev-secrets`を実行します。JWT/Session、PostgreSQL、
+Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再作成するため、既存sessionは
+無効になります。OAuth、SMTP、SMSの資格情報は各provider側で失効・再発行してください。
+
 ## 技術スタック (Technical Stack)
 - **フロントエンドフレームワーク:** React (Vite) + TypeScript
 - **バックエンドフレームワーク:** NestJS + TypeScript
 - **データベース:** PostgreSQL + Prisma ORM
-- **インメモリキャッシュ / Pub/Sub:** Redis
+- **キャッシュ / 短期セキュリティ状態:** Redis
 - **リアルタイム通信:** Socket.IO / WebSockets
 - **ゲーム描画エンジン:** PixiJS (WebGL)
 - **セキュリティ:** Nginx + ModSecurity (WAF), HashiCorp Vault (シークレット管理)
 
 **技術選定の理由:** 
-高速な開発サイクルと豊富なエコシステムを持つ React + Vite を採用し、高パフォーマンスな60FPSのWebGLゲーム描画を行う PixiJS と簡単に統合しました。NestJS は、REST APIとWebSocketゲートウェイをシームレスに管理するための堅牢でモジュール化されたアーキテクチャを提供します。PostgreSQL + Prisma により型安全でリレーショナルなデータ管理を実現し、Redis はスケーラブルなセッション管理とソケットのブロードキャストを処理します。さらに、エンタープライズレベルの防御とシークレット管理を提供するために、WAFとVaultを統合しました。
+高速な開発サイクルを持つReact + Viteと、WebGL描画用のPixiJSを採用しました。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。Redisの用途はrefresh token失効、削除確認コード、Public APIレート制限です。Socket.IO roomと再接続状態は単一backendプロセスのメモリ内にあり、Redis adapterは使用していません。HTTP防御と秘密管理にはWAFとVaultを使用します。
 
 ## データベーススキーマ (Database Schema)
 データベースにはPostgreSQLを使用し、Prisma経由で管理しています。コアとなるエンティティとその関係は以下の通りです：
 - **User:** 認証情報、プロフィールデータ、ゲーム設定を保存。
-- **GameRecord:** 試合結果、APM、PPS、ライン消去数を保存。Player 1 と Player 2 (User) にリレーション。
+- **GameResult:** 試合結果、APM、PPS、ライン消去数を保存。Player 1 と Player 2 (User) にリレーション。
 - **Tournament:** トーナメントインスタンスと状態 (登録、進行中、完了) を管理。
-- **Match:** トーナメント内の個々の試合。GameRecord と Tournament にリレーション。
+- **TournamentMatch:** トーナメント内の個々の試合。GameResult と Tournament にリレーション。
 - **Friendship / Block:** ソーシャル機能のためのUserモデル上の自己参照リレーション。
-*(詳細なエンティティ・リレーション図については `ER.md` を参照)*
+[schemaと同期したER図](ER.md)には、20モデル、15 enum、30 FK relationと制約を掲載しています。`node tools/schema-doc.cjs --check`で同期を確認できます。
 
 ## チーム情報 (Team Information)
+- **Product Owner:** kaisuzuk
+- **Project Manager:** yukusano
+- **Technical Lead:** sonakamu
+- **Developers:** kaisuzuk, sonakamu, ssawa, yukusano
+
 - **sonakamu - Game Engine & Frontend Logic (Player 1)**: PixiJS描画、ゲーム状態同期、ローカル入力処理を担当。
 - **ssawa - AI & Multiplayer Logic (Player 2)**: C++ヘッドレスAIの統合、衝突判定、WebSocketリアルタイム同期を担当。
 - **kaisuzuk - UI/UX & React Developer (Player 3)**: ネオン調SPA、ダッシュボードチャート、トーナメント表、レスポンシブデザインの設計・開発。
@@ -97,8 +130,8 @@ Clientを再生成します。
 - **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
 - **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
 
-## モジュール (合計: 35 pts)
-*注: ポイント計算: メジャー = 2pts, マイナー = 1pt*
+## 実装済みモジュール候補
+*以下23項目は最大35ポイント相当（Major = 2、Minor = 1）ですが、獲得点の宣言ではありません。要件全体と実演が完了した項目だけを評価時に申告します。検証状況は`REMAINING_TASKS.md`を参照してください。*
 
 ### Web
 1. **フロント/バックエンドにフレームワークを使用 (Major - 2pts)**: React (Vite) と NestJS。
@@ -137,22 +170,22 @@ Clientを再生成します。
 
 ## 個人の貢献 (Individual Contributions)
 - **sonakamu**: 
-  - *貢献:* PixiJSレンダリングエンジン全体を構築し、ローカル入力の遅延緩和処理を実装。
-  - *課題:* 高速な60FPSのローカル入力とサーバー状態を、視覚的なカクつきなしに同期させること。クライアント側の予測（Client-side prediction）とサーバー和解（Server reconciliation）を実装して解決した。
+  - *貢献:* PixiJS盤面描画、ローカル操作、マルチプレイヤー状態表示を実装。
+  - *課題:* サーバーsnapshotを適用しながらREADY、操作中ミノ、Next/Hold、観戦遷移の整合性を維持。
 - **ssawa**: 
   - *貢献:* C++ヘッドレスAIを開発し、Node.jsバックエンドに統合。コアとなる衝突判定ロジックを管理。
-  - *課題:* 初期状態のAIが完璧すぎて勝てなかったこと。人為的な「思考遅延」と、人間らしいミスをシミュレートする非最適手の確率マトリクスを導入して解決した。
+  - *課題:* 試合単位のC++ processを制限時間付きで管理し、返された操作列をTypeScript game engineで再生。
 - **kaisuzuk**: 
   - *貢献:* React SPA、カスタムUIコンポーネント、およびチャートライブラリを使用した分析ダッシュボードの設計と開発。
-  - *課題:* 複数のリアルタイムコンポーネント（チャット、フレンドリスト、トーナメント表）にまたがる複雑な状態管理。React Contextとカスタムフックを活用し、UIから状態管理を分離することで解決した。
+  - *課題:* チャット、フレンド、トーナメント、ダッシュボードを再利用component、Zustand store、custom hookで分離。
 - **yukusano**: 
   - *貢献:* Dockerインフラストラクチャ、NestJSバックエンドの設計、WAF/Vaultセキュリティの実装。
-  - *課題:* RESTエンドポイントへの厳格な保護を維持しつつ、高頻度のWebSocketパケットをModSecurityがブロックしないように設定すること。Socket.IOトラフィックをWAFの検査から除外するカスタムSecRulesを記述して解決した。
+  - *課題:* RESTへのOWASP CRS検査を維持したままSocket.IOとVite開発assetだけを限定除外し、永続Vaultの初期化/unseal運用を整備。
 
 ## リソースとAIの使用 (Resources and AI Usage)
 - **NestJS ドキュメント**: https://docs.nestjs.com/
 - **PixiJS ドキュメント**: https://pixijs.com/
 - **Socket.IO ドキュメント**: https://socket.io/
 - **AIの使用状況**: 
-  - *アルゴリズム支援:* テトリスAIの評価関数（平坦さや穴のペナルティ計算）を最適化するためにAIを活用し調査した。
-  - *デバッグ:* 複雑なDockerネットワーキングやVaultの初期化エラーの追跡・解決にAIを利用した。
+  - *アルゴリズム支援:* 高さ、穴、凹凸などのAI評価特徴の調査・レビューに利用。最終動作はrepository内のC++ sourceとCTestで確認する。
+  - *開発支援:* Docker/Vault/WAFの調査、修正案、test、文書草案に利用。採用前にsource、build、自動testで確認した。
