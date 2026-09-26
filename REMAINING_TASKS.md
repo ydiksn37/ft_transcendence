@@ -311,7 +311,7 @@ Tournament/Entry/全Matchを1 transactionで保存し、試合開始で `markLiv
 
 - [ ] Prisma Client修正後に2FA登録・QR・ログイン・解除を確認
 - [x] 実アカウントで42 OAuthの認可・callback・ログイン完了を確認
-- [ ] OAuth callbackをHTTPS環境で確認
+- [x] OAuth callbackをHTTPS環境で確認
 - [ ] OAuthのみのユーザーとpasswordユーザーの両方を確認
 - [x] 2FA secretがどのAPIレスポンスにも含まれないことを統合テスト
 
@@ -327,6 +327,18 @@ generate/有効化/解除は読み出したsecretと最新DB値が一致する�
 `https://localhost:8443/api/auth/42/callback` へ統一し、authorize URLへの反映まで確認した。
 42 Intra側へ同じRedirect URIを登録した後の実認可、OAuth専用/password両アカウントの比較確認、
 2FA QRの実端末操作は未チェックを維持。
+
+2026-09-26追記: HTTPS化後に42ログインが失敗した原因は、42 Intraに登録されたRedirect URIが旧
+`http://localhost:5173/api/auth/42/callback` のままで、backendが送る `redirect_uri`
+（`https://localhost:8443/api/auth/42/callback`）と一致しないことだった。Intra側を更新後、
+`https://localhost:8443` から実アカウントで認可→callback（nginxで1回のGET、302）→ログイン完了を手動確認し、
+開発DBに `oauthProvider=42`・`passwordHash` nullのユーザーが作成されたことを確認。
+同じcallback中に `FtOauthGuard user missing` が出ていたのは、`FtOauthStrategy.validate` が `done()` を呼んだうえで
+`undefined` を返し、`@nestjs/passport` がもう一度 `done` を呼んでいたため（1回目で成功済みのため実害なし）。
+`validate` がuserを返す形へ修正し、auth関連11テスト・type-check・lint成功。修正後の実ログインでの
+ログ消失は次回ログイン時に確認する。ブラウザの「保護されていない通信」表示は自己署名証明書によるもので、
+HTTPS通信自体は行われている。OAuth/password両アカウントの比較確認は、開発DBにpasswordユーザーが
+いないため未チェックを維持（passwordユーザーのregister/loginは本番構成の検証で確認済み）。
 
 2026-09-26追記: 実Nest routing・DTO validation・`AuthService`を通すHTTP統合テストを追加。
 初期登録用のgenerate応答だけがsecret/QRを返し、有効化、2FA要求login、2FA認証、解除の各応答には

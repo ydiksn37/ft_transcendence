@@ -15,14 +15,10 @@ export class FtOauthStrategy extends PassportStrategy(Strategy, '42') {
     });
   }
 
-  async validate(
-    _accessToken: string,
-    _refreshToken: string,
-    profile: Profile,
-    done: (err: any, user: any) => void,
-  ): Promise<void> {
+  // @nestjs/passport は戻り値で done を呼ぶため、ここで done を呼ぶと二重に完了する
+  validate(_accessToken: string, _refreshToken: string, profile: Profile) {
     const { id, username, displayName, emails, photos } = profile;
-    const user = {
+    return {
       oauthId: String(id),
       oauthProvider: '42',
       username: username ?? `ft_${id}`,
@@ -30,6 +26,5 @@ export class FtOauthStrategy extends PassportStrategy(Strategy, '42') {
       email: emails?.[0]?.value ?? `${id}@students.42.fr`,
       avatarUrl: photos?.[0]?.value ?? null,
     };
-    done(null, user);
   }
 }
