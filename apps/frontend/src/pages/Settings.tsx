@@ -29,8 +29,6 @@ export default function Settings() {
     keyConfig,
     showGhost,
     setShowGhost,
-    minoSkin,
-    setMinoSkin,
     displayTheme,
     setDisplayTheme,
     mapStyle,
@@ -443,11 +441,7 @@ export default function Settings() {
         <div style={panelStyle}>
           <h2>GAME DISPLAY</h2>
           {settingsError && <p role="alert">{settingsError} <button onClick={reloadSettings}>RELOAD SAVED SETTINGS</button></p>}
-          <label className="retro-select-label">MINO SKIN
-            <select className="retro-select" value={minoSkin} onChange={event => setMinoSkin(event.target.value as typeof minoSkin)}>
-              <option value="NEON">NEON</option><option value="RETRO">RETRO</option><option value="MINIMAL">MINIMAL</option>
-            </select>
-          </label>
+          <button className="nav-btn" onClick={() => navigate('/lobby/CONFIG')}>MINO SKIN &amp; PREVIEW → CONFIG</button>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0', fontSize: '12px' }}>
             <input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} style={{ transform: 'scale(1.5)', accentColor: '#00ffff' }} /> 
             SHOW GHOST PIECE

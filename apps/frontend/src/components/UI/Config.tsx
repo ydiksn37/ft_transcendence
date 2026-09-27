@@ -1,7 +1,10 @@
 import React, { useEffect } from 'react';
 import { soundManager } from '../../utils/soundManager';
+import { MinoSkinPicker } from './MinoSkinPicker';
 
 type ConfigProps = {
+  minoSkin: 'NEON' | 'RETRO' | 'MINIMAL';
+  setMinoSkin: (skin: 'NEON' | 'RETRO' | 'MINIMAL') => void;
   tuning: { arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean };
   setTuning: React.Dispatch<React.SetStateAction<{ arr: number; das: number; dcd: number; sdf: number; touchFlick?: boolean }>>;
   volume: { se: number; bgm: number };
@@ -12,7 +15,7 @@ type ConfigProps = {
   setAppState: (state: 'MENU') => void;
 };
 
-export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVolume, keyConfig, listeningAction, setListeningAction }) => {
+export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, tuning, setTuning, volume, setVolume, keyConfig, listeningAction, setListeningAction }) => {
   useEffect(() => {
     soundManager.setVolumes(volume.se, volume.bgm);
   }, [volume]);
@@ -26,6 +29,7 @@ export const Config: React.FC<ConfigProps> = ({ tuning, setTuning, volume, setVo
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
       <h1 style={{ fontSize: '24px' }}>Configuration</h1>
+      <MinoSkinPicker value={minoSkin} onChange={setMinoSkin} />
       
       <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

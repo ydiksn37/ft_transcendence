@@ -26,7 +26,7 @@ export default function LobbyPage() {
     MAX_AI_ACTION_DELAY_MS * (1 - aiSpeedPercent / 100),
   );
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
-  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume } = useConfig();
+  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume, minoSkin, setMinoSkin, settingsError, reloadSettings } = useConfig();
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   useEffect(() => {
@@ -367,7 +367,10 @@ export default function LobbyPage() {
         <div className="lobby-panels">
           {mode === 'CONFIG' && (
             <div className="panel config-panel">
+              {settingsError && <p role="alert">{settingsError} <button onClick={reloadSettings}>RELOAD SAVED SETTINGS</button></p>}
               <Config
+                minoSkin={minoSkin}
+                setMinoSkin={setMinoSkin}
                 tuning={tuning}
                 setTuning={setTuning}
                 volume={volume}
