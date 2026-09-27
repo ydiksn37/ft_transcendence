@@ -11,13 +11,14 @@ type GameBoardProps = {
   ghostY: number;
   showGhost?: boolean;
   minoSkin?: 'NEON' | 'RETRO' | 'MINIMAL';
+  mapStyle?: 'GRID' | 'VOID' | 'ARENA';
   targetLine?: number;
 };
 
 export const CELL_SIZE = 30; 
 export const BOARD_PIXEL_HEIGHT = 22 * CELL_SIZE;
 
-const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine, showGhost = true, minoSkin }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine, showGhost = true, minoSkin, mapStyle = 'GRID' }) => {
   const width = stage.length > 0 ? stage[0].length * CELL_SIZE : 300;
   const isOverlapping = stage.length > 0 ? checkCollision(player, stage, { x: 0, y: 0 }) : false;
 
@@ -117,7 +118,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
         })
       )}
       <Graphics draw={drawTargetLine} />
-      <Graphics draw={drawFrame} />
+      {mapStyle !== 'VOID' && <Graphics draw={drawFrame} />}
     </Container>
   );
 };

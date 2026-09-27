@@ -26,7 +26,7 @@ export default function LobbyPage() {
     MAX_AI_ACTION_DELAY_MS * (1 - aiSpeedPercent / 100),
   );
   const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
-  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume, minoSkin, setMinoSkin, settingsError, reloadSettings } = useConfig();
+  const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume, minoSkin, setMinoSkin, showGhost, setShowGhost, displayTheme, setDisplayTheme, mapStyle, setMapStyle, backgroundStyle, setBackgroundStyle, settingsError, reloadSettings } = useConfig();
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   useEffect(() => {
@@ -371,6 +371,14 @@ export default function LobbyPage() {
               <Config
                 minoSkin={minoSkin}
                 setMinoSkin={setMinoSkin}
+                showGhost={showGhost}
+                setShowGhost={setShowGhost}
+                displayTheme={displayTheme}
+                setDisplayTheme={setDisplayTheme}
+                mapStyle={mapStyle}
+                setMapStyle={setMapStyle}
+                backgroundStyle={backgroundStyle}
+                setBackgroundStyle={setBackgroundStyle}
                 tuning={tuning}
                 setTuning={setTuning}
                 volume={volume}

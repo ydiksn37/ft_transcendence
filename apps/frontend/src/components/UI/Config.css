@@ -1,0 +1,14 @@
+.config-tabs { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; max-width: 600px; }
+.config-tabs button { flex: 1; padding: 12px 8px; cursor: pointer; font: inherit; font-size: 12px; background: var(--color-surface); color: var(--color-text); border: 2px solid #555; }
+.config-tabs button[aria-selected='true'] { border-color: var(--color-neon-cyan); color: var(--color-neon-cyan); background: var(--color-surface-2); }
+.config-tabs button:focus-visible { outline: 2px solid var(--color-neon-magenta); outline-offset: 3px; }
+.config-tab-panel { width: 100%; max-width: 600px; }
+.config-display-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 1fr); gap: 16px; align-items: start; }
+.config-display-layout .retro-select { width: 100%; min-width: 0; }
+.tetris-ui-container.config-display-preview { width: 100%; height: auto; margin: 0; padding: 14px; box-sizing: border-box; align-items: center; gap: 12px; background-attachment: scroll; touch-action: auto; border: 2px solid var(--color-neon-cyan); border-radius: 8px; color: var(--color-text); }
+.config-display-preview figcaption { font-size: 11px; color: var(--color-neon-cyan); }
+.config-preview-hud { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 8px; background: var(--color-surface-2); color: var(--color-neon-magenta); font-size: 9px; }
+.config-display-preview .config-preview-board { width: 150px; height: 300px; margin: 0; flex: none; }
+.config-preview-board canvas { display: block; }
+.config-display-preview p { margin: 0; font-size: 8px; line-height: 1.8; text-align: center; }
+@media (max-width: 580px) { .config-display-layout { grid-template-columns: minmax(0, 1fr); } }

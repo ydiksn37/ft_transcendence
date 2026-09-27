@@ -27,15 +27,6 @@ export default function Settings() {
   const mode = new URLSearchParams(location.search).get('mode');
   const {
     keyConfig,
-    showGhost,
-    setShowGhost,
-    displayTheme,
-    setDisplayTheme,
-    mapStyle,
-    setMapStyle,
-    backgroundStyle,
-    setBackgroundStyle,
-    settingsError,
     reloadSettings,
   } = useConfig();
 
@@ -438,32 +429,6 @@ export default function Settings() {
       </div>
 
       <div style={{ width: '100%', maxWidth: '900px' }}>
-        <div style={panelStyle}>
-          <h2>GAME DISPLAY</h2>
-          {settingsError && <p role="alert">{settingsError} <button onClick={reloadSettings}>RELOAD SAVED SETTINGS</button></p>}
-          <button className="nav-btn" onClick={() => navigate('/lobby/CONFIG')}>MINO SKIN &amp; PREVIEW → CONFIG</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0', fontSize: '12px' }}>
-            <input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} style={{ transform: 'scale(1.5)', accentColor: '#00ffff' }} /> 
-            SHOW GHOST PIECE
-          </label>
-          <label className="retro-select-label">THEME
-            <select className="retro-select" value={displayTheme} onChange={event => setDisplayTheme(event.target.value as typeof displayTheme)}>
-              <option value="CYBER">CYBER</option><option value="ARCADE">ARCADE</option><option value="MONO">MONO</option>
-            </select>
-          </label>
-          <label className="retro-select-label">MAP
-            <select className="retro-select" value={mapStyle} onChange={event => setMapStyle(event.target.value as typeof mapStyle)}>
-              <option value="GRID">GRID</option><option value="VOID">VOID</option><option value="ARENA">ARENA</option>
-            </select>
-          </label>
-          <label className="retro-select-label">BACKGROUND
-            <select className="retro-select" value={backgroundStyle} onChange={event => setBackgroundStyle(event.target.value as typeof backgroundStyle)}>
-              <option value="MATRIX">MATRIX</option><option value="STARS">STARS</option><option value="SOLID">SOLID</option>
-            </select>
-          </label>
-          <p>These visual customizations affect your display only. They do not alter game rules, mechanics, or your opponent's view.</p>
-        </div>
-
         <div style={panelStyle}>
           <h2>PRIVATE GAME ARCHIVE</h2>
           <p>Import up to 500 JSON/CSV rows. Archive rows never affect rank, XP, achievements, or official match history.</p>

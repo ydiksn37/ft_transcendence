@@ -11,6 +11,7 @@ import campuses from "../../assets/images/campuses.json"
 
 import { colorMap } from "../../lib/minoColors"
 import { soundManager } from '../../utils/soundManager';
+import { gameBackgroundImage } from '../../utils/gameAppearance';
 import './TetrisUI.css';
 
 const backgroundModules = import.meta.glob<string>(
@@ -434,11 +435,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   return (
     <div className={`tetris-ui-container map-${mapStyle.toLowerCase()} background-${backgroundStyle.toLowerCase()}`} style={{
-      backgroundImage: backgroundStyle === 'SOLID'
-        ? 'none'
-        : backgroundStyle === 'STARS'
-          ? 'radial-gradient(circle at 20% 30%, rgba(255,255,255,.7) 0 1px, transparent 2px), radial-gradient(circle at 75% 65%, rgba(0,245,255,.7) 0 1px, transparent 2px), linear-gradient(#02020a, #080018)'
-          : `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`
+      backgroundImage: gameBackgroundImage(backgroundStyle, bg?.image)
      }}>
       <div className="tetris-ui-content">
         <div className="tetris-ui-scaling-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${scale})`, transformOrigin: isMobileView ? 'top center' : 'center center' }}>
@@ -527,6 +524,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                   <GameBoard 
                     showGhost={showGhost}
                     minoSkin={minoSkin}
+                    mapStyle={mapStyle}
                     stage={stage} 
                     player={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? { pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any : player} 
                     ghostY={(gameMode === 'ONLINE_1V1' && isWaiting) || gameOver ? 0 : (ghostYOverride ?? calculateGhostY(player, stage))}
@@ -747,6 +745,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                             }}
                           >
                             <GameBoard 
+                              mapStyle={mapStyle}
                               stage={opp.stage || createStage(10)} 
                               player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
                               ghostY={0} 
