@@ -1968,6 +1968,55 @@ void testExpertBoardStabilityPenalizesBuriedHoles() {
          "Expert stability must increasingly penalize buried holes");
 }
 
+void testExpertExcavationRequiresClearingExistingCeiling() {
+  tetris::Board board;
+  for (int row = visibleRow(16); row <= visibleRow(18); ++row)
+    for (int col = 0; col < 8; ++col)
+      board.set(row, col, tetris::Cell::Garbage);
+  for (int col = 0; col < 10; ++col)
+    if (col != 2 && col != 3)
+      board.set(visibleRow(19), col, tetris::Cell::Garbage);
+
+  // An O removes the real ceiling over the two bottom holes.
+  const tetris::ActivePiece dig{tetris::PieceType::O, 8, visibleRow(17), 0};
+  expect(tetris::isValidPosition(board, dig), "excavation O must be legal");
+  expect(tetris::calcGhostY(board, dig) == dig.y,
+         "excavation O must be grounded");
+  expect(tetris::expertClearedHoleCeilings(board, dig) == 2,
+         "clearing the existing cavity ceiling must count as excavation");
+  tetris::Board mirrored;
+  for (int row = 0; row < tetris::kBoardRows; ++row)
+    for (int col = 0; col < 10; ++col)
+      mirrored.set(row, 9 - col, board.cells()[row][col]);
+  expect(tetris::expertClearedHoleCeilings(
+             mirrored, {tetris::PieceType::O, 0, dig.y, 0}) == 2,
+         "excavation must treat both sides of the board equally");
+
+  // A support cell makes O land one row higher. The two top rows disappear,
+  // but the original two bottom holes and their ceiling remain untouched.
+  board.set(visibleRow(18), 9, tetris::Cell::Garbage);
+  const tetris::ActivePiece upper{tetris::PieceType::O, 8, visibleRow(16), 0};
+  expect(tetris::isValidPosition(board, upper), "upper O must be legal");
+  expect(tetris::calcGhostY(board, upper) == upper.y,
+         "upper O must be grounded");
+  const auto result = tetris::clearLines(tetris::lockMino(board, upper));
+  expect(result.linesCleared == 2, "upper fixture must clear two rows");
+  expect(tetris::evaluateExpertBoard(result.board).coveredHoleDepth <
+             tetris::evaluateExpertBoard(board).coveredHoleDepth,
+         "upper clear must reproduce the misleading depth improvement");
+  expect(tetris::expertClearedHoleCeilings(board, upper) == 0,
+         "upper clears and newly placed roofs must not receive excavation credit");
+  for (int col = 0; col < 10; ++col)
+    expect(board.cells()[visibleRow(19)][col] ==
+               result.board.cells()[visibleRow(19)][col],
+           "upper clears must leave the buried floor unchanged");
+
+  tetris::Board empty;
+  expect(tetris::expertClearedHoleCeilings(
+             empty, {tetris::PieceType::O, 3, visibleRow(18), 0}) == 0,
+         "a placement without a clear must not earn excavation credit");
+}
+
 void testExpertAvoidsWastingTWithHold() {
   tetris::ExpertWeights weights;
   weights.tWastedPenalty = 1.0e9;
@@ -2986,6 +3035,7 @@ int main() {
     testExpertOpeningSurvivesSafeGarbage();
     testExpertWellDistanceFeature();
     testExpertBoardStabilityPenalizesBuriedHoles();
+    testExpertExcavationRequiresClearingExistingCeiling();
     testExpertAvoidsWastingTWithHold();
     testExpertTreatsZeroLineTSpinAsWastedT();
     testExpertConservesTWithDefaultWeights();

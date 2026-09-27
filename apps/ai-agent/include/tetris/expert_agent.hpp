@@ -327,6 +327,11 @@ findExpertTSpinSequence(const Board& board, std::size_t maximumAttacks = 4);
     const ExpertTAvailability& tAvailability = {},
     const ExpertIAvailability& iAvailability = {}) noexcept;
 
+// Number of distinct existing cavity ceiling cells removed by a legal lock.
+// Clearing unrelated rows higher in the stack is not excavation progress.
+[[nodiscard]] int expertClearedHoleCeilings(
+    const Board& board, const ActivePiece& placement) noexcept;
+
 // Diagnostic for a legal grounded donor placement: returns 2 or 3 for a
 // newly opened safe TSD/TST, otherwise 0. Availability is AFTER using Hold.
 [[nodiscard]] int expertDonationLines(

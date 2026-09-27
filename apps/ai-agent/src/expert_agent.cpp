@@ -1903,6 +1903,9 @@ double placementReward(const Board& boardBefore,
                        const ExpertWeights& weights,
                        bool emergencyMode, int comboBefore = -1) noexcept {
   double reward = 0.0;
+  const int clearedHoleCeilings = placement.linesCleared > 0 &&
+          currentFeatures.holes > 0
+      ? expertClearedHoleCeilings(boardBefore, placement.placement) : 0;
   // Filling a broad basin may need to occupy the old attack lane. Refund
   // part of that preference only for actual repairs without new holes.
   // Weakening it whenever a basin merely exists would reward *creating* a
@@ -1994,11 +1997,11 @@ double placementReward(const Board& boardBefore,
     const bool repairsDamage =
         resultFeatures.unownedHoleCells < currentFeatures.unownedHoleCells ||
         resultFeatures.unfillableCavityCells < currentFeatures.unfillableCavityCells ||
-        resultFeatures.coveredHoleDepth < currentFeatures.coveredHoleDepth ||
+        clearedHoleCeilings > 0 ||
         (placement.linesCleared > 0 &&
          (resultFeatures.garbageCells < currentFeatures.garbageCells ||
           resultFeatures.openWellCount < currentFeatures.openWellCount ||
-          currentFeatures.maximumHeight >= 11));
+          emergencyMode));
     const bool hasReservedTAttack =
         currentFeatures.safeToPreserveTSpinSetup &&
         (currentFeatures.reachableTSpinDoublePatterns > 0 ||
@@ -2325,9 +2328,6 @@ double placementReward(const Board& boardBefore,
              currentFeatures.coveredHoleDepth);
   const int recoveredHoles =
       std::max(0, currentFeatures.holes - resultFeatures.holes);
-  const int recoveredHoleDepth = std::max(
-      0, currentFeatures.coveredHoleDepth -
-             resultFeatures.coveredHoleDepth);
   const int newUnfillableCavityCells = std::max(
       0, resultFeatures.unfillableCavityCells -
              currentFeatures.unfillableCavityCells);
@@ -2376,7 +2376,7 @@ double placementReward(const Board& boardBefore,
   reward -= weights.heightIncreasePenalty * heightIncrease *
             (1.0 + recoveryUrgency);
   reward += weights.holeRecoveryReward *
-            (2 * recoveredHoles + recoveredHoleDepth) *
+            (2 * recoveredHoles + clearedHoleCeilings) *
             recoveryMultiplier;
   reward += weights.unfillableCavityRecoveryReward *
             recoveredUnfillableCavityCells * recoveryMultiplier;
@@ -2415,15 +2415,14 @@ double placementReward(const Board& boardBefore,
       reward -= weights.multipleWellDelayPenalty * existingExtraWells;
     }
   }
-  // A line clear which shortens an open Well or removes blocks above a buried
-  // hole reduces future I demand. Do not reward merely roofing the Well: the
-  // transition must clear a line without creating or burying another hole.
+  // Only removing an existing cavity's ceiling counts as excavation. Total
+  // covered depth also falls when clearing newly stacked rows far above it;
+  // rewarding that lets the agent farm "repairs" with the same buried floor.
   const bool usefulRecovery =
-      recoveredHoles > 0 || recoveredHoleDepth > 0 ||
+      recoveredHoles > 0 || clearedHoleCeilings > 0 ||
       recoveredUnfillableCavityCells > 0 || garbageCellsCleared > 0 ||
       (currentFeatures.openWellCount > 1 && safeWellResolution) ||
-      resultFeatures.wideDepressionUnits < currentFeatures.wideDepressionUnits ||
-      currentFeatures.maximumHeight >= 11;
+      resultFeatures.wideDepressionUnits < currentFeatures.wideDepressionUnits;
   if (placement.linesCleared > 0 && newHoles == 0 && buriedHoleDepth == 0 &&
       usefulRecovery) {
     const int availableIPieces = std::max(1, replacementI.visibleCount);
@@ -2433,7 +2432,7 @@ double placementReward(const Board& boardBefore,
         1.0 + 0.50 * supplyDeficit +
         0.25 * std::max(0, currentFeatures.openWellCount - 1);
     reward += weights.wellClearReliefReward *
-              (openWellDepthRelief + recoveredHoleDepth) * wellUrgency;
+              (openWellDepthRelief + clearedHoleCeilings) * wellUrgency;
     reward += weights.wellDemandReliefReward * openWellDemandRelief *
               wellUrgency;
   }
@@ -3332,6 +3331,25 @@ ExpertBoardEvaluation evaluateExpertBoard(
     const ExpertIAvailability& iAvailability) noexcept {
   return evaluateBoardForExpert(board, weights, tAvailability,
                                 iAvailability);
+}
+
+int expertClearedHoleCeilings(
+    const Board& board, const ActivePiece& placement) noexcept {
+  const Board locked = lockMino(board, placement);
+  int clearedCeilings = 0;
+  for (int row = 0; row + 1 < kBoardRows; ++row) {
+    const bool removed = std::all_of(
+        locked.cells()[row].begin(), locked.cells()[row].end(),
+        [](Cell cell) { return cell != Cell::Empty; });
+    if (!removed) continue;
+    for (int col = 0; col < kBoardCols; ++col) {
+      // Use the pre-placement board: a newly created roof is not a repair.
+      // Each ceiling counts once regardless of the size of the cavity below.
+      if (occupied(board, row, col) && !occupied(board, row + 1, col))
+        ++clearedCeilings;
+    }
+  }
+  return clearedCeilings;
 }
 
 std::optional<ExpertDonationPlan> findExpertDonationTemplate(
