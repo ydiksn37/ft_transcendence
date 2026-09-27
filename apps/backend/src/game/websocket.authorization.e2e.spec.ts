@@ -251,9 +251,16 @@ describe('WebSocket JWT authentication and chat authorization (e2e)', () => {
         (payload) => payload.roomId.startsWith(`${roomId}_`),
       );
       const board = eventFrom(outsider, 'game:opponent');
-      outsider.emit('room:spectate', { roomId });
+      const joinedAsViewer = eventFrom<{
+        players: unknown[];
+        isOwner: boolean;
+      }>(outsider, 'custom_room_state');
+      outsider.emit('game:join_custom_room', { roomId });
       const [spectatorState] = await Promise.all([spectating, board]);
       expect(spectatorState.players).toHaveLength(2);
+      const lobby = await joinedAsViewer;
+      expect(lobby.players).toHaveLength(4);
+      expect(lobby.isOwner).toBe(false);
 
       outsider.disconnect();
       players.forEach((player) => player.disconnect());

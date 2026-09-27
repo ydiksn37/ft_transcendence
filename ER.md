@@ -380,7 +380,7 @@ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 ```prisma
 id String @id @default(uuid())
 userId String @unique
-minoSkin MinoSkin @default(NEON)
+minoSkin MinoSkin @default(RETRO)
 showGhost Boolean @default(true)
 displayTheme DisplayTheme @default(CYBER)
 mapStyle MapStyle @default(GRID)

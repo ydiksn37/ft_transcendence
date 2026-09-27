@@ -8,6 +8,7 @@ type Room = {
   roomId: string;
   name: string;
   ownerId: string;
+  isTournamentActive?: boolean;
 };
 
 type CustomRoomsListProps = {
@@ -220,7 +221,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
                     onClick={() => handleJoinRoom(room.roomId)}
                     style={{ borderColor: '#e74c3c', color: '#e74c3c', height: '40px', padding: '0 15px' }}
                   >
-                    JOIN
+                    {room.isTournamentActive ? 'SPECTATE' : 'JOIN'}
                   </button>
                 </div>
               ))

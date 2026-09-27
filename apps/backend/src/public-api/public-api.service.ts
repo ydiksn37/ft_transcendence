@@ -23,7 +23,7 @@ export class PublicApiService {
   private settingsData(dto: PublicGameSettingsDto) {
     // PUT replaces the resource: omitted/null fields reset to schema defaults.
     return {
-      minoSkin: dto.minoSkin ?? ('NEON' as const),
+      minoSkin: dto.minoSkin ?? ('RETRO' as const),
       showGhost: dto.showGhost ?? true,
       displayTheme: dto.displayTheme ?? ('CYBER' as const),
       mapStyle: dto.mapStyle ?? ('GRID' as const),

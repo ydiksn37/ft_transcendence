@@ -38,6 +38,14 @@ function mount(fetcher, stored = {}) {
   return { flush, current: () => value, storage, runTimers: async () => { const pending = [...timers.values()]; timers.clear(); for (const fn of pending) await fn(); await flush(); } };
 }
 
+test('defaults to retro while preserving explicit guest skin selections', async () => {
+  for (const [saved, expected] of [[undefined, 'RETRO'], ['invalid', 'RETRO'], ['NEON', 'NEON'], ['MINIMAL', 'MINIMAL'], ['RETRO', 'RETRO']]) {
+    const h = mount(async () => { throw Error('Guest must not fetch'); }, { token: '', ...(saved === undefined ? {} : { tetrisMinoSkin: saved }) });
+    await h.flush();
+    assert.equal(h.current().minoSkin, expected);
+  }
+});
+
 test('failed initial fetch never enables writes of fallback settings', async () => {
   const calls = [];
   const h = mount(async (url, options) => { calls.push([url, options]); return { ok: false }; });

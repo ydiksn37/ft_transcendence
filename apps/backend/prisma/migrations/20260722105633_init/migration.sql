@@ -102,7 +102,7 @@ CREATE TABLE "UserStats" (
 CREATE TABLE "UserGameSettings" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "minoSkin" "MinoSkin" NOT NULL DEFAULT 'NEON',
+    "minoSkin" "MinoSkin" NOT NULL DEFAULT 'RETRO',
     "showGhost" BOOLEAN NOT NULL DEFAULT true,
     "fallSpeedMultiplier" DECIMAL(3,1) NOT NULL DEFAULT 1.0,
     "keyBindings" JSONB,

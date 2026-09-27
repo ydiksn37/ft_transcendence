@@ -51,6 +51,87 @@ describe('GameGateway', () => {
     expect(gateway).toBeDefined();
   });
 
+  it('admits connected late joiners only after the champion is decided, keeping the completed bracket intact', () => {
+    const viewer: any = {
+      id: 'viewer',
+      connected: true,
+      data: { guestSessionId: 'guest' },
+    };
+    const left: any = { id: 'left', connected: false, data: {} };
+    const root: any = {};
+    const room: any = {
+      roomId: 'CUP1',
+      isTournamentActive: true,
+      tournament: { root },
+      players: [
+        { socket: { id: 'owner' }, userId: 'owner', username: 'Player 1' },
+      ],
+      spectators: new Map([
+        ['viewer', viewer],
+        ['left', left],
+      ]),
+    };
+    (gateway as any).clientRoom.set('viewer', 'CUP1');
+    (gateway as any).admitTournamentSpectators(room);
+    expect(room.players).toHaveLength(1);
+    room.isTournamentActive = false;
+    (gateway as any).admitTournamentSpectators(room);
+    expect(room.players).toHaveLength(1);
+    root.winnerId = 'owner';
+    (gateway as any).admitTournamentSpectators(room);
+    expect(room.players).toHaveLength(2);
+    expect(room.players[1]).toMatchObject({
+      socket: viewer,
+      userId: null,
+      guestSessionId: 'guest',
+      username: 'Player 2',
+      wins: 0,
+    });
+    expect(room.tournament.root).toBe(root);
+    expect(room.spectators.size).toBe(0);
+    (gateway as any).admitTournamentSpectators(room);
+    expect(room.players).toHaveLength(2);
+  });
+
+  it('joins an active tournament between rounds as a viewer without altering its players', () => {
+    const viewer: any = {
+      id: 'viewer',
+      data: {},
+      join: jest.fn(),
+      leave: jest.fn(),
+      emit: jest.fn(),
+    };
+    const players = Array.from({ length: 4 }, (_, i) => ({
+      socket: { id: `s${i}`, disconnected: false },
+      userId: `u${i}`,
+    }));
+    const tournament = { matches: [], root: {} };
+    const room: any = {
+      roomId: 'CUP1',
+      ownerSocketId: 's0',
+      players,
+      tournament,
+      isTournamentActive: true,
+      isPlaying: false,
+    };
+    (gateway as any).customRooms.set('CUP1', room);
+    gateway.handleJoinCustomRoom(viewer, { roomId: 'CUP1' });
+    gateway.handleJoinCustomRoom(viewer, { roomId: 'CUP1' });
+    expect(room.players).toBe(players);
+    expect(room.players).toHaveLength(4);
+    expect(room.tournament).toBe(tournament);
+    expect(room.spectators.size).toBe(1);
+    expect((gateway as any).clientRoom.get('viewer')).toBe('CUP1');
+    expect(viewer.emit).toHaveBeenCalledWith(
+      'custom_room_state',
+      expect.objectContaining({ isOwner: false, tournament }),
+    );
+    expect(viewer.emit).not.toHaveBeenCalledWith('error', expect.anything());
+    const advance = jest.spyOn(gateway as any, 'startNextTournamentRound');
+    gateway.handleStartTournamentMatch(viewer);
+    expect(advance).not.toHaveBeenCalled();
+  });
+
   it.each([1, 3, 4])(
     'allows a four-player tournament with %s guests, including a guest owner',
     async (guestCount) => {

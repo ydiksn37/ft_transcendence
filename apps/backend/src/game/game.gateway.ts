@@ -66,6 +66,7 @@ interface CustomRoom {
   tournament?: Tournament;
   databaseTournamentId?: string;
   databaseMatchIds?: Record<string, string>;
+  spectators?: Map<string, Socket>;
 }
 
 interface GuestSession {
@@ -234,6 +235,7 @@ export class GameGateway
       : undefined;
     const roomId = this.clientRoom.get(client.id) ?? null;
     const gameRoomId = this.clientGameRoom.get(client.id) ?? null;
+    if (roomId) this.customRooms.get(roomId)?.spectators?.delete(client.id);
     if (
       guestSession &&
       guestSession.socketId === client.id &&
@@ -650,6 +652,7 @@ export class GameGateway
       roomId: r.roomId,
       name: r.name,
       ownerId: r.ownerSocketId,
+      isTournamentActive: !!r.isTournamentActive,
     }));
   }
 
@@ -940,6 +943,7 @@ export class GameGateway
   handleLeaveCustomRoom(@ConnectedSocket() client: Socket) {
     const roomId = this.clientRoom.get(client.id);
     if (!roomId) return;
+    this.customRooms.get(roomId)?.spectators?.delete(client.id);
 
     const gameRoomId = this.clientGameRoom.get(client.id);
     const targetRoomId = gameRoomId ?? roomId;
@@ -1004,6 +1008,8 @@ export class GameGateway
       this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
     }
     this.clientRoom.delete(client.id);
+    this.clientGameRoom.delete(client.id);
+    if (gameRoomId) client.leave(gameRoomId);
     client.leave(roomId);
     client.emit('custom_room_state', { inRoom: false });
   }
@@ -1075,9 +1081,29 @@ export class GameGateway
       });
 
       if (existingPlayerIndex === -1) {
-        client.emit('error', {
-          message: 'トーナメント進行中は新規参加できません',
-        });
+        const previousGameId = this.clientGameRoom.get(client.id);
+        const previousGame = previousGameId
+          ? this.rooms.get(previousGameId)
+          : undefined;
+        if (
+          previousGame?.isActive() &&
+          previousGame.getPlayers().get(client.id)?.isGameOver === false
+        ) {
+          client.emit(ServerEvent.ERROR, {
+            message: '対戦中は観戦へ切り替えられません',
+          });
+          return;
+        }
+        const previousRoomId = this.clientRoom.get(client.id);
+        if (previousRoomId && previousRoomId !== roomId)
+          this.handleLeaveCustomRoom(client);
+        if (!room.spectators) room.spectators = new Map();
+        room.spectators.set(client.id, client);
+        this.clientRoom.set(client.id, roomId);
+        client.join(roomId);
+        this.handleRequestCustomRoomState(client);
+        // Between rounds, show the bracket and wait for the next match.
+        if (room.isPlaying) this.handleSpectate(client, { roomId });
         return;
       }
 
@@ -1127,6 +1153,7 @@ export class GameGateway
         username: (client.data?.username as string) ?? `Player ${lowest}`,
         wins: 0,
       });
+      room.spectators?.delete(client.id);
     }
 
     client.join(room.roomId);
@@ -1324,6 +1351,10 @@ export class GameGateway
     const room = this.customRooms.get(roomId);
     if (room && room.ownerSocketId === client.id) {
       room.tournament = undefined;
+      room.spectators?.forEach((spectator) => {
+        spectator.emit('tournament_state', { tournament: undefined });
+        this.handleRequestCustomRoomState(spectator);
+      });
       // トーナメント終了時に全プレイヤーの clientGameRoom マッピングをクリアする。
       // これにより次回のトーナメント開始時に古いゲームルームへの参照が残らなくなる。
       room.players.forEach((p) => {
@@ -1463,6 +1494,7 @@ export class GameGateway
             parentMatch.playerIds.push(currentMatch.winnerId);
           } else if (currentMatch.id === tournament.root.id) {
             room.isTournamentActive = false;
+            this.admitTournamentSpectators(room);
             console.log(
               `[Tournament End] Tournament finished for room ${roomId}. isTournamentActive set to false.`,
             );
@@ -1503,6 +1535,10 @@ export class GameGateway
               isPlaying: room.isPlaying,
               tournament: room.tournament,
             });
+          });
+          room.spectators?.forEach((spectator) => {
+            spectator.emit('tournament_state', { tournament: room.tournament });
+            this.handleRequestCustomRoomState(spectator);
           });
         },
         this.aiAgentService,
@@ -1553,6 +1589,9 @@ export class GameGateway
     if (startedCount > 0) {
       room.isPlaying = true;
       this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+      room.spectators?.forEach((spectator) =>
+        this.handleSpectate(spectator, { roomId }),
+      );
 
       const firstStartedMatch = matchesToStart.find((m) => m.isPlaying);
       if (firstStartedMatch) {
@@ -2093,6 +2132,39 @@ export class GameGateway
         });
       }
     }
+  }
+
+  /** Late joiners become eligible for the next tournament, never this bracket. */
+  private admitTournamentSpectators(room: CustomRoom): void {
+    if (room.isTournamentActive || !room.tournament?.root.winnerId) return;
+    room.spectators?.forEach((socket) => {
+      if (!socket.connected || this.clientRoom.get(socket.id) !== room.roomId)
+        return;
+      const userId = (socket.data.userId as string | undefined) ?? null;
+      if (
+        room.players.some(
+          (player) =>
+            player.socket.id === socket.id ||
+            (userId !== null && player.userId === userId),
+        )
+      )
+        return;
+      let index = 1;
+      while (
+        room.players.some((player) => player.username === `Player ${index}`)
+      )
+        index++;
+      room.players.push({
+        socket,
+        userId,
+        guestSessionId:
+          (socket.data.guestSessionId as string | undefined) ?? null,
+        username:
+          (socket.data.username as string | undefined) ?? `Player ${index}`,
+        wins: 0,
+      });
+    });
+    room.spectators?.clear();
   }
 
   @SubscribeMessage(ClientEvent.SPECTATE)

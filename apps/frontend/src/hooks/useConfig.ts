@@ -13,7 +13,7 @@ type BackgroundStyle = 'MATRIX' | 'STARS' | 'SOLID';
 export const useConfig = () => {
   const [minoSkin, setMinoSkin] = useState<'NEON' | 'RETRO' | 'MINIMAL'>(() => {
     const saved = localStorage.getItem('tetrisMinoSkin');
-    return saved === 'RETRO' || saved === 'MINIMAL' ? saved : 'NEON';
+    return saved === 'NEON' || saved === 'MINIMAL' ? saved : 'RETRO';
   });
   const [showGhost, setShowGhost] = useState(() => localStorage.getItem('tetrisShowGhost') !== 'false');
   const [displayTheme, setDisplayTheme] = useState<DisplayTheme>(() => {
@@ -92,7 +92,7 @@ export const useConfig = () => {
         if (localTuning || localVolume || localKeyConfig || localShowGhost !== null || localMinoSkin !== null || localDisplayTheme !== null || localMapStyle !== null || localBackgroundStyle !== null) {
           const payload: any = {};
           if (localShowGhost !== null) payload.showGhost = localShowGhost !== 'false';
-          if (localMinoSkin !== null) payload.minoSkin = ['NEON', 'RETRO', 'MINIMAL'].includes(localMinoSkin) ? localMinoSkin : 'NEON';
+          if (localMinoSkin !== null) payload.minoSkin = ['NEON', 'RETRO', 'MINIMAL'].includes(localMinoSkin) ? localMinoSkin : 'RETRO';
           if (localDisplayTheme !== null) payload.displayTheme = ['CYBER', 'ARCADE', 'MONO'].includes(localDisplayTheme) ? localDisplayTheme : 'CYBER';
           if (localMapStyle !== null) payload.mapStyle = ['GRID', 'VOID', 'ARENA'].includes(localMapStyle) ? localMapStyle : 'GRID';
           if (localBackgroundStyle !== null) payload.backgroundStyle = ['MATRIX', 'STARS', 'SOLID'].includes(localBackgroundStyle) ? localBackgroundStyle : 'MATRIX';
@@ -148,7 +148,7 @@ export const useConfig = () => {
           if (user.gameSettings) {
             const gs = user.gameSettings;
             setShowGhost(gs.showGhost ?? true);
-            setMinoSkin(gs.minoSkin === 'RETRO' || gs.minoSkin === 'MINIMAL' ? gs.minoSkin : 'NEON');
+            setMinoSkin(gs.minoSkin === 'NEON' || gs.minoSkin === 'MINIMAL' ? gs.minoSkin : 'RETRO');
             setDisplayTheme(gs.displayTheme === 'ARCADE' || gs.displayTheme === 'MONO' ? gs.displayTheme : 'CYBER');
             setMapStyle(gs.mapStyle === 'VOID' || gs.mapStyle === 'ARENA' ? gs.mapStyle : 'GRID');
             setBackgroundStyle(gs.backgroundStyle === 'STARS' || gs.backgroundStyle === 'SOLID' ? gs.backgroundStyle : 'MATRIX');
