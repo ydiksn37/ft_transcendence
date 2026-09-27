@@ -44,6 +44,7 @@ import {
   parseChatMessage,
   parseCustomRoomId,
   parseCustomRoomName,
+  parseRoomVisibility,
   parseGameInput,
   parseGarbage,
   parseOptionalRoomId,
@@ -51,6 +52,7 @@ import {
 } from './ws-payload';
 
 interface CustomRoom {
+  isPublic?: boolean;
   roomId: string;
   name: string;
   ownerSocketId: string;
@@ -648,12 +650,14 @@ export class GameGateway
   }
 
   private getCustomRoomsList() {
-    return Array.from(this.customRooms.values()).map((r) => ({
-      roomId: r.roomId,
-      name: r.name,
-      ownerId: r.ownerSocketId,
-      isTournamentActive: !!r.isTournamentActive,
-    }));
+    return Array.from(this.customRooms.values())
+      .filter((r) => r.isPublic !== false)
+      .map((r) => ({
+        roomId: r.roomId,
+        name: r.name,
+        ownerId: r.ownerSocketId,
+        isTournamentActive: !!r.isTournamentActive,
+      }));
   }
 
   // ── ゲーム履歴保存 ─────────────────────────────────────────
@@ -829,6 +833,7 @@ export class GameGateway
     const roomName = data?.name?.trim() || `Room ${roomId}`;
 
     this.customRooms.set(roomId, {
+      isPublic: data.isPublic,
       roomId,
       name: roomName,
       ownerSocketId: client.id,
@@ -848,6 +853,7 @@ export class GameGateway
     client.join(roomId);
     this.clientRoom.set(client.id, roomId);
     client.emit('custom_room_created', {
+      isPublic: data.isPublic,
       roomId,
       name: roomName,
       players: [
@@ -911,6 +917,28 @@ export class GameGateway
     this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
   }
 
+  @SubscribeMessage('game:set_room_visibility')
+  handleSetRoomVisibility(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+  ) {
+    const data = this.parsePayload(client, parseRoomVisibility, payload);
+    if (!data) return;
+    const roomId = this.clientRoom.get(client.id);
+    const room = roomId ? this.customRooms.get(roomId) : undefined;
+    if (!room || room.ownerSocketId !== client.id) {
+      client.emit('error', {
+        message: '部屋の公開設定を変更できるのはオーナーだけです',
+      });
+      return;
+    }
+    room.isPublic = data.isPublic;
+    this.server
+      .to(room.roomId)
+      .emit('custom_room_visibility', { isPublic: room.isPublic });
+    this.server.emit('custom_rooms_updated', this.getCustomRoomsList());
+  }
+
   @SubscribeMessage('game:get_custom_rooms')
   handleGetCustomRooms(@ConnectedSocket() client: Socket) {
     client.emit('custom_rooms_updated', this.getCustomRoomsList());
@@ -923,6 +951,7 @@ export class GameGateway
     const room = this.customRooms.get(roomId);
     if (room) {
       client.emit('custom_room_state', {
+        isPublic: room.isPublic !== false,
         inRoom: true,
         roomId: room.roomId,
         name: room.name,

@@ -129,6 +129,10 @@ not whether migrations have been applied to a running database.
 - **Communication:** Daily stand-ups and real-time collaboration were conducted via Discord.
 
 ## Features List
+
+Custom rooms can be public (listed) or private (unlisted). Owners choose visibility
+at creation and can change it later. Use **JOIN BY ID** to enter an unlisted room;
+anyone knowing its ID can join or spectate, so this is not password protection.
 - **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: sonakamu).
 - **Tournament System:** Single-elimination brackets with real-time progress (Responsible: sonakamu).
   Custom-room tournaments accept 4, 8, or 16 players, including guests and guest hosts.

@@ -3,11 +3,29 @@ import {
   parseBoardUpdate,
   parseChatMessage,
   parseCustomRoomId,
+  parseCustomRoomName,
+  parseRoomVisibility,
   parseGameInput,
   parseGarbage,
 } from './ws-payload';
 
 describe('WebSocket payload validation', () => {
+  it('defaults rooms to public and accepts only boolean visibility', () => {
+    expect(parseCustomRoomName({ name: 'room' })).toEqual({
+      name: 'room',
+      isPublic: true,
+    });
+    expect(parseCustomRoomName({ isPublic: false })).toEqual({
+      isPublic: false,
+    });
+    for (const isPublic of ['false', null, 0, {}]) {
+      expect(() => parseCustomRoomName({ isPublic })).toThrow();
+      expect(() => parseRoomVisibility({ isPublic })).toThrow();
+    }
+    expect(() =>
+      parseRoomVisibility({ isPublic: true, roomId: 'other' }),
+    ).toThrow();
+  });
   it('accepts bounded game input and rejects unknown fields', () => {
     expect(parseGameInput({ roomId: 'room_1', pieceId: 4 })).toEqual({
       roomId: 'room_1',

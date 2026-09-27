@@ -20,6 +20,8 @@ type CustomRoomsListProps = {
 export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setAppState, onBack }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
+  const [joinRoomId, setJoinRoomId] = useState('');
   const [customRoomId, setCustomRoomId] = useState('');
   const [inRoom, setInRoom] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
@@ -37,7 +39,8 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       setRooms(updatedRooms);
     };
 
-    const handleRoomState = (data: { inRoom: boolean; roomId?: string; isOwner?: boolean; players?: any[]; isPlaying?: boolean; tournament?: Tournament }) => {
+    const handleRoomState = (data: { inRoom: boolean; roomId?: string; isOwner?: boolean; players?: any[]; isPlaying?: boolean; tournament?: Tournament; isPublic?: boolean }) => {
+      if (data.isPublic !== undefined) setIsPublic(data.isPublic);
       if (!data.inRoom) {
         setInRoom(null);
         setIsOwner(false);
@@ -53,7 +56,8 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       }
     };
 
-    const handleRoomCreated = (data: { roomId: string; name: string, players: any[] }) => {
+    const handleRoomCreated = (data: { roomId: string; name: string, players: any[]; isPublic?: boolean }) => {
+      setIsPublic(data.isPublic ?? true);
       setInRoom(data.roomId);
       setCustomRoomId(data.roomId);
       setIsOwner(true);
@@ -97,6 +101,8 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
     socket.on('match:found', handleMatchFound);
     socket.on('tournament_state', handleTournamentState);
     socket.on('error', handleError);
+    const handleVisibility = (data: { isPublic: boolean }) => setIsPublic(data.isPublic);
+    socket.on('custom_room_visibility', handleVisibility);
 
     return () => {
       socket.off('custom_rooms_updated', handleRoomsUpdated);
@@ -107,6 +113,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       socket.off('match:found', handleMatchFound);
       socket.off('tournament_state', handleTournamentState);
       socket.off('error', handleError);
+      socket.off('custom_room_visibility', handleVisibility);
     };
   }, [socket]);
 
@@ -134,7 +141,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
 
   const handleCreateRoom = () => {
     if (socket) {
-      socket.emit('game:create_custom_room', { name: newRoomName });
+      socket.emit('game:create_custom_room', { name: newRoomName, isPublic });
     }
   };
 
@@ -147,6 +154,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const handleJoinRoom = (roomId: string) => {
     if (socket) {
       socket.emit('game:join_custom_room', { roomId });
+      socket.emit('game:request_custom_room_state');
       setInRoom(roomId);
       setCustomRoomId(roomId);
       setIsOwner(false);
@@ -174,7 +182,14 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       
       {!inRoom ? (
         <>
-          <div style={{ marginBottom: '40px', display: 'flex', gap: '15px', alignItems: 'center' }}>
+          <div style={{ marginBottom: '40px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
+            <label>
+              VISIBILITY{' '}
+              <select aria-label="Room visibility" value={isPublic ? 'public' : 'private'} onChange={e => setIsPublic(e.target.value === 'public')}>
+                <option value="public">PUBLIC</option>
+                <option value="private">PRIVATE (ROOM ID ONLY)</option>
+              </select>
+            </label>
             <input 
               type="text" 
               placeholder="ROOM NAME" 
@@ -206,6 +221,10 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             </button>
           </div>
 
+          <form onSubmit={e => { e.preventDefault(); if (joinRoomId.trim()) handleJoinRoom(joinRoomId.trim()); }} style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+            <input aria-label="Room ID to join" placeholder="ROOM ID" value={joinRoomId} maxLength={24} onChange={e => setJoinRoomId(e.target.value.toUpperCase())} />
+            <button className="nav-btn" type="submit" disabled={!joinRoomId.trim()}>JOIN BY ID</button>
+          </form>
           <div className="panel" style={{ width: '100%', maxWidth: '600px', flexDirection: 'column', gap: '15px', padding: '20px', minHeight: '300px', justifyContent: 'flex-start' }}>
             {rooms.length === 0 ? (
               <p style={{ textAlign: 'center', color: '#aaa', fontSize: '12px', lineHeight: '2' }}>NO ROOMS AVAILABLE.</p>
@@ -380,6 +399,15 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
         </div>
       )}
 
+      {inRoom && (
+        <div style={{ marginTop: '20px', textAlign: 'center', lineHeight: 2 }}>
+          <div>ROOM ID: {inRoom} / {isPublic ? 'PUBLIC' : 'PRIVATE'}</div>
+          {isOwner && <button className="nav-btn" onClick={() => socket?.emit('game:set_room_visibility', { isPublic: !isPublic })}>
+            {isPublic ? 'MAKE PRIVATE' : 'MAKE PUBLIC'}
+          </button>}
+          {!isPublic && <p style={{ fontSize: '10px' }}>Anyone with the room ID can join or spectate.</p>}
+        </div>
+      )}
       {!inRoom && (
         <button
           className="back-btn"

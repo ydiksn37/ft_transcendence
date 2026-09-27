@@ -57,11 +57,25 @@ function boundedInteger(
   return value as number;
 }
 
-export function parseCustomRoomName(value: unknown): { name?: string } {
-  const data = record(value, ['name']);
+export function parseRoomVisibility(value: unknown): { isPublic: boolean } {
+  const data = record(value, ['isPublic']);
+  if (typeof data.isPublic !== 'boolean')
+    throw new WsPayloadError('isPublic must be a boolean');
+  return { isPublic: data.isPublic };
+}
+
+export function parseCustomRoomName(value: unknown): {
+  name?: string;
+  isPublic: boolean;
+} {
+  const data = record(value, ['name', 'isPublic']);
+  const visibility =
+    data.isPublic === undefined
+      ? { isPublic: true }
+      : parseRoomVisibility({ isPublic: data.isPublic });
   if (data.name === undefined || data.name === null || data.name === '')
-    return {};
-  return { name: boundedString(data.name, 'name', 1, 40) };
+    return visibility;
+  return { name: boundedString(data.name, 'name', 1, 40), ...visibility };
 }
 
 export function parseCustomRoomId(value: unknown, field = 'roomId'): string {

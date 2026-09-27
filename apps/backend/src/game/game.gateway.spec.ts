@@ -51,6 +51,47 @@ describe('GameGateway', () => {
     expect(gateway).toBeDefined();
   });
 
+  it('hides private rooms from listings and restricts visibility changes to the owner', () => {
+    const emit = jest.fn();
+    gateway.server = { emit, to: () => ({ emit: jest.fn() }) } as any;
+    const owner: any = {
+      id: 'owner',
+      data: {},
+      emit: jest.fn(),
+      join: jest.fn(),
+    };
+    gateway.handleCreateCustomRoom(owner, {
+      name: 'Private room',
+      isPublic: false,
+    });
+    const roomId = (gateway as any).clientRoom.get('owner');
+    const room = (gateway as any).customRooms.get(roomId);
+    expect(room.isPublic).toBe(false);
+    expect((gateway as any).getCustomRoomsList()).toEqual([]);
+    const visitor: any = {
+      id: 'visitor',
+      data: {},
+      emit: jest.fn(),
+      join: jest.fn(),
+    };
+    gateway.handleJoinCustomRoom(visitor, { roomId });
+    expect(room.players).toHaveLength(2);
+    gateway.handleSetRoomVisibility(visitor, { isPublic: true });
+    expect(room.isPublic).toBe(false);
+    gateway.handleSetRoomVisibility(owner, { isPublic: true });
+    expect((gateway as any).getCustomRoomsList()).toEqual([
+      expect.objectContaining({ roomId }),
+    ]);
+    gateway.handleSetRoomVisibility(owner, { isPublic: false });
+    gateway.handleGetCustomRooms(visitor);
+    expect(visitor.emit).toHaveBeenCalledWith('custom_rooms_updated', []);
+    gateway.handleRequestCustomRoomState(visitor);
+    expect(visitor.emit).toHaveBeenCalledWith(
+      'custom_room_state',
+      expect.objectContaining({ isPublic: false }),
+    );
+  });
+
   it('admits connected late joiners only after the champion is decided, keeping the completed bracket intact', () => {
     const viewer: any = {
       id: 'viewer',
