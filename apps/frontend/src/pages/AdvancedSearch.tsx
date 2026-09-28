@@ -105,6 +105,7 @@ export default function AdvancedSearch() {
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
+              maxLength={100}
               placeholder="SEARCH USERNAME..."
               style={{ ...inputStyle, flex: '1 1 200px' }}
             />

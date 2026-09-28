@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { parseBoundedInteger, validateLength } from '../lib/formValidation';
 import './Dashboard.css';
 
 export default function AdminPanel() {
@@ -105,16 +106,28 @@ export default function AdminPanel() {
       } else {
         alert('Failed to update role. Only ADMIN can do this.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setError('Could not update the user role.');
     }
   };
 
   const handleBan = async (userId: string) => {
     const days = prompt('Enter BAN duration (in days):', '7');
-    if (!days || isNaN(Number(days))) return;
+    if (days === null) return;
+    const durationDays = parseBoundedInteger(days, 1, 3650);
+    if (durationDays === null) {
+      setError('BAN duration must be a whole number from 1 to 3650 days.');
+      return;
+    }
     const reason = prompt('Enter BAN reason:', 'Violation of terms');
-    if (!reason) return;
+    if (reason === null) return;
+    const normalizedReason = reason.trim();
+    const reasonError = validateLength(normalizedReason, 'BAN reason', 1, 500);
+    if (reasonError) {
+      setError(reasonError);
+      return;
+    }
+    setError('');
 
     try {
       const token = localStorage.getItem('token');
@@ -124,7 +137,7 @@ export default function AdminPanel() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ durationDays: Number(days), reason })
+        body: JSON.stringify({ durationDays, reason: normalizedReason })
       });
       if (res.ok) {
         alert('User has been banned.');
@@ -132,8 +145,8 @@ export default function AdminPanel() {
       } else {
         alert('Failed to ban user.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setError('Could not ban the user.');
     }
   };
 
@@ -151,8 +164,8 @@ export default function AdminPanel() {
       } else {
         alert('Failed to unban user.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setError('Could not unban the user.');
     }
   };
 

@@ -18,6 +18,7 @@ export default function Friends() {
 	const [currentUser, setCurrentUser] = useState<any>(null);
 	const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
 	const [showSuggest, setShowSuggest] = useState(false);
+	const [error, setError] = useState('');
 
 	useEffect(() => {
 		const token = localStorage.getItem('token');
@@ -63,12 +64,11 @@ export default function Friends() {
 			const res = await fetch('/api/users/friends', {
 				headers: { Authorization: `Bearer ${token}` }
 			});
-			if (res.ok) {
-				const data = await res.json();
-				setFriendships(data);
-			}
-		} catch (error) {
-			console.error("Failed to fetch friends", error);
+			if (!res.ok) throw new Error('Failed to fetch friends');
+			const data = await res.json();
+			setFriendships(data);
+		} catch {
+			setError('Could not load the friends list.');
 		}
 	};
 
@@ -78,12 +78,11 @@ export default function Friends() {
 			const res = await fetch('/api/users/me', {
 				headers: { Authorization: `Bearer ${token}` }
 			});
-			if (res.ok) {
-				const data = await res.json();
-				setCurrentUser(data);
-			}
-		} catch (error) {
-			console.error("Failed to fetch current user", error);
+			if (!res.ok) throw new Error('Failed to fetch current user');
+			const data = await res.json();
+			setCurrentUser(data);
+		} catch {
+			setError('Could not load your profile.');
 		}
 	};
 
@@ -103,7 +102,12 @@ export default function Friends() {
 	}, [navigate, keyConfig.quitToMenu, mode]);
 
 	const handleAddFriend = async () => {
-		if (!addFriendInput.trim()) return;
+		const username = addFriendInput.trim();
+		if (username.length < 3 || username.length > 21) {
+			setError('Username must be 3-21 characters.');
+			return;
+		}
+		setError('');
 		try {
 			const token = localStorage.getItem('token');
 			const res = await fetch('/api/users/friends/request', {
@@ -112,7 +116,7 @@ export default function Friends() {
 					'Content-Type': 'application/json',
 					Authorization: `Bearer ${token}` 
 				},
-				body: JSON.stringify({ username: addFriendInput })
+				body: JSON.stringify({ username })
 			});
 			
 			if (res.ok) {
@@ -123,9 +127,8 @@ export default function Friends() {
 				const errorData = await res.json();
 				alert(errorData.message || 'Failed to send friend request');
 			}
-		} catch (error: any) {
-			console.error("Failed to send friend request", error);
-			alert('Failed to send friend request');
+		} catch {
+			setError('Failed to send friend request.');
 		}
 	};
 
@@ -141,8 +144,8 @@ export default function Friends() {
 				body: JSON.stringify({ accept: true })
 			});
 			if (res.ok) fetchFriends();
-		} catch (error) {
-			console.error("Failed to accept friend request", error);
+		} catch {
+			setError('Failed to accept friend request.');
 		}
 	};
 
@@ -158,8 +161,8 @@ export default function Friends() {
 				body: JSON.stringify({ accept: false })
 			});
 			if (res.ok) fetchFriends();
-		} catch (error) {
-			console.error("Failed to decline friend request", error);
+		} catch {
+			setError('Failed to decline friend request.');
 		}
 	};
 
@@ -172,8 +175,8 @@ export default function Friends() {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 			if (res.ok) fetchFriends();
-		} catch (error) {
-			console.error("Failed to remove friend", error);
+		} catch {
+			setError('Failed to remove friend.');
 		}
 	};
 
@@ -212,6 +215,7 @@ export default function Friends() {
 			<div className="dashboard-content">
 				<h1 className="dashboard-title" style={{ color: '#3498db' }}>FRIENDS LIST</h1>
 				<div className="dashboard-subtitle">{friends.filter(f => f.isOnline).length} FRIENDS ONLINE</div>
+				{error && <p role="alert" style={{ color: '#ff6b6b' }}>{error}</p>}
 
 				<div className="dashboard-panels" style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
 					
@@ -220,6 +224,7 @@ export default function Friends() {
 							type="text"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
+							maxLength={100}
 							placeholder="SEARCH FRIENDS..."
 							style={{ 
 								width: '100%', padding: '15px', backgroundColor: '#000', color: '#fff',
@@ -288,6 +293,8 @@ export default function Friends() {
 										}}
 										onFocus={() => setShowSuggest(true)}
 										onBlur={() => setTimeout(() => setShowSuggest(false), 200)}
+										minLength={3}
+										maxLength={21}
 										placeholder="@USERNAME"
 										style={{ 
 											flex: '1 1 150px', padding: '10px', backgroundColor: '#000', color: '#fff',

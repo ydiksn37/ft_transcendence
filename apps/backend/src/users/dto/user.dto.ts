@@ -214,6 +214,7 @@ export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'preset:2' })
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
   avatarUrl?: string | null;
 }
 

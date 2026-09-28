@@ -135,10 +135,14 @@ at creation and can change it later. Use **JOIN BY ID** to enter an unlisted roo
 anyone knowing its ID can join or spectate, so this is not password protection.
 - **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: sonakamu).
 - **Tournament System:** Single-elimination brackets with real-time progress (Responsible: sonakamu).
-  Custom-room tournaments accept 4, 8, or 16 players, including guests and guest hosts.
-  Brackets are persisted only when all players have distinct registered accounts;
-  guest-containing brackets remain in server memory. Existing per-match result
-  saving still applies. The same registered account cannot enter twice.
+  A room owner can start a tournament with any participant count of four or more;
+  it is not restricted to 4, 8, or 16 players. Guests, guest hosts, and multiple
+  connections using the same registered account are accepted. A bracket is persisted
+  only when every participant is an authenticated user with a distinct user ID;
+  otherwise it runs in server memory while the existing per-match result saving still
+  applies. Anyone who enters the room after the tournament starts joins as a spectator
+  without changing the active bracket, and becomes eligible to play after a champion
+  is decided.
 - **AI Opponent:** Play against an intelligent bot with adjustable difficulties (Responsible: ssawa).
 - **Spectator Mode:** Watch live matches with real-time board updates (Responsible: sonakamu).
 - **Analytics Dashboard:** Visual graphs for APM, PPS, and win rates (Responsible: yukusano).
@@ -146,10 +150,30 @@ anyone knowing its ID can join or spectate, so this is not password protection.
 - **Social Features:** Friend lists, real-time chat, profile customization (Responsible: yukusano).
 - **Advanced Security:** ModSecurity WAF and HashiCorp Vault integration (Responsible: yukusano).
 
-## Implemented Module Candidates
-*The 23 entries below total at most 35 points (Major = 2, Minor = 1), but this
-is not a score claim. A module is claimed for evaluation only after its complete
-requirement and live demonstration pass; see `REMAINING_TASKS.md`.*
+## Modules Selected for Evaluation — Core 14 points
+
+The following conservative set is the primary evaluation claim. Each module has a
+corresponding implementation and demonstration path; additional candidates are listed
+separately and are counted only after a successful live demonstration.
+
+| Module | Points | Why selected / implementation | Primary owner | Demonstration |
+| --- | ---: | --- | --- | --- |
+| Frontend and backend frameworks | 2 | React/Vite SPA and NestJS REST/WebSocket backend provide the application structure. | kaisuzuk / yukusano | Start the stack and navigate between SPA routes; inspect Nest modules. |
+| Database ORM | 1 | Prisma defines PostgreSQL relations, migrations, constraints, and typed queries. | yukusano | Show `schema.prisma`, migrations, and persisted users/results. |
+| WebSockets | 2 | Socket.IO carries authoritative game state, chat, rooms, reconnects, and spectator updates. | sonakamu / ssawa | Run a live match and spectator in independent Chrome contexts. |
+| Standard user management | 2 | Registration, profiles, avatars, friends, presence, and account settings are implemented. | yukusano / kaisuzuk | Register, edit a profile, upload/select an avatar, and add a friend. |
+| Game statistics and history | 1 | Wins, losses, APM, PPS, ranking, progression, and match history are stored and displayed. | yukusano | Complete a match and open Dashboard/Profile. |
+| OAuth 2.0 | 1 | 42 OAuth uses an HTTPS callback and creates or resumes an OAuth identity safely. | yukusano | Sign in through 42 and load the authenticated profile. |
+| Two-factor authentication | 1 | TOTP enrollment, QR setup, login challenge, verification, and disabling are implemented. | yukusano | Enable 2FA, sign out, and complete a challenged login. |
+| Web-based game | 2 | The Tetris-like engine implements 7-bag generation, rotations, lock delay, scoring, and line clears. | sonakamu / ssawa | Play a solo game and demonstrate core mechanics. |
+| Remote players | 2 | Server-authoritative network matches synchronize two remote players and garbage attacks. | sonakamu / ssawa | Play a 1v1 match in two independent Chrome contexts. |
+| **Total** | **14** | Minimum passing module claim. |  |  |
+
+## Additional Implemented Module Candidates
+
+*The entries below are not part of the core 14-point claim. They are proposed for
+additional credit only when their complete requirement and live demonstration pass;
+see `REMAINING_TASKS.md`.*
 
 ### Web
 1. **Use a Framework as backend and frontend (Major - 2pts)**: React (Vite) and NestJS.

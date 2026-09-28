@@ -4,6 +4,7 @@ import {
   BanUserDto,
   ImportUserSettingsDto,
   UpdateGameSettingsDto,
+  UpdateUserDto,
   UpdateUserRoleDto,
 } from './user.dto';
 
@@ -79,6 +80,29 @@ describe('game settings DTO validation', () => {
       transform(
         { settings: { volume: 50, passwordHash: 'must-not-pass' } },
         ImportUserSettingsDto,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('profile DTO validation', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    transform: true,
+    forbidNonWhitelisted: true,
+  });
+
+  it('bounds persisted avatar references', async () => {
+    await expect(
+      pipe.transform(
+        { avatarUrl: 'preset:2' },
+        { type: 'body', metatype: UpdateUserDto },
+      ),
+    ).resolves.toBeInstanceOf(UpdateUserDto);
+    await expect(
+      pipe.transform(
+        { avatarUrl: 'x'.repeat(2049) },
+        { type: 'body', metatype: UpdateUserDto },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

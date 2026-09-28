@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
+import { isSixDigitCode, validateLength } from '../lib/formValidation';
 import './LobbyPage.css';
 
 interface ApiKey {
@@ -39,25 +40,31 @@ export default function Settings() {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(user?.twoFactorEnabled || false);
   const [archiveRows, setArchiveRows] = useState<ImportedArchiveRow[]>([]);
+  const [operationError, setOperationError] = useState('');
 
   const handleGenerate2FA = async () => {
+    setOperationError('');
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/auth/2fa/generate', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setQrCodeDataUrl(data.qrCodeDataUrl);
-        setShow2FASetup(true);
-      }
-    } catch (e) {
-      console.error(e);
+      if (!res.ok) throw new Error('Could not start 2FA setup.');
+      const data = await res.json();
+      setQrCodeDataUrl(data.qrCodeDataUrl);
+      setShow2FASetup(true);
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : 'Could not start 2FA setup.');
     }
   };
 
   const handleTurnOn2FA = async () => {
+    if (!isSixDigitCode(twoFactorCode)) {
+      setOperationError('Enter the 6-digit authentication code.');
+      return;
+    }
+    setOperationError('');
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/auth/2fa/turn-on', {
@@ -76,14 +83,19 @@ export default function Settings() {
       } else {
         alert('Invalid code!');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Could not enable 2FA.');
     }
   };
 
   const handleTurnOff2FA = async () => {
     const code = prompt('Enter current 2FA code to disable:');
     if (!code) return;
+    if (!isSixDigitCode(code)) {
+      setOperationError('Enter the 6-digit authentication code.');
+      return;
+    }
+    setOperationError('');
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/auth/2fa/turn-off', {
@@ -100,8 +112,8 @@ export default function Settings() {
       } else {
         alert('Invalid code!');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Could not disable 2FA.');
     }
   };
 
@@ -140,8 +152,8 @@ export default function Settings() {
         const data = await res.json();
         setApiKeys(data);
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Could not load API keys.');
     }
   };
 
@@ -159,7 +171,13 @@ export default function Settings() {
   }, []);
 
   const handleCreateApiKey = async () => {
-    if (!newKeyLabel.trim()) return;
+    const label = newKeyLabel.trim();
+    const labelError = validateLength(label, 'API key label', 1, 100);
+    if (labelError) {
+      setOperationError(labelError);
+      return;
+    }
+    setOperationError('');
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -169,16 +187,15 @@ export default function Settings() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify({ label: newKeyLabel })
+        body: JSON.stringify({ label })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setNewKey(data.key);
-        setNewKeyLabel('');
-        fetchApiKeys();
-      }
-    } catch (e) {
-      console.error(e);
+      if (!res.ok) throw new Error('Could not create API key.');
+      const data = await res.json();
+      setNewKey(data.key);
+      setNewKeyLabel('');
+      fetchApiKeys();
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : 'Could not create API key.');
     } finally {
       setLoading(false);
     }
@@ -195,8 +212,8 @@ export default function Settings() {
       if (res.ok) {
         fetchApiKeys();
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Could not revoke API key.');
     }
   };
 
@@ -207,6 +224,10 @@ export default function Settings() {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (file.size > 1_000_000) {
+        setOperationError('Settings file must not exceed 1 MB.');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
@@ -275,8 +296,7 @@ export default function Settings() {
       } else {
         alert('Failed to export data.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
       alert('Failed to export data.');
     }
   };
@@ -288,6 +308,10 @@ export default function Settings() {
     input.onchange = async event => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (file.size > 1_000_000) {
+        setOperationError('Archive file must not exceed 1 MB.');
+        return;
+      }
       const format = file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
       const data = await file.text();
       const token = localStorage.getItem('token');
@@ -328,11 +352,19 @@ export default function Settings() {
       'Enter your current password. Leave it blank for an OAuth-only account.'
     );
     if (password === null) return;
+    if (password.length > 100) {
+      setOperationError('Password must not exceed 100 characters.');
+      return;
+    }
 
     let twoFactorCode: string | undefined;
     if (is2FAEnabled) {
       const enteredCode = window.prompt('Enter your current 6-digit 2FA code.');
       if (enteredCode === null) return;
+      if (!isSixDigitCode(enteredCode)) {
+        setOperationError('Enter the 6-digit authentication code.');
+        return;
+      }
       twoFactorCode = enteredCode;
     }
 
@@ -359,10 +391,18 @@ export default function Settings() {
         'A 6-digit deletion code was sent to your email. Enter it here.'
       );
       if (code === null) return;
+      if (!isSixDigitCode(code)) {
+        setOperationError('Enter the 6-digit deletion code.');
+        return;
+      }
       const confirmation = window.prompt(
         'This permanently deletes your account and personal data. Type DELETE MY ACCOUNT to continue.'
       );
       if (confirmation === null) return;
+      if (confirmation !== 'DELETE MY ACCOUNT') {
+        setOperationError('Account deletion confirmation did not match.');
+        return;
+      }
 
       const deleteRes = await fetch('/api/users/me', {
         method: 'DELETE',
@@ -380,8 +420,7 @@ export default function Settings() {
         const error = await deleteRes.json().catch(() => null);
         alert(error?.message || 'Failed to delete account.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
       alert('Failed to delete account.');
     }
   };
@@ -429,6 +468,7 @@ export default function Settings() {
       </div>
 
       <div style={{ width: '100%', maxWidth: '900px' }}>
+        {operationError && <p role="alert" style={{ color: '#ff6b6b' }}>{operationError}</p>}
         <div style={panelStyle}>
           <h2>PRIVATE GAME ARCHIVE</h2>
           <p>Import up to 500 JSON/CSV rows. Archive rows never affect rank, XP, achievements, or official match history.</p>
@@ -451,6 +491,7 @@ export default function Settings() {
               placeholder="KEY LABEL" 
               value={newKeyLabel}
               onChange={(e) => setNewKeyLabel(e.target.value)}
+              maxLength={100}
               style={{
                 flex: 1,
                 padding: '10px',
@@ -560,9 +601,12 @@ export default function Settings() {
                   type="text" 
                   placeholder="ENTER 6-DIGIT CODE" 
                   value={twoFactorCode}
-                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '10px', width: '100%', maxWidth: '250px', outline: 'none', fontFamily: "'Press Start 2P', monospace", fontSize: '14px', textAlign: 'center' }}
                   maxLength={6}
+                  minLength={6}
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
                 />
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button 

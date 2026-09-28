@@ -188,6 +188,7 @@ export default function Chat() {
 							type="text" 
 							value={inputText}
 							onChange={(e) => setInputText(e.target.value)}
+							maxLength={500}
 							onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSend(); }}
 							placeholder="Type a message..."
 							style={{ 

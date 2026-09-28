@@ -119,9 +119,8 @@ export default function Dashboard() {
 					avgPps: Number(day.avgPps),
 					totalLinesCleared: day.totalLinesCleared,
 				})));
-			} catch (error) {
+			} catch {
 				if (signal.aborted) return;
-				console.error(error);
 				setError(true);
 				setGames([]);
 				setAnalytics([]);

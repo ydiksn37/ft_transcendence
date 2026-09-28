@@ -22,6 +22,7 @@ export default function Profile() {
 	const [games, setGames] = useState<GameRecordView[]>([]);
 	const [user, setUser] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState('');
 	const [loadingPiece, setLoadingPiece] = useState<any>(null);
 	const [selectedIndex, setSelectedIndex] = useState(-1); // 0: BACK, 1: SETTINGS, 2: ADMIN
 
@@ -107,8 +108,8 @@ export default function Profile() {
 					winRate: Number(statsData.winRate),
 				});
 				setGames(mappedGames);
-			} catch (error) {
-				console.error(error);
+			} catch {
+				setError('Could not load your profile. Please retry.');
 			} finally {
 				setLoading(false);
 			}
@@ -120,6 +121,17 @@ export default function Profile() {
 	const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
 		if (event.target.files && event.target.files.length > 0) {
 			const file = event.target.files[0];
+			if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
+				setError('Avatar must be a JPG, PNG, GIF, or WebP image.');
+				event.target.value = '';
+				return;
+			}
+			if (file.size > 2 * 1024 * 1024) {
+				setError('Avatar must not exceed 2 MB.');
+				event.target.value = '';
+				return;
+			}
+			setError('');
 			const reader = new FileReader();
 			reader.addEventListener('load', () => setImageSrc(reader.result?.toString() || null));
 			reader.readAsDataURL(file);
@@ -164,13 +176,21 @@ export default function Profile() {
 			
 			// Close cropper modal
 			setImageSrc(null);
-		} catch (error: any) {
-			console.error(error);
-			alert(error.message);
+		} catch (error: unknown) {
+			setError(error instanceof Error ? error.message : 'Failed to upload avatar.');
 		} finally {
 			setLoading(false);
 		}
 	};
+
+	if (!loading && error && (!user || !stats)) {
+		return (
+			<div className="dashboard-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
+				<p role="alert">{error}</p>
+				<button onClick={() => window.location.reload()}>RETRY</button>
+			</div>
+		);
+	}
 
 	if (loading || !user || !stats) {
 		return (
@@ -249,6 +269,7 @@ export default function Profile() {
 
 			<div className="dashboard-content">
 				<h1 className="dashboard-title">MY PROFILE</h1>
+				{error && <p role="alert" style={{ color: '#ff6b6b' }}>{error}</p>}
 				<div className="dashboard-subtitle">@{user.username}</div>
 
 				<div className="dashboard-panels">
@@ -333,8 +354,8 @@ export default function Profile() {
 													body: JSON.stringify({ avatarUrl: `preset:${i}` })
 												});
 												setUser((prev: any) => ({ ...prev, avatarUrl: `preset:${i}` }));
-											} catch (e) {
-												console.error(e);
+											} catch {
+												setError('Failed to update avatar.');
 											}
 										}}>
 											<AvatarIcon color={p.color} symbol={p.symbol} size={32} />

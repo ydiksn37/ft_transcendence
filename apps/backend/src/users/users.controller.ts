@@ -15,6 +15,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -49,6 +50,39 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+
+type AvatarMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+function detectAvatarMimeType(buffer: Buffer): AvatarMimeType | null {
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 6 &&
+    ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))
+  ) {
+    return 'image/gif';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
 
 @ApiTags('Users')
 @UseGuards(JwtAuthGuard)
@@ -117,17 +151,18 @@ export class UsersController {
     @CurrentUser() user: AuthenticatedUser,
     @UploadedFile(
       new ParseFilePipeBuilder()
-        .addFileTypeValidator({
-          fileType: /^image\/(jpeg|png|gif|webp)$/,
-          overrideMimeType: true,
-        })
         .addMaxSizeValidator({ maxSize: 2 * 1024 * 1024 })
         .build({ fileIsRequired: true }),
     )
     file: Express.Multer.File,
   ) {
-    // The pipe has checked the actual bytes and replaced the client MIME type.
-    // Never use the untrusted original extension for a publicly served file.
+    const detectedMimeType = detectAvatarMimeType(file.buffer);
+    if (!detectedMimeType) {
+      throw new BadRequestException('Invalid avatar image');
+    }
+    file.mimetype = detectedMimeType;
+
+    // Never use the client MIME type or original extension for a public file.
     const extension = {
       'image/jpeg': 'jpg',
       'image/png': 'png',

@@ -19,6 +19,7 @@
     "pretype-check": "npm run db:generate",
     "type-check": "tsc --noEmit",
     "headless": "ts-node src/game/headless/headless-cli.ts",
+    "pretest": "npm run build --workspace @transcendence/shared",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

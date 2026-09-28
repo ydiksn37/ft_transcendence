@@ -734,6 +734,10 @@ subjectの14点要件と未完成モジュール0点を明示。確定申告点�
 2026-09-26追記: private archive importと3人以上のCustom Room実装を反映し、候補表を
 23モジュール・最大35ポイントへ更新。これは候補上限であり獲得済み点数ではない旨を維持した。
 
+2026-09-28追記: 評価時に主申告する14ポイントを英語・日本語READMEへ明記し、追加候補と分離。
+Custom Roomはprivate roomもJOIN BY ID方式であり、password方式ではない現在の実装へ説明を同期した。
+4名全員のcommitが既存のGit履歴から確認できることを確認した。履歴の書き換えや補助ファイルは追加しない。
+
 ### 25. ER図をPrisma schemaへ同期する（完了）
 
 - [x] 存在しないOrganization関連テーブルを削除するか実装
@@ -904,6 +908,13 @@ Playwrightがブラウザ外で記録した各自の `game:state` フレーム�
 凍結中もサーバーからフレームが送られ続けることを検証。2回実行し、凍結側/アクティブ側が5/5行と4/4行で一致、
 凍結中のフレームは4件。既存の復帰後再描画・reload再接続・再戦も継続成功。
 対象はサーバー進行のONLINE_1V1/CUSTOM_ROOMS。VS_AIの人間側盤面はフロントエンドで計算する設計のため対象外。
+
+2026-09-28追記: 認証、2FA、設定値、room、chat、検索、friend、admin BAN、avatar、設定import、
+アカウント削除のfrontend入力制約を追加し、backend DTOの境界値と画像magic byte検証も補強。
+不正形式・空欄・上限超過・注入文字列を含む自動テストを追加した。通常の失敗は画面へ表示し、
+意図したErrorBoundary以外のfrontend `console.error` / `console.warn` を除去。Chrome smoke testでdesktop、
+tablet、mobile、login、profile、admin、search、Custom Room、対戦・再接続を通し、console error、warning、
+page error、mixed contentが0件であることを確認した。Backend Jestは43 suites・381 tests成功。
 
 ## 現在の検証コマンド
 

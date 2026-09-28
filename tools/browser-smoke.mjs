@@ -124,8 +124,8 @@ try {
         xp: 1170, level: 2, levelProgress: 170, levelTarget: 1000,
         rank: 'SILVER', rankPoints: 250,
         achievements: [
-          { key: 'first_win', name: 'First victory', description: 'Win your first match.', target: 1, progress: 1, xpReward: 100, earnedAt: '2026-09-26T00:00:00.000Z' },
-          { key: 'ten_wins', name: 'Ten victories', description: 'Win 10 matches.', target: 10, progress: 1, xpReward: 200, earnedAt: null },
+          { key: 'first_win', group: 'wins', groupName: 'Victories', tier: 1, totalTiers: 2, name: 'First victory', description: 'Win matches: 1.', target: 1, progress: 1, xpReward: 100, earnedAt: '2026-09-26T00:00:00.000Z' },
+          { key: 'ten_wins', group: 'wins', groupName: 'Victories', tier: 2, totalTiers: 2, name: 'Ten victories', description: 'Win matches: 10.', target: 10, progress: 1, xpReward: 200, earnedAt: null },
         ],
       },
     };
@@ -154,7 +154,8 @@ try {
   const response = await page.goto(new URL('/profile', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!response?.ok()) diagnostics.push(`HTTP ${response?.status() ?? 'no response'}`);
   const bodyText = await page.locator('body').innerText();
-  for (const expected of ['ACHIEVEMENTS & PROGRESSION', 'LEVEL 2', '250 RP', 'First victory', 'UNLOCKED', '170 / 1000 XP']) {
+  // Only assert text visible while the achievements disclosure is closed.
+  for (const expected of ['ACHIEVEMENTS', 'LEVEL', '250 RP', '1 / 2 UNLOCKED', '1170 XP TOTAL', '170 / 1000 XP']) {
     if (!bodyText.includes(expected)) diagnostics.push(`missing text: ${expected}`);
   }
   const overflow = await page.evaluate(() => ({

@@ -192,7 +192,7 @@ class SoundManager {
         this.waitForUserInteraction();
         return;
       }
-      console.error('BGM playback failed.', err);
+      this.pendingBgmUrl = null;
     });
   }
 

@@ -1,5 +1,7 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { TwoFactorCodeDto } from './auth/dto/auth-action.dto';
+import { LoginDto } from './auth/dto/login.dto';
+import { RegisterDto } from './auth/dto/register.dto';
 import { CreateDirectRoomDto } from './chat/dto/chat.dto';
 import { SaveSinglePlayerResultDto } from './game/dto/save-single-player-result.dto';
 import {
@@ -66,6 +68,16 @@ describe('HTTP input DTO validation', () => {
     [FriendRequestDto, { username: '@player' }],
     [RespondFriendRequestDto, { accept: true }],
     [TwoFactorCodeDto, { code: '123456' }],
+    [LoginDto, { email: 'player@example.com', password: 'password' }],
+    [
+      RegisterDto,
+      {
+        email: 'player@example.com',
+        username: 'player',
+        displayName: 'Player',
+        password: 'password',
+      },
+    ],
     [
       CreateDirectRoomDto,
       { targetUserId: '123e4567-e89b-12d3-a456-426614174000' },
@@ -95,6 +107,17 @@ describe('HTTP input DTO validation', () => {
     [FriendRequestDto, { addresseeId: 'not-a-uuid' }],
     [RespondFriendRequestDto, { accept: 'yes' }],
     [TwoFactorCodeDto, { code: '12345x' }],
+    [LoginDto, { email: `${'a'.repeat(250)}@x.io`, password: 'password' }],
+    [LoginDto, { email: 'player@example.com', password: '' }],
+    [
+      RegisterDto,
+      {
+        email: 'player@example.com',
+        username: 'ab',
+        displayName: 'Player',
+        password: 'password',
+      },
+    ],
     [CreateDirectRoomDto, { targetUserId: 'not-a-uuid' }],
     [CreateTournamentDto, { name: 'Cup', maxPlayers: 5 }],
     [TournamentListQueryDto, { limit: 101 }],

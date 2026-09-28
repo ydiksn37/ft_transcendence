@@ -425,7 +425,7 @@ const PlayPage = () => {
             lines: 40,
             pieces: piecesPlaced
           })
-        }).catch(err => console.error('Failed to save sprint record:', err));
+        }).catch(() => undefined);
       }
     }
   }, [gameOver, finalTime, token, piecesPlaced, gameModeRef]);
@@ -460,7 +460,7 @@ const PlayPage = () => {
               durationSeconds: Math.floor(durationSeconds),
               score: score
             })
-          }).catch(err => console.error('Failed to save game result:', err));
+          }).catch(() => undefined);
         }, 0);
         return () => clearTimeout(submission);
       }

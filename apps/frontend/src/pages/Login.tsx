@@ -3,11 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useConfig } from '../hooks/useConfig';
 import { DsAlert, DsButton, DsField, DsHeading, DsInput, DsPanel } from '../components/design-system';
+import { isSixDigitCode, validateEmail, validateLength } from '../lib/formValidation';
 import './Login.css';
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_email_conflict:
     'This 42 email is already used by a password account. Log in with your password instead.',
+  profile_fetch_failed:
+    'Authentication completed, but the profile could not be loaded. Please try again.',
 };
 
 export default function Login() {
@@ -52,12 +55,38 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
+    if (!isLogin) {
+      const usernameError = validateLength(username, 'Username', 3, 20);
+      const displayNameError = displayName
+        ? validateLength(displayName, 'Display name', 1, 50)
+        : null;
+      const passwordError = validateLength(password, 'Password', 8, 100);
+      const validationError = usernameError || displayNameError || passwordError;
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    } else if (password.length === 0 || password.length > 100) {
+      setError('Password is required and must not exceed 100 characters.');
+      return;
+    }
     
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
       const payload = isLogin 
-        ? { email, password } 
-        : { email, username, password, displayName: displayName || username };
+        ? { email: email.trim(), password }
+        : {
+            email: email.trim(),
+            username: username.trim(),
+            password,
+            displayName: displayName.trim() || username.trim(),
+          };
         
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -98,6 +127,10 @@ export default function Login() {
   const handle2FASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!isSixDigitCode(twoFactorCode)) {
+      setError('Enter the 6-digit authentication code.');
+      return;
+    }
     
     try {
       const response = await fetch('/api/auth/2fa/authenticate', {
@@ -179,10 +212,12 @@ export default function Login() {
                 autoComplete="one-time-code"
                 type="text" 
                 value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value)}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 className="retro-input"
                 placeholder="123456"
                 maxLength={6}
+                minLength={6}
+                pattern="[0-9]{6}"
                 required 
               />
             </DsField>
@@ -198,6 +233,7 @@ export default function Login() {
                         onChange={(e) => setEmail(e.target.value)}
                         className="retro-input"
                         placeholder="YOU@EXAMPLE.COM"
+                        maxLength={254}
                         required 
                       />
                     </DsField>
@@ -211,6 +247,8 @@ export default function Login() {
                             onChange={(e) => setUsername(e.target.value)}
                             className="retro-input"
                             placeholder="PLAYER_ONE"
+                            minLength={3}
+                            maxLength={20}
                             required 
                           />
                         </DsField>
@@ -221,6 +259,7 @@ export default function Login() {
                             onChange={(e) => setDisplayName(e.target.value)}
                             className="retro-input"
                             placeholder="PLAYER 1"
+                            maxLength={50}
                           />
                         </DsField>
                       </>
@@ -233,6 +272,8 @@ export default function Login() {
                         onChange={(e) => setPassword(e.target.value)}
                         className="retro-input"
                         placeholder="********"
+                        minLength={isLogin ? 1 : 8}
+                        maxLength={100}
                         required 
                       />
                     </DsField>

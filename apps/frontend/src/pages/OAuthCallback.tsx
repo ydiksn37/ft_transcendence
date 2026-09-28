@@ -42,9 +42,8 @@ export const OAuthCallback: React.FC = () => {
           
           navigate(redirectUrl, { replace: true });
         })
-        .catch((err) => {
-          console.error(err);
-          navigate('/login', { replace: true });
+        .catch(() => {
+          navigate('/login?oauthError=profile_fetch_failed', { replace: true });
         });
     } else {
       navigate('/login', { replace: true });

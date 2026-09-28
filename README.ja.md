@@ -121,8 +121,18 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 - **コミュニケーション:** 毎日のスタンドアップとリアルタイムのコラボレーションはDiscordで実施しました。
 
 ## 機能リスト (Features List)
+
+Custom Roomは公開（一覧表示）または非公開（一覧に表示しない）で作成でき、ownerは作成後も
+公開範囲を変更できます。非公開roomには **JOIN BY ID** で入室します。Room IDを知っている人は
+参加または観戦できるため、パスワード保護ではありません。
+
 - **リアルタイム1v1対戦:** おじゃまブロック付きのサーバー主導テトリス (担当: sonakamu)。
 - **トーナメントシステム:** リアルタイム進行のシングルトーナメント表 (担当: sonakamu)。
+  Room ownerは4名以上であれば任意の参加人数で開始でき、4・8・16名には限定されません。
+  ゲスト、ゲストowner、同じ登録アカウントからの複数接続も参加できます。全参加者が互いに異なる
+  認証ユーザーの場合だけ大会表をDBへ保存し、それ以外は既存の試合結果保存を維持しながら
+  サーバーのメモリ上で進行します。大会開始後に入室したユーザーは進行中の大会表を変更せず
+  観戦者となり、優勝者の確定後に次回大会へ参加できるプレイヤーになります。
 - **AI対戦相手:** 難易度調整可能な賢いボットとの対戦 (担当: ssawa)。
 - **観戦モード:** 進行中の試合と盤面をリアルタイム観戦 (担当: sonakamu)。
 - **分析ダッシュボード:** APM, PPS, 勝率の視覚的グラフ (担当: yukusano)。
@@ -130,8 +140,28 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 - **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
 - **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
 
-## 実装済みモジュール候補
-*以下23項目は最大35ポイント相当（Major = 2、Minor = 1）ですが、獲得点の宣言ではありません。要件全体と実演が完了した項目だけを評価時に申告します。検証状況は`REMAINING_TASKS.md`を参照してください。*
+## 評価で申告するモジュール — 基本14ポイント
+
+以下を合格ラインの主申告とします。各モジュールに実装と実演手順があり、追加候補は実演に成功した場合だけ
+別途申告します。
+
+| モジュール | 点 | 選定理由・実装 | 主担当 | 実演 |
+| --- | ---: | --- | --- | --- |
+| Frontend / Backendフレームワーク | 2 | React/ViteのSPAとNestJSのREST・WebSocket backendで全体を構成。 | kaisuzuk / yukusano | stackを起動し、SPA routeとNest moduleを提示。 |
+| Database ORM | 1 | PrismaでPostgreSQLのrelation、migration、constraint、型付きqueryを管理。 | yukusano | schema、migration、保存済みUser/GameResultを提示。 |
+| WebSockets | 2 | Socket.IOでゲーム状態、chat、room、再接続、観戦をリアルタイム配信。 | sonakamu / ssawa | 独立したChrome contextで対戦と観戦を実演。 |
+| 標準ユーザー管理 | 2 | 登録、profile、avatar、friend、presence、設定を実装。 | yukusano / kaisuzuk | 登録、profile編集、avatar設定、friend追加を実演。 |
+| ゲーム統計と履歴 | 1 | 勝敗、APM、PPS、rank、progression、対戦履歴を保存・表示。 | yukusano | 対戦完了後にDashboard/Profileを表示。 |
+| OAuth 2.0 | 1 | 42 OAuthをHTTPS callbackで処理し、安全にOAuth identityを作成・再利用。 | yukusano | 42 loginからprofile表示まで実演。 |
+| 2FA | 1 | TOTP登録、QR、login challenge、認証、解除を実装。 | yukusano | 2FA有効化後に再loginしてcodeを入力。 |
+| Webベースゲーム | 2 | 7-bag、rotation、lock delay、score、line clearを持つゲームengine。 | sonakamu / ssawa | Solo gameで主要mechanicを実演。 |
+| Remote players | 2 | Server-authoritativeな2人対戦とgarbage attackを同期。 | sonakamu / ssawa | 2つのChrome contextで1v1を実演。 |
+| **合計** | **14** | 合格に必要な基本申告。 |  |  |
+
+## 追加の実装済みモジュール候補
+
+*以下は基本14ポイントには含めません。要件全体と実演が成功した項目だけを追加申告します。
+検証状況は`REMAINING_TASKS.md`を参照してください。*
 
 ### Web
 1. **フロント/バックエンドにフレームワークを使用 (Major - 2pts)**: React (Vite) と NestJS。

@@ -156,8 +156,9 @@ export default function LobbyPage() {
               setMyRecords(dataMe);
             }
           }
-        } catch (e) {
-          console.error('Failed to fetch leaderboard or my records', e);
+        } catch {
+          setRecords([]);
+          setMyRecords([]);
         }
       };
       fetchLeaderboard();

@@ -93,19 +93,19 @@ export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost
       <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
-          <input type="number" min="0" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          <input type="number" min="0" max="5000" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>DAS (ms)</label>
-          <input type="number" min="0" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          <input type="number" min="0" max="5000" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>DCD (ms)</label>
-          <input type="number" min="0" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          <input type="number" min="0" max="5000" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
-          <input type="number" min="0" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Number(e.target.value)}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+          <input type="number" min="0" max="1000" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Math.max(0, Math.min(1000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
         </div>
       </div>
       </>}

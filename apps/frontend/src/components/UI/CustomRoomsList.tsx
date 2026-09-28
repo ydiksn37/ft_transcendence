@@ -28,6 +28,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   const [players, setPlayers] = useState<{ socketId: string; userId: string | null; username: string | null; wins: number }[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (!socket) return;
@@ -140,23 +141,40 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
   }, [inRoom, onBack, setAppState, tournament, isPlaying, isOwner, socket, players.length]);
 
   const handleCreateRoom = () => {
+    const name = newRoomName.trim();
+    if (name.length > 40) {
+      setValidationError('Room name must not exceed 40 characters.');
+      return;
+    }
+    setValidationError('');
     if (socket) {
-      socket.emit('game:create_custom_room', { name: newRoomName, isPublic });
+      socket.emit('game:create_custom_room', { name, isPublic });
     }
   };
 
   const handleUpdateRoomId = () => {
-    if (socket && inRoom && customRoomId) {
+    if (!/^[A-Za-z0-9]{4}$/.test(customRoomId)) {
+      setValidationError('Room ID must contain exactly 4 letters or numbers.');
+      return;
+    }
+    setValidationError('');
+    if (socket && inRoom) {
       socket.emit('game:update_custom_room_id', { newRoomId: customRoomId });
     }
   };
 
   const handleJoinRoom = (roomId: string) => {
+    const normalizedRoomId = roomId.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{4,24}$/.test(normalizedRoomId)) {
+      setValidationError('Room ID must be 4-24 letters, numbers, underscores, or hyphens.');
+      return;
+    }
+    setValidationError('');
     if (socket) {
-      socket.emit('game:join_custom_room', { roomId });
+      socket.emit('game:join_custom_room', { roomId: normalizedRoomId });
       socket.emit('game:request_custom_room_state');
-      setInRoom(roomId);
-      setCustomRoomId(roomId);
+      setInRoom(normalizedRoomId);
+      setCustomRoomId(normalizedRoomId);
       setIsOwner(false);
     }
   };
@@ -179,6 +197,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
           CUSTOM ROOMS
         </h1>
       )}
+      {validationError && <p role="alert" style={{ color: '#ff6b6b' }}>{validationError}</p>}
       
       {!inRoom ? (
         <>
@@ -195,6 +214,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
               placeholder="ROOM NAME" 
               value={newRoomName} 
               onChange={(e) => setNewRoomName(e.target.value)}
+              maxLength={40}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   handleCreateRoom();
@@ -222,7 +242,7 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
           </div>
 
           <form onSubmit={e => { e.preventDefault(); if (joinRoomId.trim()) handleJoinRoom(joinRoomId.trim()); }} style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-            <input aria-label="Room ID to join" placeholder="ROOM ID" value={joinRoomId} maxLength={24} onChange={e => setJoinRoomId(e.target.value.toUpperCase())} />
+            <input aria-label="Room ID to join" placeholder="ROOM ID" value={joinRoomId} minLength={4} maxLength={24} pattern="[A-Za-z0-9_-]{4,24}" onChange={e => setJoinRoomId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24).toUpperCase())} />
             <button className="nav-btn" type="submit" disabled={!joinRoomId.trim()}>JOIN BY ID</button>
           </form>
           <div className="panel" style={{ width: '100%', maxWidth: '600px', flexDirection: 'column', gap: '15px', padding: '20px', minHeight: '300px', justifyContent: 'flex-start' }}>
@@ -374,6 +394,9 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
                 type="text"
                 value={customRoomId}
                 onChange={(e) => setCustomRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase())}
+                minLength={4}
+                maxLength={4}
+                pattern="[A-Za-z0-9]{4}"
                 style={{ 
                   width: '100px', 
                   padding: '8px', 

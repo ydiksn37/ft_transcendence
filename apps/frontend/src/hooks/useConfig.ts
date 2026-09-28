@@ -231,7 +231,6 @@ export const useConfig = () => {
         
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          console.error("Save config failed:", errData);
           setSettingsError(`設定の保存に失敗しました: ${errData.message || res.status}`);
         } else setSettingsError(null);
       } catch {
