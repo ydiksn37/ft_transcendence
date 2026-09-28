@@ -30,6 +30,7 @@ export class GameController {
       player1LinesCleared: body.linesCleared,
       player2LinesCleared: 0,
       player1TSpins: body.tSpins ?? 0,
+      player1OtherSpins: body.otherSpins,
       player2TSpins: 0,
       player1Tetrises: body.tetrises ?? 0,
       player2Tetrises: 0,

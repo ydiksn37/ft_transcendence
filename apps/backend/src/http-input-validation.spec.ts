@@ -30,6 +30,36 @@ describe('HTTP input DTO validation', () => {
   const transform = (value: unknown, metatype: new () => object) =>
     pipe.transform(value, { type: 'body', metatype });
 
+  it.each([{ I: -1 }, { J: 1.5 }, { L: '2' }, { S: 1000001 }, { O: 1 }, []])(
+    'rejects invalid other-spin counters %p',
+    async (otherSpins) => {
+      await expect(
+        transform(
+          {
+            gameMode: 'MARATHON',
+            linesCleared: 2,
+            durationSeconds: 60,
+            otherSpins,
+          },
+          SaveSinglePlayerResultDto,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+  it('accepts all five non-T spin counters', async () => {
+    await expect(
+      transform(
+        {
+          gameMode: 'MARATHON',
+          linesCleared: 20,
+          durationSeconds: 60,
+          otherSpins: { I: 1, J: 2, L: 3, S: 4, Z: 5 },
+        },
+        SaveSinglePlayerResultDto,
+      ),
+    ).resolves.toBeInstanceOf(SaveSinglePlayerResultDto);
+  });
+
   it.each([
     [SearchUsersDto, { page: '2', limit: '50', status: 'ONLINE' }],
     [SearchHistoryDto, { mode: 'VERSUS', result: 'WIN' }],

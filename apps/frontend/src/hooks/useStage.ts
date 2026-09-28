@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createStage, type Cell } from '../utils/gameHelpers';
 import type { Player } from './usePlayer';
+import { detectOtherSpin, emptyOtherSpins } from '@transcendence/shared';
 
 export type LockEvent = {
   id: number;
@@ -22,6 +23,7 @@ export const useStage = (
   const lockEventIdRef = useRef(0);
   const stageRef = useRef<Cell[][]>(stage);
   const lastLockedSpawnRef = useRef<number | null>(null);
+  const achievementStatsRef = useRef({ tSpins: 0, tetrises: 0, otherSpins: emptyOtherSpins() });
 
   useEffect(() => {
     // Effect replay or changing callbacks must not lock/draw Next twice.
@@ -50,6 +52,13 @@ export const useStage = (
     // 2. If collided, bake the active piece into the stage
     if (player.collided) {
       lastLockedSpawnRef.current = player.spawnCount;
+      const cells: [number, number][] = [];
+      let piece = '';
+      player.tetromino.forEach((row, y) => row.forEach((value, x) => {
+        if (value !== 0) { piece = String(value); cells.push([player.pos.y + y, player.pos.x + x]); }
+      }));
+      const otherSpin = detectOtherSpin(piece, player.lastAction === 'rotate', cells,
+        (row, col) => col >= 0 && col < newStage[0].length && row < newStage.length && (row < 0 || newStage[row][col][0] === 0));
       let isLockOut = true;
       player.tetromino.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -113,6 +122,11 @@ export const useStage = (
       }
 
       stageRef.current = swept;
+      if (cleared > 0) {
+        if (tSpinType !== 'none') achievementStatsRef.current.tSpins++;
+        if (cleared === 4 && !perfectClear) achievementStatsRef.current.tetrises++;
+        if (otherSpin) achievementStatsRef.current.otherSpins[otherSpin]++;
+      }
       setStage(swept);
       
       lockEventIdRef.current++;
@@ -134,5 +148,5 @@ export const useStage = (
     }
   }, [player, resetPlayer, checkGameOver, disableSweep]);
 
-  return [stage, setStage, lockEvent, stageRef] as const;
+  return [stage, setStage, lockEvent, stageRef, achievementStatsRef] as const;
 };

@@ -20,7 +20,7 @@ function mount() {
   };
   const code = ts.transpileModule(fs.readFileSync(path.join(__dirname,
     '../src/hooks/useStage.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  vm.runInNewContext(code, { exports, require: name => name === 'react' ? react : { createStage } });
+  vm.runInNewContext(code, { exports, require: name => name === 'react' ? react : name === '@transcendence/shared' ? require('@transcendence/shared') : { createStage } });
   return {
     render(player, disableSweep = false) {
       cursor = 0;
@@ -59,4 +59,27 @@ test('disableSweep preserves complete rows without re-locking on configuration c
   h.render(p, false); h.replay();
   assert.equal(h.resets(), 1);
   assert.ok(h.render(p)[3].current[39].every(cell => cell[1] === 'merged'));
+});
+
+for (const type of ['I', 'J', 'L', 'S', 'Z']) test(`${type} spin clears are counted once for solo results`, () => {
+  const shared = require('@transcendence/shared');
+  const shape = shared.TETROMINO_SHAPES[type][0];
+  const maxRow = Math.max(...shape.map(([row]) => row));
+  const maxCol = Math.max(...shape.map(([, col]) => col));
+  const matrix = Array.from({ length: maxRow + 1 }, () => Array(maxCol + 1).fill(0));
+  shape.forEach(([row, col]) => { matrix[row][col] = type; });
+  const y = 39 - maxRow;
+  const p = { spawnCount: 1, collided: true, pos: { x: 3, y }, tetromino: matrix, lastAction: 'rotate', rotationIndex: 0, kickIndex: 0 };
+  const h = mount();
+  const initial = h.render(p);
+  const board = initial[3].current;
+  for (const row of new Set(shape.map(([row]) => row + y))) board[row] = Array.from({ length: 10 }, () => ['X', 'merged']);
+  shape.forEach(([row, col]) => { board[row + y][col + 3] = [0, 'clear']; });
+  const [top, left] = shape.reduce((a, b) => a[0] < b[0] ? a : b);
+  board[y + top - 1][left + 3] = ['X', 'merged'];
+  h.replay(); h.replay();
+  const result = h.render(p);
+  assert.equal(result[4].current.otherSpins[type], 1);
+  assert.equal(result[4].current.tSpins, 0);
+  assert.ok(result[2].lines > 0);
 });

@@ -1,62 +1,96 @@
 import type { Prisma } from '@prisma/client';
 
-type Progress = {
-  wins: number;
-  totalGames: number;
-  totalTSpins: number;
-  totalTetrises: number;
-};
+type Metric =
+  | 'wins'
+  | 'totalGames'
+  | 'totalLinesCleared'
+  | 'bestWinStreak'
+  | 'totalTSpins'
+  | 'totalTetrises'
+  | 'totalISpins'
+  | 'totalJSpins'
+  | 'totalLSpins'
+  | 'totalSSpins'
+  | 'totalZSpins';
+type Progress = Partial<Record<Metric, number>>;
 
 // A single catalogue drives both award conditions and the progression API/UI.
-export const GAME_ACHIEVEMENTS = [
-  {
-    key: 'first_win',
-    name: 'First victory',
-    description: 'Win your first match.',
-    metric: 'wins',
-    target: 1,
-    xpReward: 100,
-  },
-  {
-    key: 'ten_wins',
-    name: 'Ten victories',
-    description: 'Win 10 matches.',
-    metric: 'wins',
-    target: 10,
-    xpReward: 200,
-  },
-  {
-    key: 'hundred_games',
-    name: 'Regular player',
-    description: 'Complete 100 games.',
-    metric: 'totalGames',
-    target: 100,
-    xpReward: 200,
-  },
-  {
-    key: 'spin_specialist',
-    name: 'Spin specialist',
-    description: 'Perform 10 T-spins.',
-    metric: 'totalTSpins',
-    target: 10,
-    xpReward: 150,
-  },
-  {
-    key: 'tetris_master',
-    name: 'Tetris master',
-    description: 'Clear 100 Tetrises.',
-    metric: 'totalTetrises',
-    target: 100,
-    xpReward: 300,
-  },
-] as const satisfies ReadonlyArray<{
-  key: string;
+const milestones = [1, 10, 20, 50, 100, 200, 1000];
+const series: Array<{
+  group: string;
   name: string;
-  description: string;
-  metric: keyof Progress;
-  target: number;
-  xpReward: number;
-}>;
+  metric: Metric;
+  targets: number[];
+  verb: string;
+}> = [
+  {
+    group: 'wins',
+    name: 'Victories',
+    metric: 'wins',
+    targets: milestones,
+    verb: 'Win matches',
+  },
+  {
+    group: 'games',
+    name: 'Games played',
+    metric: 'totalGames',
+    targets: milestones,
+    verb: 'Complete games',
+  },
+  {
+    group: 'lines',
+    name: 'Line clears',
+    metric: 'totalLinesCleared',
+    targets: [100, 500, 1000, 5000, 10000, 50000, 100000],
+    verb: 'Clear lines',
+  },
+  {
+    group: 'streak',
+    name: 'Win streak',
+    metric: 'bestWinStreak',
+    targets: [3, 5, 10, 20, 50],
+    verb: 'Win consecutive matches',
+  },
+  {
+    group: 'tetrises',
+    name: 'Tetrises',
+    metric: 'totalTetrises',
+    targets: milestones,
+    verb: 'Clear Tetrises',
+  },
+  ...(['T', 'I', 'J', 'L', 'S', 'Z'] as const).map((piece) => ({
+    group: `${piece.toLowerCase()}_spins`,
+    name: `${piece}-Spins`,
+    metric: `total${piece}Spins` as Metric,
+    targets: milestones,
+    verb: `Perform line-clearing ${piece}-Spins`,
+  })),
+];
+// Keep old keys/rewards: existing unlocks must never pay XP twice.
+const legacy: Record<string, { key: string; xp: number }> = {
+  wins_1: { key: 'first_win', xp: 100 },
+  wins_10: { key: 'ten_wins', xp: 200 },
+  games_100: { key: 'hundred_games', xp: 200 },
+  t_spins_10: { key: 'spin_specialist', xp: 150 },
+  tetrises_100: { key: 'tetris_master', xp: 300 },
+};
+export const GAME_ACHIEVEMENTS = series.flatMap((series) =>
+  series.targets.map((target, index) => {
+    const key = `${series.group}_${target}`;
+    return {
+      key: legacy[key]?.key ?? key,
+      group: series.group,
+      groupName: series.name,
+      tier: index + 1,
+      totalTiers: series.targets.length,
+      name: `${series.name} ${index + 1}`,
+      description: `${series.verb}: ${target}.`,
+      metric: series.metric,
+      target,
+      xpReward: legacy[key]?.xp ?? [50, 100, 150, 250, 400, 600, 1000][index],
+    };
+  }),
+);
 
 /** Must run inside the same serializable transaction as the stats update. */
 export async function awardGameAchievements(
@@ -65,7 +99,7 @@ export async function awardGameAchievements(
   progress: Progress,
 ): Promise<number> {
   const eligible = GAME_ACHIEVEMENTS.filter(
-    (item) => progress[item.metric] >= item.target,
+    (item) => (progress[item.metric] ?? 0) >= item.target,
   );
   if (!eligible.length) return 0;
   const existing = await tx.userAchievement.findMany({

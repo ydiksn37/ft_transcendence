@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import type { AiDifficulty } from '@transcendence/shared';
+import type { AiDifficulty, OtherSpinCounts } from '@transcendence/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { GameMode } from '@prisma/client';
 import { Prisma, Rank } from '@prisma/client';
@@ -26,6 +26,8 @@ export class GameService {
     player2LinesCleared: number;
     player1TSpins: number;
     player2TSpins: number;
+    player1OtherSpins?: Partial<OtherSpinCounts>;
+    player2OtherSpins?: Partial<OtherSpinCounts>;
     player1Tetrises: number;
     player2Tetrises: number;
     garbageSent1to2: number;
@@ -74,6 +76,8 @@ export class GameService {
                 player2LinesCleared: data.player2LinesCleared,
                 player1TSpins: data.player1TSpins,
                 player2TSpins: data.player2TSpins,
+                player1OtherSpins: data.player1OtherSpins ?? {},
+                player2OtherSpins: data.player2OtherSpins ?? {},
                 player1Tetrises: data.player1Tetrises,
                 player2Tetrises: data.player2Tetrises,
                 garbageSent1to2: data.garbageSent1to2,
@@ -98,6 +102,7 @@ export class GameService {
                 data.player1Tetrises,
                 data.durationSeconds,
                 completedAt,
+                data.player1OtherSpins ?? {},
               );
             }
             if (data.player2Id && !data.isAiGame) {
@@ -113,6 +118,7 @@ export class GameService {
                 data.player2Tetrises,
                 data.durationSeconds,
                 completedAt,
+                data.player2OtherSpins ?? {},
               );
             }
 
@@ -151,6 +157,7 @@ export class GameService {
     tetrises: number,
     durationSeconds: number,
     completedAt: Date,
+    otherSpins: Partial<OtherSpinCounts> = {},
   ) {
     const stats = await tx.userStats.upsert({
       where: { userId },
@@ -188,7 +195,17 @@ export class GameService {
 
     // XP計算
     const xpGain = won ? 50 : 20;
+    const spinTotals = {
+      totalISpins: (stats.totalISpins ?? 0) + (otherSpins.I ?? 0),
+      totalJSpins: (stats.totalJSpins ?? 0) + (otherSpins.J ?? 0),
+      totalLSpins: (stats.totalLSpins ?? 0) + (otherSpins.L ?? 0),
+      totalSSpins: (stats.totalSSpins ?? 0) + (otherSpins.S ?? 0),
+      totalZSpins: (stats.totalZSpins ?? 0) + (otherSpins.Z ?? 0),
+    };
     const rewardXp = await awardGameAchievements(tx, userId, {
+      ...spinTotals,
+      totalLinesCleared: stats.totalLinesCleared + linesCleared,
+      bestWinStreak,
       wins,
       totalGames,
       totalTSpins: stats.totalTSpins + tSpins,
@@ -223,6 +240,7 @@ export class GameService {
         totalLinesCleared: stats.totalLinesCleared + linesCleared,
         totalTSpins: stats.totalTSpins + tSpins,
         totalTetrises: stats.totalTetrises + tetrises,
+        ...spinTotals,
         currentWinStreak,
         bestWinStreak,
         xp: newXp,

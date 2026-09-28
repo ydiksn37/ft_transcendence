@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GameService } from './game.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GAME_ACHIEVEMENTS } from './achievements';
 
 describe('GameService result/statistics transaction', () => {
   const initial = {
@@ -62,9 +63,9 @@ describe('GameService result/statistics transaction', () => {
     transaction.mockImplementation(async (fn) => fn(tx));
     tx.gameResult.create.mockResolvedValue({ id: 'result' });
     tx.userStats.upsert.mockResolvedValue(initial);
-    tx.userAchievement.findMany.mockResolvedValue([
-      { achievement: { key: 'first_win' } },
-    ]);
+    tx.userAchievement.findMany.mockResolvedValue(
+      GAME_ACHIEVEMENTS.map((a) => ({ achievement: { key: a.key } })),
+    );
     tx.gameAnalytic.findUnique.mockResolvedValue(null);
   });
 
@@ -103,6 +104,30 @@ describe('GameService result/statistics transaction', () => {
       where: { userId: 'alice' },
       create: { userId: 'alice' },
       update: {},
+    });
+  });
+
+  it('stores and accumulates all five non-T spin counters for both players', async () => {
+    const spins = { I: 1, J: 2, L: 3, S: 4, Z: 5 };
+    await service.saveResult({
+      ...data,
+      player1OtherSpins: spins,
+      player2OtherSpins: { S: 2 },
+    });
+    expect(tx.gameResult.create.mock.calls[0][0].data).toMatchObject({
+      player1OtherSpins: spins,
+      player2OtherSpins: { S: 2 },
+    });
+    expect(tx.userStats.update.mock.calls[0][0].data).toMatchObject({
+      totalISpins: 1,
+      totalJSpins: 2,
+      totalLSpins: 3,
+      totalSSpins: 4,
+      totalZSpins: 5,
+    });
+    expect(tx.userStats.update.mock.calls[1][0].data).toMatchObject({
+      totalISpins: 0,
+      totalSSpins: 2,
     });
   });
 
@@ -183,7 +208,11 @@ describe('GameService result/statistics transaction', () => {
 
   it('includes newly earned achievement XP in the saved level', async () => {
     tx.userStats.upsert.mockResolvedValue({ ...initial, wins: 0, xp: 900 });
-    tx.userAchievement.findMany.mockResolvedValue([]);
+    tx.userAchievement.findMany.mockResolvedValue(
+      GAME_ACHIEVEMENTS.filter((a) => a.key !== 'first_win').map((a) => ({
+        achievement: { key: a.key },
+      })),
+    );
     tx.achievement.upsert.mockResolvedValue({ id: 'first', xpReward: 100 });
     tx.userAchievement.createMany.mockResolvedValue({ count: 1 });
     await service.saveResult({ ...data, player2Id: null, isAiGame: true });

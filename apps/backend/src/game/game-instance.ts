@@ -11,6 +11,9 @@ import {
   ServerEvent,
   ClientEvent,
   AI_BOT_CONFIGS,
+  detectOtherSpin,
+  emptyOtherSpins,
+  type OtherSpinCounts,
 } from '@transcendence/shared';
 import { BagGenerator } from './engine/bag-generator';
 import {
@@ -81,6 +84,7 @@ export interface PlayerState {
   attacksSent: number;
   piecesPlaced: number;
   tSpins: number;
+  otherSpins: OtherSpinCounts;
   tetrises: number;
   lastLock?: {
     id: number;
@@ -126,6 +130,7 @@ export class GameInstance {
         pps: number;
         linesCleared: number;
         tSpins: number;
+        otherSpins: OtherSpinCounts;
         tetrises: number;
         attacksSent: number;
         durationSeconds: number;
@@ -182,6 +187,7 @@ export class GameInstance {
       attacksSent: 0,
       piecesPlaced: 0,
       tSpins: 0,
+      otherSpins: emptyOtherSpins(),
       tetrises: 0,
     });
   }
@@ -653,6 +659,16 @@ export class GameInstance {
       player.activeY,
       player.activeRotation,
     );
+    const otherSpin = detectOtherSpin(
+      player.activeMino,
+      player.lastMoveWasRotation,
+      cells,
+      (row, col) =>
+        col >= 0 &&
+        col < 10 &&
+        row < 40 &&
+        (row < 0 || player.board[row][col] === null),
+    );
     let maxLockY = -1;
     for (const [r, c] of cells) {
       maxLockY = Math.max(maxLockY, r);
@@ -695,6 +711,7 @@ export class GameInstance {
 
       if (clearType === 'tetris') player.tetrises++;
       if (tspin) player.tSpins++;
+      if (otherSpin) player.otherSpins[otherSpin]++;
 
       // B2B カウント更新
       const isB2b = clearType === 'tetris' || (tspin && linesCleared > 0);
@@ -1103,6 +1120,7 @@ export class GameInstance {
             pps: durationMinutes > 0 ? p.piecesPlaced / duration : 0,
             linesCleared: p.lines,
             tSpins: p.tSpins,
+            otherSpins: p.otherSpins,
             tetrises: p.tetrises,
             attacksSent: p.attacksSent,
             durationSeconds: duration,

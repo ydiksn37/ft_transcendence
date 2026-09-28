@@ -2,6 +2,25 @@ import type { Prisma } from '@prisma/client';
 import { awardGameAchievements, GAME_ACHIEVEMENTS } from './achievements';
 
 describe('game achievements', () => {
+  it('defines unique tiered goals and preserves existing award identities', () => {
+    expect(GAME_ACHIEVEMENTS).toHaveLength(75);
+    expect(new Set(GAME_ACHIEVEMENTS.map((a) => a.key)).size).toBe(75);
+    expect(
+      GAME_ACHIEVEMENTS.filter((a) => a.group === 'wins').map((a) => a.target),
+    ).toEqual([1, 10, 20, 50, 100, 200, 1000]);
+    for (const piece of ['t', 'i', 'j', 'l', 's', 'z']) {
+      expect(
+        GAME_ACHIEVEMENTS.filter((a) => a.group === `${piece}_spins`),
+      ).toHaveLength(7);
+    }
+    expect(GAME_ACHIEVEMENTS.find((a) => a.key === 'first_win')).toMatchObject({
+      target: 1,
+      xpReward: 100,
+    });
+    expect(
+      GAME_ACHIEVEMENTS.find((a) => a.key === 'spin_specialist'),
+    ).toMatchObject({ target: 10, xpReward: 150 });
+  });
   const db = {
     achievement: { upsert: jest.fn() },
     userAchievement: { findMany: jest.fn(), createMany: jest.fn() },
@@ -53,7 +72,10 @@ describe('game achievements', () => {
       totalTSpins: 10,
       totalTetrises: 100,
     };
-    expect(await awardGameAchievements(tx, 'owner', progress)).toBe(950);
+    const expected = GAME_ACHIEVEMENTS.filter(
+      (a) => (progress[a.metric as keyof typeof progress] ?? 0) >= a.target,
+    ).reduce((sum, a) => sum + a.xpReward, 0);
+    expect(await awardGameAchievements(tx, 'owner', progress)).toBe(expected);
     db.userAchievement.findMany.mockResolvedValue(
       GAME_ACHIEVEMENTS.map((a) => ({ achievement: { key: a.key } })),
     );

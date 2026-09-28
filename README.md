@@ -265,13 +265,26 @@ Results and statistics are saved in one transaction. Existing historical
 statistics are not automatically recalculated; old records cannot reliably
 distinguish a guest/AI victory from a draw using winner user ID alone.
 
-Game achievements are awarded once per account on result saving: first victory
-(100 XP), 10 victories (200 XP), 100 games (200 XP), 10 cumulative T-spins
-(150 XP), and 100 cumulative Tetrises (300 XP). Multiple achievements can unlock
-in the same game; their XP is added before calculating the new level. Definitions
-are created on demand, so reseeding or deleting existing data is not required.
+Game achievements have 75 milestones across 11 categories. Wins, games played,
+Tetrises, and each of T/I/J/L/S/Z spins use 1, 10, 20, 50, 100, 200, 1000;
+line clears use 100, 500, 1000, 5000, 10000, 50000, 100000; best win streak uses
+3, 5, 10, 20, 50. Profile shows the next milestone per category with expandable
+tier details. Each milestone pays XP once; old achievement keys and rewards are
+preserved. Multiple milestones can unlock in one game, before level calculation.
+Definitions are created on demand, so reseeding or deleting data is not required.
 Solo/AI games contribute to play and technique totals; solo runs do not count as
 victories. Historical threshold eligibility is checked at the next saved game.
+T-spins retain the existing full/mini rule. I/J/L/S/Z spin achievements require
+the last successful movement to be a rotation, all four translations (up, down,
+left, right) to be blocked on the pre-lock board, and at least one cleared line.
+They do not change score, attack, or B2B rules; O-spins are not counted.
+Multiplayer counts come from the authoritative TS engine; solo counts use the
+same shared detector in the frontend and the existing authenticated result API
+(client-reported, not authoritative replay verification). Non-T counts start at
+zero: historical results lack the necessary rotation/board data to reconstruct them.
+The spin-counter columns are included in the initial migration for fresh development
+databases. Databases created with the previous initial migration need recreation
+or a separate schema update; restarting alone does not add these columns.
 
 Daily analytics group newly saved games by completion date in UTC. APM and PPS
 are arithmetic means across that day's games (not time-weighted); cleared lines

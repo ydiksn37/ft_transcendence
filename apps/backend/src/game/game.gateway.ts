@@ -701,6 +701,8 @@ export class GameGateway
         player2LinesCleared: p2Stats.linesCleared,
         player1TSpins: p1Stats.tSpins,
         player2TSpins: p2Stats.tSpins,
+        player1OtherSpins: p1Stats.otherSpins,
+        player2OtherSpins: p2Stats.otherSpins,
         player1Tetrises: p1Stats.tetrises,
         player2Tetrises: p2Stats.tetrises,
         garbageSent1to2: p1Stats.attacksSent,

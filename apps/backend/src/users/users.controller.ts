@@ -14,10 +14,13 @@ import {
   ParseFilePipeBuilder,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
+import { mkdir, unlink, writeFile } from 'fs/promises';
 import {
   ApiTags,
   ApiOperation,
@@ -52,6 +55,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @ApiBearerAuth('access-token')
 @Controller('users')
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
@@ -105,42 +109,52 @@ export class UsersController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads'),
-        filename: (_req, file, cb) => {
-          const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `avatar-${unique}${extname(file.originalname)}`);
-        },
-      }),
-      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-      fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-          return cb(
-            new Error('JPG/PNG/GIF/WebPのみアップロード可能です'),
-            false,
-          );
-        }
-        cb(null, true);
-      },
+      storage: memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024, files: 1 }, // 2MB
     }),
   )
-  uploadAvatar(
+  async uploadAvatar(
     @CurrentUser() user: AuthenticatedUser,
     @UploadedFile(
       new ParseFilePipeBuilder()
-        .addFileTypeValidator({ fileType: /^image\/(jpeg|png|gif|webp)$/ })
+        .addFileTypeValidator({
+          fileType: /^image\/(jpeg|png|gif|webp)$/,
+          overrideMimeType: true,
+        })
         .addMaxSizeValidator({ maxSize: 2 * 1024 * 1024 })
         .build({ fileIsRequired: true }),
     )
     file: Express.Multer.File,
   ) {
-    const avatarUrl = `/uploads/${file.filename}`;
-    return this.usersService.updateAvatar(user.id, avatarUrl, {
-      filename: file.filename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      sizeBytes: file.size,
-    });
+    // The pipe has checked the actual bytes and replaced the client MIME type.
+    // Never use the untrusted original extension for a publicly served file.
+    const extension = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+    }[file.mimetype];
+    const filename = `avatar-${randomUUID()}.${extension}`;
+    const directory = process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads');
+    const path = join(directory, filename);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path, file.buffer, { flag: 'wx' });
+    const avatarUrl = `/uploads/${filename}`;
+    try {
+      return await this.usersService.updateAvatar(user.id, avatarUrl, {
+        filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      });
+    } catch (error) {
+      await unlink(path).catch(() => {
+        this.logger.error(
+          'Failed to remove avatar after database update failed',
+        );
+      });
+      throw error;
+    }
   }
 
   @Get('search')

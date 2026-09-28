@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { emptyOtherSpins } from '@transcendence/shared';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CustomRoomsList } from '../components/UI/CustomRoomsList';
 import { VsScreen } from '../components/UI/VsScreen';
@@ -112,7 +113,7 @@ const PlayPage = () => {
      return false;
   }, [nextPieceKeys, setMatchResult, gameModeRef, setGameOver, setDropTime]);
 
-  const [stage, setStage, lockEvent, stageRef] = useStage(player, resetPlayer, checkGameOver);
+  const [stage, setStage, lockEvent, stageRef, achievementStatsRef] = useStage(player, resetPlayer, checkGameOver);
 
   const { keyConfig, setKeyConfig, keyConfigRef, tuningRef, setListeningAction, showGhost, minoSkin, mapStyle, backgroundStyle } = useConfig();
   const listeningActionRef = useRef<string | null>(null);
@@ -430,34 +431,41 @@ const PlayPage = () => {
   }, [gameOver, finalTime, token, piecesPlaced, gameModeRef]);
 
   // General Game Result Submission Effect
+  const resultSubmittedRef = useRef(false);
   useEffect(() => {
     if (gameOver && (gameModeRef.current === '40_LINES' || gameModeRef.current === 'MARATHON')) {
-      if (token) {
+      if (token && !resultSubmittedRef.current) {
         const durationSeconds = elapsedTime / 1000;
         const durationMinutes = durationSeconds / 60;
         const apm = durationMinutes > 0 ? attackLines / durationMinutes : 0;
         const pps = durationMinutes > 0 ? piecesPlaced / (durationMinutes * 60) : 0;
 
-        fetch(`/api/game/result`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            gameMode: gameModeRef.current,
-            apm: Math.round(apm * 10) / 10,
-            pps: Math.round(pps * 100) / 100,
-            linesCleared: lines,
-            tSpins: 0, 
-            tetrises: 0, 
-            durationSeconds: Math.floor(durationSeconds),
-            score: score
-          })
-        }).catch(err => console.error('Failed to save game result:', err));
+        // Let the final lock's score/line state updates settle before sending.
+        // Cleanup also prevents StrictMode replay from submitting twice.
+        const submission = setTimeout(() => {
+          if (resultSubmittedRef.current) return;
+          resultSubmittedRef.current = true;
+          fetch(`/api/game/result`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              gameMode: gameModeRef.current,
+              apm: Math.round(apm * 10) / 10,
+              pps: Math.round(pps * 100) / 100,
+              linesCleared: lines,
+              ...achievementStatsRef.current,
+              durationSeconds: Math.floor(durationSeconds),
+              score: score
+            })
+          }).catch(err => console.error('Failed to save game result:', err));
+        }, 0);
+        return () => clearTimeout(submission);
       }
     }
-  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score, gameModeRef]);
+  }, [gameOver, token, piecesPlaced, attackLines, elapsedTime, lines, score, gameModeRef, achievementStatsRef]);
 
   // ── Lock Delay (遊び時間) ────────────────────────────────────────────────
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -644,6 +652,8 @@ const PlayPage = () => {
     setFinalTime(null);
     
     const newStage = createStage(nextMode === '4_WIDE' ? 4 : 10);
+    achievementStatsRef.current = { tSpins: 0, tetrises: 0, otherSpins: emptyOtherSpins() };
+    resultSubmittedRef.current = false;
     if (nextMode === '4_WIDE') {
       // Board width is 4. Place 3 blocks on the bottom row (y=39).
       for (let x = 0; x < 3; x++) newStage[39][x] = ['X', 'merged'];
@@ -698,7 +708,7 @@ const PlayPage = () => {
   }, [setStage, resetPlayer, resetHold, stageRef, setScore, setGameMode, setMatchResult, setPendingGarbage,
     initialLevel, setDropTime, setGameOver, setStartTime, setLines, setPiecesPlaced, setIsWaiting, setCountdown,
     setFinalTime, startTimeRef, setElapsedTime, setLevel, setAppState, countdownRef, pendingGarbageRef,
-    setOpponentStage, setOpponentScore, countdownTimeoutsRef, gameModeRef, setAttackLines]);
+    setOpponentStage, setOpponentScore, countdownTimeoutsRef, gameModeRef, setAttackLines, achievementStatsRef]);
 
   // Handle Game Over sound and stop BGM
   useEffect(() => {

@@ -3,6 +3,7 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { MailService } from '../mail/mail.service';
+import { GAME_ACHIEVEMENTS } from '../game/achievements';
 
 describe('user progression', () => {
   const findUnique = jest.fn();
@@ -23,7 +24,7 @@ describe('user progression', () => {
       rank: 'BRONZE',
       rankPoints: 0,
     });
-    expect(result.achievements).toHaveLength(5);
+    expect(result.achievements).toHaveLength(GAME_ACHIEVEMENTS.length);
     expect(
       result.achievements.every((a) => a.progress === 0 && a.earnedAt === null),
     ).toBe(true);
@@ -56,7 +57,12 @@ describe('user progression', () => {
       progress: 10,
       earnedAt: null,
     });
-    expect(result.achievements[2]).toMatchObject({ progress: 50, target: 100 });
+    expect(
+      result.achievements.find((a) => a.key === 'hundred_games'),
+    ).toMatchObject({ progress: 50, target: 100, group: 'games', tier: 5 });
+    expect(
+      result.achievements.find((a) => a.key === 'i_spins_1'),
+    ).toMatchObject({ progress: 0, target: 1 });
   });
 
   it('rejects missing or deleted accounts', async () => {

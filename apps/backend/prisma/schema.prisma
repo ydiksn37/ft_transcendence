@@ -198,6 +198,11 @@ model UserStats {
   avgPps            Decimal  @default(0) @db.Decimal(6, 3)
   totalLinesCleared Int      @default(0)
   totalTSpins       Int      @default(0)
+  totalISpins       Int      @default(0)
+  totalJSpins       Int      @default(0)
+  totalLSpins       Int      @default(0)
+  totalSSpins       Int      @default(0)
+  totalZSpins       Int      @default(0)
   totalTetrises     Int      @default(0)
   currentWinStreak  Int      @default(0)
   bestWinStreak     Int      @default(0)
@@ -256,6 +261,8 @@ model GameResult {
   player1LinesCleared Int
   player2LinesCleared Int?
   player1TSpins       Int           @default(0)
+  player1OtherSpins   Json          @default("{}")
+  player2OtherSpins   Json          @default("{}")
   player2TSpins       Int           @default(0)
   player1Tetrises     Int           @default(0)
   player2Tetrises     Int           @default(0)
