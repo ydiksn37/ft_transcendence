@@ -47,6 +47,11 @@ erDiagram
         Decimal avgPps
         Int totalLinesCleared
         Int totalTSpins
+        Int totalISpins
+        Int totalJSpins
+        Int totalLSpins
+        Int totalSSpins
+        Int totalZSpins
         Int totalTetrises
         Int currentWinStreak
         Int bestWinStreak
@@ -91,6 +96,8 @@ erDiagram
         Int player1LinesCleared
         Int player2LinesCleared "nullable"
         Int player1TSpins
+        Json player1OtherSpins
+        Json player2OtherSpins
         Int player2TSpins
         Int player1Tetrises
         Int player2Tetrises
@@ -363,6 +370,11 @@ bestPps Decimal @default(0) @db.Decimal(6, 3)
 avgPps Decimal @default(0) @db.Decimal(6, 3)
 totalLinesCleared Int @default(0)
 totalTSpins Int @default(0)
+totalISpins Int @default(0)
+totalJSpins Int @default(0)
+totalLSpins Int @default(0)
+totalSSpins Int @default(0)
+totalZSpins Int @default(0)
 totalTetrises Int @default(0)
 currentWinStreak Int @default(0)
 bestWinStreak Int @default(0)
@@ -415,6 +427,8 @@ player2Pps Decimal? @db.Decimal(6, 3)
 player1LinesCleared Int
 player2LinesCleared Int?
 player1TSpins Int @default(0)
+player1OtherSpins Json @default("{}")
+player2OtherSpins Json @default("{}")
 player2TSpins Int @default(0)
 player1Tetrises Int @default(0)
 player2Tetrises Int @default(0)
