@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AvatarIcon } from '@/components/UI/AvatarIcon';
 import { RecentBattles } from '@/components/dashboard/RecentBattles';
-import { getAvatarPreset } from '@/lib/avatarPresets';
+import { resolveAvatar } from '@/lib/avatarPresets';
 import { loadPublicProfile, profileRequest, ProfileRequestError } from '@/lib/publicProfile';
 import './Dashboard.css';
 import './PublicProfile.css';
@@ -66,8 +66,7 @@ function ProfileDetails({ id }: { id: string }) {
   };
 
   const user = data?.user;
-  const preset = getAvatarPreset(user?.avatarUrl?.startsWith('preset:')
-    ? Number(user.avatarUrl.slice(7)) : 0);
+  const avatar = resolveAvatar(user?.id, user?.avatarUrl);
   const friend = data?.friendship;
   return <main className="dashboard-container public-profile-page">
     <div className="dashboard-header"><button className="back-btn" onClick={() => navigate(returnTo, {
@@ -81,8 +80,7 @@ function ProfileDetails({ id }: { id: string }) {
         <div className="public-profile-grid">
           <section className="arcade-panel public-profile-card">
             <div className="public-profile-hero">
-              <AvatarIcon color={preset.color} symbol={preset.symbol} size={112}
-                photo={user.avatarUrl?.startsWith('preset:') ? undefined : user.avatarUrl ?? undefined} />
+              <AvatarIcon color={avatar.preset.color} symbol={avatar.preset.symbol} size={112} photo={avatar.photo} />
               <div className="public-profile-identity">
                 <h2>{user.displayName || user.username}</h2>
                 <p>@{user.username}</p>

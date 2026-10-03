@@ -11,7 +11,23 @@ export const AVATAR_PRESETS = [
 
 export type AvatarPreset = typeof AVATAR_PRESETS[number];
 
+export interface AvatarDisplay {
+  preset: AvatarPreset;
+  photo?: string;
+}
+
 /* dbできたら切り替える */
 export function getAvatarPreset(avatarId: number) {
   return AVATAR_PRESETS[avatarId % AVATAR_PRESETS.length]
+}
+
+/** Resolve every user's avatar with one stable rule across the application. */
+export function resolveAvatar(userId: string | null | undefined, avatarUrl: string | null | undefined): AvatarDisplay {
+  const presetMatch = avatarUrl?.match(/^preset:(\d+)$/);
+  const fallbackIndex = userId ? userId.charCodeAt(0) % AVATAR_PRESETS.length : 0;
+  const presetIndex = presetMatch ? Number(presetMatch[1]) : fallbackIndex;
+  return {
+    preset: getAvatarPreset(presetIndex),
+    photo: avatarUrl && !presetMatch ? avatarUrl : undefined,
+  };
 }

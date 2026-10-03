@@ -11,7 +11,7 @@ import { WinRatePanel } from '@/components/dashboard/WinRatePanel';
 import { AvatarIcon } from '@/components/UI/AvatarIcon';
 import { DsAlert, DsButton, DsInput, DsSelect, DsSpinner } from '@/components/design-system';
 import { useConfig } from '@/hooks/useConfig';
-import { AVATAR_PRESETS, getAvatarPreset } from '@/lib/avatarPresets';
+import { AVATAR_PRESETS, resolveAvatar } from '@/lib/avatarPresets';
 import { getProfileTab, mapAnalytics, mapGameHistory, normalizeStats, PROFILE_TABS, profileSearch, type ProfileTab } from '@/lib/profileHub';
 import type { DailyAnalyticView, GameRecordView, UserStats } from '@/lib/types';
 import { startVisibleRefresh } from '@/lib/visibleRefresh';
@@ -219,10 +219,7 @@ export default function Profile() {
     <DsButton onClick={() => { setCoreLoading(true); setCoreAttempt(value => value + 1); }}>RETRY</DsButton>
   </div>;
 
-  const isPreset = user.avatarUrl?.startsWith('preset:');
-  const presetIndex = isPreset ? Number(user.avatarUrl?.split(':')[1]) : 0;
-  const preset = getAvatarPreset(presetIndex);
-  const photoUrl = !isPreset && user.avatarUrl ? user.avatarUrl : undefined;
+  const avatar = resolveAvatar(user.id, user.avatarUrl);
 
   return <div className="dashboard-container profile-hub">
     <header className="dashboard-header profile-header">
@@ -242,7 +239,7 @@ export default function Profile() {
 
       {tab === 'overview' && <section id="profile-panel-overview" role="tabpanel" aria-labelledby="profile-tab-overview" className="profile-tab-panel">
         <div className="profile-hero arcade-panel">
-          <AvatarIcon color={preset.color} symbol={preset.symbol} photo={photoUrl} size={96} />
+          <AvatarIcon color={avatar.preset.color} symbol={avatar.preset.symbol} photo={avatar.photo} size={96} />
           <div className="profile-identity"><h2>{user.displayName || user.username}</h2><span>@{user.username}</span><p>{user.bio || 'No bio set.'}</p></div>
           <DsButton onClick={openEditor}>EDIT PROFILE</DsButton>
         </div>

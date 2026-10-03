@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AvatarIcon } from '@/components/UI/AvatarIcon';
-import { getAvatarPreset } from '@/lib/avatarPresets';
+import { resolveAvatar } from '@/lib/avatarPresets';
 import '../pages/Dashboard.css';
 
 interface UserResult {
@@ -145,7 +145,7 @@ export default function AdvancedSearch() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {results.map((u, index) => {
-                const preset = getAvatarPreset(u.id?.charCodeAt(0) % 8 || 0);
+                const avatar = resolveAvatar(u.id, u.avatarUrl);
                 const winRate = u.stats?.winRate ? Number(u.stats.winRate).toFixed(1) : '0.0';
                 
                 return (
@@ -153,7 +153,7 @@ export default function AdvancedSearch() {
                     <div style={{ fontSize: '14px', color: '#555', width: '30px' }}>
                       #{((page - 1) * 10) + index + 1}
                     </div>
-                    <AvatarIcon color={preset.color} symbol={preset.symbol} photo={u.avatarUrl} size={48} />
+                    <AvatarIcon color={avatar.preset.color} symbol={avatar.preset.symbol} photo={avatar.photo} size={48} />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{u.displayName || u.username}</div>
                       <div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>@{u.username}</div>

@@ -4,7 +4,7 @@ import { useConfig } from '../hooks/useConfig';
 import { useAuth } from '../hooks/useAuth';
 import { io, Socket } from "socket.io-client";
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
-import { getAvatarPreset } from "@/lib/avatarPresets";
+import { resolveAvatar } from "@/lib/avatarPresets";
 import '../pages/Dashboard.css'
 import './ProfileLinks.css'
 
@@ -20,6 +20,7 @@ export default function Chat() {
 	const [activeRoomId, setActiveRoomId] = useState<string | null>(initialRoomId);
 	const [rooms, setRooms] = useState<any[]>([]);
 	const [messages, setMessages] = useState<any[]>([]);
+	const [messageReload, setMessageReload] = useState(0);
 	const [inputText, setInputText] = useState("");
 	const [socket, setSocket] = useState<Socket | null>(null);
 	const openProfile = (id: string) => {
@@ -63,12 +64,19 @@ export default function Chat() {
 	// Fetch Messages for active room
 	useEffect(() => {
 		if (!activeRoomId || !token) return;
+		const controller = new AbortController();
 		fetch(`/api/chat/rooms/${activeRoomId}/messages`, {
-			headers: { 'Authorization': `Bearer ${token}` }
+			headers: { 'Authorization': `Bearer ${token}` },
+			signal: controller.signal,
 		})
-		.then(res => res.json())
-		.then(data => setMessages(data));
-	}, [activeRoomId, token]);
+		.then(res => {
+			if (!res.ok) throw new Error('Messages unavailable');
+			return res.json();
+		})
+		.then(data => { if (!controller.signal.aborted) setMessages(data); })
+		.catch(() => undefined);
+		return () => controller.abort();
+	}, [activeRoomId, token, messageReload]);
 
 	// Socket connection
 	useEffect(() => {
@@ -141,8 +149,12 @@ export default function Chat() {
 								<button 
 									key={r.id}
 									onClick={() => {
-										setActiveRoomId(r.id);
-										setMessages([]); // clear while loading
+										if (r.id === activeRoomId) {
+											setMessageReload(value => value + 1);
+										} else {
+											setMessages([]);
+											setActiveRoomId(r.id);
+										}
 									}}
 									style={{
 										padding: '15px 10px',
@@ -167,11 +179,11 @@ export default function Chat() {
 					<div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
 						{messages.map((m) => {
 							const isMe = m.sender.id === user.id;
-							const preset = getAvatarPreset(m.sender.avatarId || m.sender.id?.charCodeAt(0) % 8 || 0);
+							const avatar = resolveAvatar(m.sender.id, m.sender.avatarUrl);
 							return (
 								<div key={m.id} style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
 									<button type="button" className="user-profile-avatar" onClick={() => openProfile(m.sender.id)} aria-label={`View ${m.sender.displayName || m.sender.username}'s profile`}>
-										<AvatarIcon color={preset.color} symbol={preset.symbol} photo={m.sender.avatarUrl} size={32} />
+										<AvatarIcon color={avatar.preset.color} symbol={avatar.preset.symbol} photo={avatar.photo} size={32} />
 									</button>
 									<div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
 										<button type="button" className="user-profile-name chat-profile-name" onClick={() => openProfile(m.sender.id)}>{m.sender.displayName || m.sender.username}</button>

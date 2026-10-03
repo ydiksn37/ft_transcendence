@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useConfig } from '../hooks/useConfig';
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
-import { getAvatarPreset } from "@/lib/avatarPresets";
+import { resolveAvatar } from "@/lib/avatarPresets";
 import { io } from "socket.io-client";
 import '../pages/Dashboard.css'
 import './ProfileLinks.css'
@@ -240,11 +240,11 @@ export default function Friends() {
 						<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 							{filteredFriends.length === 0 && <div style={{ color: '#555', textAlign: 'center', padding: '20px' }}>NO FRIENDS FOUND</div>}
 							{filteredFriends.map(f => {
-								const preset = getAvatarPreset(f.avatarId || f.id?.charCodeAt(0) % 8 || 0);
+								const avatar = resolveAvatar(f.id, f.avatarUrl);
 								return (
 									<div key={f.id} className="friend-item" style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: '#1a1a1a', border: '2px solid #333' }}>
 										<button type="button" className="user-profile-link friend-profile-link" onClick={() => openProfile(f.id)} aria-label={`View ${f.displayName || f.username}'s profile`}>
-											<AvatarIcon color={preset.color} symbol={preset.symbol} photo={f.avatarUrl} size={48} />
+											<AvatarIcon color={avatar.preset.color} symbol={avatar.preset.symbol} photo={avatar.photo} size={48} />
 											<div style={{ flex: 1, minWidth: '120px' }}>
 											<div style={{ fontSize: '16px', fontWeight: 'bold' }}>{f.displayName || f.username}</div>
 											<div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>@{f.username}</div>

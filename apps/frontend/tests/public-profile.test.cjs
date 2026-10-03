@@ -89,7 +89,7 @@ function render(friendship, self = false, error = '', navigationState = {
         useLocation: () => ({ state: navigationState }),
         useNavigate: () => (...args) => navigations.push(args), Link: 'a',
       };
-      if (name.includes('avatarPresets')) return { getAvatarPreset: () => ({ color: 'cyan', symbol: 'T' }) };
+      if (name.includes('avatarPresets')) return { resolveAvatar: () => ({ preset: { color: 'cyan', symbol: 'T' } }) };
       if (name.includes('AvatarIcon')) return { AvatarIcon: 'avatar' };
       if (name.includes('RecentBattles')) return { RecentBattles: 'history' };
       if (name.includes('publicProfile')) return {
