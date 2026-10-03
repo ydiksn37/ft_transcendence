@@ -42,7 +42,8 @@ for (const skin of ['RETRO', 'NEON', 'MINIMAL']) test(`${skin} previews all seve
 });
 
 test('CONFIG contains every appearance control and forwards changes to saved settings', () => {
-  const react = { useEffect() {}, useState: init => [init(), () => {}] };
+  let stateCall = 0;
+  const react = { useEffect() {}, useState: init => [stateCall++ === 0 ? 'DISPLAY' : init(), () => {}] };
   const { Config } = load('components/UI/Config.tsx', name => {
     if (name === 'react') return { ...react, default: react };
     if (name === 'react/jsx-runtime') {
@@ -108,7 +109,9 @@ test('CONFIG tabs show only their category and cancel key rebinding when switche
   };
   const render = () => { cursor = 0; return nodes(Config(props)); };
   let tree = render();
-  for (const category of ['CONTROLS', 'SOUND', 'DISPLAY']) {
+  assert.deepEqual(tree.filter(n => n.props?.role === 'tab').map(n => n.props.children),
+    ['CONTROLS', 'DISPLAY', 'SOUND']);
+  for (const category of ['DISPLAY', 'SOUND', 'CONTROLS']) {
     tree.find(n => n.props?.role === 'tab' && n.props.children === category).props.onClick();
     tree = render();
     const selected = tree.filter(n => n.props?.role === 'tab' && n.props['aria-selected']);

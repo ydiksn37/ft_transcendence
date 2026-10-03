@@ -5,7 +5,7 @@ import type { useConfig } from '../../hooks/useConfig';
 import { DisplayPreview } from './DisplayPreview';
 import './Config.css';
 
-const tabs = ['DISPLAY', 'CONTROLS', 'SOUND'] as const;
+const tabs = ['CONTROLS', 'DISPLAY', 'SOUND'] as const;
 
 type ConfigProps = Pick<ReturnType<typeof useConfig>,
   'showGhost' | 'setShowGhost' | 'displayTheme' | 'setDisplayTheme' |
@@ -23,7 +23,7 @@ type ConfigProps = Pick<ReturnType<typeof useConfig>,
 };
 
 export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost, setShowGhost, displayTheme, setDisplayTheme, mapStyle, setMapStyle, backgroundStyle, setBackgroundStyle, tuning, setTuning, volume, setVolume, keyConfig, listeningAction, setListeningAction }) => {
-  const [tab, setTab] = React.useState<typeof tabs[number]>(() => 'DISPLAY');
+  const [tab, setTab] = React.useState<typeof tabs[number]>(() => 'CONTROLS');
   const selectTab = (next: typeof tab) => {
     setListeningAction(null);
     setTab(next);
