@@ -3,7 +3,7 @@
 # Project T (ft_transcendence)
 
 ## 概要 (Description)
-Project Tは、`ft_transcendence` 課題のために構築された、モダンでリアルタイムな対戦型テトリス風Webアプリケーションです。高い競技性と応答性の高いゲーム体験を提供することを目的としており、リアルタイムの1v1対戦、観戦モード、AI対戦相手、および完全に機能するトーナメントシステムを備えています。サーバー主導（Server-Authoritative）のゲームプレイ、チート対策、およびシームレスなリアルタイム同期を確実にするため、堅牢なバックエンドを持つフルスタックアーキテクチャを採用しています。
+Project Tは、`ft_transcendence` 課題のために構築された、モダンでリアルタイムな対戦型テトリス風Webアプリケーションです。高い競技性と応答性の高いゲーム体験を提供することを目的としており、リアルタイムの1v1対戦、観戦モード、AI対戦相手、および完全に機能するトーナメントシステムを備えています。
 
 ## インストールと実行手順 (Instructions)
 
@@ -87,13 +87,11 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 - **フロントエンドフレームワーク:** React (Vite) + TypeScript
 - **バックエンドフレームワーク:** NestJS + TypeScript
 - **データベース:** PostgreSQL + Prisma ORM
-- **キャッシュ / 短期セキュリティ状態:** Redis
-- **リアルタイム通信:** Socket.IO / WebSockets
 - **ゲーム描画エンジン:** PixiJS (WebGL)
-- **セキュリティ:** Nginx + ModSecurity (WAF), HashiCorp Vault (シークレット管理)
+- **セキュリティ:** Nginx + ModSecurity (WAF), HashiCorp Vault
 
 **技術選定の理由:** 
-高速な開発サイクルを持つReact + Viteと、WebGL描画用のPixiJSを採用しました。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。Redisの用途はrefresh token失効、削除確認コード、Public APIレート制限です。Socket.IO roomと再接続状態は単一backendプロセスのメモリ内にあり、Redis adapterは使用していません。HTTP防御と秘密管理にはWAFとVaultを使用します。
+モダンなReact + Viteと、WebGL描画用のPixiJSを採用しました。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。
 
 ## データベーススキーマ (Database Schema)
 データベースにはPostgreSQLを使用し、Prisma経由で管理しています。コアとなるエンティティとその関係は以下の通りです：
@@ -102,7 +100,6 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 - **Tournament:** トーナメントインスタンスと状態 (登録、進行中、完了) を管理。
 - **TournamentMatch:** トーナメント内の個々の試合。GameResult と Tournament にリレーション。
 - **Friendship / Block:** ソーシャル機能のためのUserモデル上の自己参照リレーション。
-[schemaと同期したER図](ER.md)には、20モデル、15 enum、30 FK relationと制約を掲載しています。`node tools/schema-doc.cjs --check`で同期を確認できます。
 
 ## チーム情報 (Team Information)
 - **Product Owner:** kaisuzuk
@@ -118,21 +115,13 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 ## プロジェクト管理 (Project Management)
 - **組織:** アジャイルライクな並行開発アプローチを採用。ボトルネックを防ぐため、専門的な役割 (フロントエンドゲーム、フロントエンドUI、バックエンド/インフラ) に分かれて作業しました。
 - **タスク管理:** GitHubを使用してスプリントバックログを管理し、進捗を追跡しました。
-- **コミュニケーション:** 毎日のスタンドアップとリアルタイムのコラボレーションはDiscordで実施しました。
+- **コミュニケーション:** Discordで実施しました。隔週で対面でも集まっていました。
 
 ## 機能リスト (Features List)
 
-Custom Roomは公開（一覧表示）または非公開（一覧に表示しない）で作成でき、ownerは作成後も
-公開範囲を変更できます。非公開roomには **JOIN BY ID** で入室します。Room IDを知っている人は
-参加または観戦できるため、パスワード保護ではありません。
-
+- **ゲームボードUI:** ゲームボードの背景シャッフル (担当: kaisuzuk)。
 - **リアルタイム1v1対戦:** おじゃまブロック付きのサーバー主導テトリス (担当: sonakamu)。
 - **トーナメントシステム:** リアルタイム進行のシングルトーナメント表 (担当: sonakamu)。
-  Room ownerは4名以上であれば任意の参加人数で開始でき、4・8・16名には限定されません。
-  ゲスト、ゲストowner、同じ登録アカウントからの複数接続も参加できます。全参加者が互いに異なる
-  認証ユーザーの場合だけ大会表をDBへ保存し、それ以外は既存の試合結果保存を維持しながら
-  サーバーのメモリ上で進行します。大会開始後に入室したユーザーは進行中の大会表を変更せず
-  観戦者となり、優勝者の確定後に次回大会へ参加できるプレイヤーになります。
 - **AI対戦相手:** 難易度調整可能な賢いボットとの対戦 (担当: ssawa)。
 - **観戦モード:** 進行中の試合と盤面をリアルタイム観戦 (担当: sonakamu)。
 - **分析ダッシュボード:** APM, PPS, 勝率の視覚的グラフ (担当: yukusano)。
@@ -140,10 +129,7 @@ Custom Roomは公開（一覧表示）または非公開（一覧に表示しな
 - **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
 - **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
 
-## 評価で申告するモジュール — 基本14ポイント
-
-以下を合格ラインの主申告とします。各モジュールに実装と実演手順があり、追加候補は実演に成功した場合だけ
-別途申告します。
+## 基本モジュール
 
 | モジュール | 点 | 選定理由・実装 | 主担当 | 実演 |
 | --- | ---: | --- | --- | --- |
@@ -156,12 +142,9 @@ Custom Roomは公開（一覧表示）または非公開（一覧に表示しな
 | 2FA | 1 | TOTP登録、QR、login challenge、認証、解除を実装。 | yukusano | 2FA有効化後に再loginしてcodeを入力。 |
 | Webベースゲーム | 2 | 7-bag、rotation、lock delay、score、line clearを持つゲームengine。 | sonakamu / ssawa | Solo gameで主要mechanicを実演。 |
 | Remote players | 2 | Server-authoritativeな2人対戦とgarbage attackを同期。 | sonakamu / ssawa | 2つのChrome contextで1v1を実演。 |
-| **合計** | **14** | 合格に必要な基本申告。 |  |  |
+| **合計** | **14** |  |  |  |
 
-## 追加の実装済みモジュール候補
-
-*以下は基本14ポイントには含めません。要件全体と実演が成功した項目だけを追加申告します。
-検証状況は`REMAINING_TASKS.md`を参照してください。*
+## 全モジュール
 
 ### Web
 1. **フロント/バックエンドにフレームワークを使用 (Major - 2pts)**: React (Vite) と NestJS。
@@ -170,33 +153,32 @@ Custom Roomは公開（一覧表示）または非公開（一覧に表示しな
 4. **ユーザー間対話 (Major - 2pts)**: リアルタイムチャット、フレンドシステム、プロフィール閲覧。
 5. **高度な検索 (Minor - 1pt)**: ユーザーと対戦履歴のフィルタリング・検索。
 6. **公開API (Major - 2pts)**: APIキーで保護された5つ以上のエンドポイントとSwaggerドキュメント。
-7. **カスタムデザインシステム (Minor - 1pt)**: 再利用可能なネオン/サイバーパンク調UIコンポーネント。
+7. **カスタムデザインシステム (Minor - 1pt)**: 再利用可能なUIコンポーネント。
 
 ### ユーザー管理 (User Management)
 8. **標準ユーザー管理 (Major - 2pts)**: アバター、表示名、フレンド状態。
 9. **ゲーム統計 (Minor - 1pt)**: APM, PPS, 勝率の追跡。
 10. **OAuth 2.0 (Minor - 1pt)**: 42 イントラネット認証。
 11. **二要素認証 (2FA) (Minor - 1pt)**: 認証アプリによるTOTPベースの2FA。
-12. **高度な権限システム (Major - 2pts)**: BAN機能付きのAdmin/Moderatorロール。
 
 ### ゲームとUX (Game and User Experience)
-13. **Webベースのゲーム (Major - 2pts)**: T-Spin、7-bagシステム、ロック遅延を備えたテトリス風ゲーム。
-14. **リモートプレイヤー (Major - 2pts)**: WebSocket経由のネットワーク1v1マルチプレイヤー。
-15. **マルチプレイヤー (3人以上) (Major - 2pts)**: カスタムルームと観戦ブロードキャストのサポート。
-16. **ゲームのカスタマイズ (Minor - 1pt)**: キーバインド変更、ゴーストピースのON/OFF。
-17. **トーナメントシステム (Minor - 1pt)**: 自動マッチメイキングとトーナメント表の進行。
-18. **観戦モード (Minor - 1pt)**: 進行中の試合のライブ視聴。
+12. **Webベースのゲーム (Major - 2pts)**: T-Spin、7-bagシステム、ロック遅延を備えたテトリス風ゲーム。
+13. **リモートプレイヤー (Major - 2pts)**: WebSocket経由のネットワーク1v1マルチプレイヤー。
+14. **マルチプレイヤー (3人以上) (Major - 2pts)**: カスタムルームと観戦ブロードキャストのサポート。
+15. **ゲームのカスタマイズ (Minor - 1pt)**: キーバインド変更、ミノのスタイリング変更、背景選択。
+16. **トーナメントシステム (Minor - 1pt)**: 自動マッチメイキングとトーナメント表の進行。
+17. **観戦モード (Minor - 1pt)**: 進行中の試合のライブ視聴。
 
 ### 人工知能 (Artificial Intelligence)
-19. **AI対戦相手 (Major - 2pts)**: 高さ、穴、平坦さを評価するヘッドレスC++ボット。
+18. **AI対戦相手 (Major - 2pts)**: C++ボット。
 
 ### データと分析 (Data and Analytics)
-20. **データエクスポート/インポート (Minor - 1pt)**: ユーザー設定と統計のJSON入出力。
-21. **高度な分析ダッシュボード (Major - 2pts)**: ユーザーパフォーマンスのインタラクティブなチャートとグラフ。
-22. **GDPRコンプライアンス (Minor - 1pt)**: パスワード/2FAでの再認証、メール確認コード、個人データの完全削除、対戦履歴の匿名保持、削除完了メール。
+19. **データエクスポート/インポート (Minor - 1pt)**: ユーザー設定と統計のJSON入出力。
+20. **高度な分析ダッシュボード (Major - 2pts)**: ユーザーパフォーマンスのインタラクティブなチャートとグラフ。
+21. **GDPRコンプライアンス (Minor - 1pt)**: パスワード/2FAでの再認証、メール確認コード、個人データの完全削除、対戦履歴の匿名保持、削除完了メール。
 
 ### サイバーセキュリティ (Cybersecurity)
-23. **WAF と HashiCorp Vault (Major - 2pts)**: ModSecurityを搭載したNginxとシークレット管理用Vault。
+22. **WAF と HashiCorp Vault (Major - 2pts)**: ModSecurityを搭載したNginxとシークレット管理用Vault。
 
 ## 個人の貢献 (Individual Contributions)
 - **sonakamu**: 
@@ -216,6 +198,5 @@ Custom Roomは公開（一覧表示）または非公開（一覧に表示しな
 - **NestJS ドキュメント**: https://docs.nestjs.com/
 - **PixiJS ドキュメント**: https://pixijs.com/
 - **Socket.IO ドキュメント**: https://socket.io/
-- **AIの使用状況**: 
-  - *アルゴリズム支援:* 高さ、穴、凹凸などのAI評価特徴の調査・レビューに利用。最終動作はrepository内のC++ sourceとCTestで確認する。
-  - *開発支援:* Docker/Vault/WAFの調査、修正案、test、文書草案に利用。採用前にsource、build、自動testで確認した。
+- **テトリスAI『Cold Clear』の思考部を眺める**: https://komorinfo.com/blog/cold-clear-search-algorithm/ 
+- **AIの使用状況**: デバッグ、 README.md の校正

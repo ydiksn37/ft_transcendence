@@ -718,3 +718,5 @@ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 - nullのplayer/winner参照だけでAI・引き分け・ユーザー削除を区別できません。isAiGame、gameMode等と合わせて扱います。
 - schemaのonDeleteとサービスの削除処理は別です。アカウント削除サービスはChatMessage等を明示的に削除するため、SetNullだけが行われるとは限りません。
 - UserStats.winRateは現在の保存処理でwins / (wins + losses) × 100（分母0なら0）。GameAnalyticはUTC日次集計です。これらはschemaの制約ではなくアプリケーションの更新規則です。
+
+`node tools/schema-doc.cjs --check`
