@@ -17,9 +17,9 @@
 .profile-quick-actions button { min-height: 52px; font-size: 9px; }
 .performance-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%; }
 .performance-toolbar p { color: #888; font-size: 9px; line-height: 1.6; }
-.profile-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; width: 100%; }
-.profile-filters label { display: grid; gap: 8px; color: #aaa; font-size: 9px; }
-.profile-filters select { min-height: 38px; }
+.profile-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; width: 100%; }
+.profile-filters label { display: grid; grid-template-rows: auto 44px; gap: 8px; min-width: 0; color: #aaa; font-size: 9px; }
+.profile-filters .ds-input, .profile-filters .ds-select { width: 100%; height: 44px; min-height: 44px; margin: 0; }
 .profile-modal-backdrop, .profile-cropper { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .88); }
 .profile-modal { width: min(720px, 100%); max-height: calc(100vh - 48px); overflow: auto; display: grid; gap: 16px; padding: 26px; border: 4px solid #777; background: #111; box-shadow: 10px 10px 0 #000; }
 .profile-modal-heading { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #444; }
@@ -48,7 +48,11 @@
   .profile-hero > button { grid-column: 1 / -1; }
   .profile-quick-actions { grid-template-columns: repeat(2, 1fr); }
   .performance-toolbar { align-items: flex-start; flex-direction: column; }
+  .profile-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile-avatar-presets { grid-template-columns: repeat(4, 1fr); }
   .profile-modal-backdrop { padding: 8px; }
   .profile-modal { box-sizing: border-box; max-height: calc(100vh - 16px); padding: 16px; }
+}
+@media (max-width: 460px) {
+  .profile-filters { grid-template-columns: minmax(0, 1fr); }
 }

@@ -264,15 +264,15 @@ export default function Profile() {
           <StatCard label="BEST STREAK" value={stats.bestWinStreak} /><StatCard label="WINS" value={stats.wins} sub={`${stats.losses} losses`} /></div>
         <WinRatePanel stats={stats} />
         <div className="profile-filters">
-          <label>FROM <DsInput type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)} /></label>
-          <label>TO <DsInput type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)} /></label>
-          <DsSelect aria-label="Game mode" value={historyMode} onChange={event => setHistoryMode(event.target.value as HistoryMode)}>
+          <label><span>FROM</span><DsInput type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)} /></label>
+          <label><span>TO</span><DsInput type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)} /></label>
+          <label><span>MODE</span><DsSelect aria-label="Game mode" value={historyMode} onChange={event => setHistoryMode(event.target.value as HistoryMode)}>
             <option value="ALL">ALL MODES</option><option value="VERSUS">VERSUS</option><option value="AI">AI</option>
             <option value="TOURNAMENT">TOURNAMENT</option><option value="LINES_40">40 LINES</option><option value="MARATHON">MARATHON</option>
-          </DsSelect>
-          <DsSelect aria-label="Game result" value={historyResult} onChange={event => setHistoryResult(event.target.value as HistoryResult)}>
+          </DsSelect></label>
+          <label><span>RESULT</span><DsSelect aria-label="Game result" value={historyResult} onChange={event => setHistoryResult(event.target.value as HistoryResult)}>
             <option value="ALL">ALL RESULTS</option><option value="WIN">WINS</option><option value="LOSE">LOSSES</option>
-          </DsSelect>
+          </DsSelect></label>
         </div>
         {performanceError && <DsAlert tone="danger">{performanceError}</DsAlert>}
         {performanceLoading && <DsSpinner label="Loading match history" />}
