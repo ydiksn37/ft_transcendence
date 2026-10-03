@@ -1,10 +1,10 @@
 # DB設計書（Prisma schema同期）
 
-このファイルは `node tools/schema-doc.cjs` の出力です。手編集せず、schema変更後に再生成してください。
+このファイルは `node tools/schema-doc.cjs --write` の出力です。手編集せず、schema変更後に再生成してください。
 `node tools/schema-doc.cjs --check` で同期を検証できます。DB接続・migrationは行いません。
 
-正本: [schema.prisma](apps/backend/prisma/schema.prisma)。テーブルはPrismaモデル名で表記しています。
-総テーブル数: **20** / enum数: **15**。実DBへのmigration適用状況を証明する図ではありません。
+正本: [schema.prisma](../apps/backend/prisma/schema.prisma)。テーブルはPrismaモデル名で表記しています。
+総テーブル数: **19** / enum数: **14**。実DBへのmigration適用状況を証明する図ではありません。
 
 ## ER図
 
@@ -30,7 +30,6 @@ erDiagram
         String oauthId "nullable"
         Boolean twoFactorEnabled
         String twoFactorSecret "nullable"
-        DateTime deletedAt "nullable"
         DateTime createdAt
         DateTime updatedAt
     }
@@ -138,36 +137,18 @@ erDiagram
         String id PK
         ChatRoomType type
         String name "nullable"
-        String relatedId "nullable"
         DateTime createdAt
     }
     ChatRoomMembership {
         String id PK
         String roomId FK
         String userId FK
-        DateTime lastReadAt "nullable"
-        DateTime joinedAt
     }
     ChatMessage {
         String id PK
         String roomId FK
         String senderId FK "nullable"
         String content
-        Boolean isDeleted
-        DateTime deletedAt "nullable"
-        DateTime editedAt "nullable"
-        DateTime createdAt
-    }
-    Notification {
-        String id PK
-        String userId FK
-        NotificationType type
-        String title
-        String content
-        String relatedId "nullable"
-        String relatedType "nullable"
-        Boolean isRead
-        DateTime readAt "nullable"
         DateTime createdAt
     }
     Tournament {
@@ -190,7 +171,6 @@ erDiagram
         String userId FK
         Int seed "nullable"
         Int finalRank "nullable"
-        DateTime registeredAt
     }
     TournamentMatch {
         String id PK
@@ -210,10 +190,8 @@ erDiagram
         String key UK
         String name
         String description
-        String iconUrl "nullable"
         Int xpReward
         AchievementCategory category
-        Boolean isSecret
         DateTime createdAt
     }
     UserAchievement {
@@ -282,7 +260,6 @@ erDiagram
     User ||..o{ ChatRoomMembership : "user (userId)"
     ChatRoom ||..o{ ChatMessage : "room (roomId)"
     User |o..o{ ChatMessage : "sender (senderId)"
-    User ||..o{ Notification : "user (userId)"
     User |o..o{ Tournament : "creator (creatorId)"
     User |o..o{ Tournament : "winner (winnerId)"
     Tournament ||..o{ TournamentEntry : "tournament (tournamentId)"
@@ -300,7 +277,7 @@ erDiagram
     User ||..o{ ImportedGameArchive : "user (userId)"
 ```
 
-FKリレーション数: **30**。関連先が任意なら0..1、必須なら1、子側は0..多（unique FKなら0..1）です。
+FKリレーション数: **29**。関連先が任意なら0..1、必須なら1、子側は0..多（unique FKなら0..1）です。
 
 ## Enum
 
@@ -316,7 +293,6 @@ FKリレーション数: **30**。関連先が任意なら0..1、必須なら1�
 | GameMode | VERSUS, AI, TOURNAMENT, LINES_40, MARATHON |
 | FriendshipStatus | PENDING, ACCEPTED, REJECTED |
 | ChatRoomType | GLOBAL, DIRECT, GAME, TOURNAMENT |
-| NotificationType | FRIEND_REQUEST, FRIEND_ACCEPT, GAME_INVITE, GAME_RESULT, TOURNAMENT_START, TOURNAMENT_MATCH, TOURNAMENT_RESULT, ACHIEVEMENT_UNLOCKED, SYSTEM_MESSAGE, ORG_INVITE |
 | TournamentStatus | REGISTRATION, SEEDING, IN_PROGRESS, COMPLETED, CANCELLED |
 | MatchStatus | PENDING, READY, IN_PROGRESS, COMPLETED, BYE |
 | AchievementCategory | GAME, SOCIAL, TOURNAMENT, SPECIAL |
@@ -345,13 +321,11 @@ oauthProvider String?
 oauthId String?
 twoFactorEnabled Boolean @default(false)
 twoFactorSecret String?
-deletedAt DateTime?
 createdAt DateTime @default(now())
 updatedAt DateTime @updatedAt
 @@index([username])
 @@index([email])
 @@index([isOnline])
-@@index([deletedAt])
 @@index([oauthProvider, oauthId])
 ```
 
@@ -501,7 +475,6 @@ blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelet
 id String @id @default(uuid())
 type ChatRoomType
 name String?
-relatedId String?
 createdAt DateTime @default(now())
 ```
 
@@ -511,8 +484,6 @@ createdAt DateTime @default(now())
 id String @id @default(uuid())
 roomId String
 userId String
-lastReadAt DateTime?
-joinedAt DateTime @default(now())
 room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 @@unique([roomId, userId])
@@ -527,31 +498,11 @@ id String @id @default(uuid())
 roomId String
 senderId String?
 content String @db.Text
-isDeleted Boolean @default(false)
-deletedAt DateTime?
-editedAt DateTime?
 createdAt DateTime @default(now())
 room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 sender User? @relation(fields: [senderId], references: [id], onDelete: SetNull)
 @@index([roomId, createdAt(sort: Desc)])
 @@index([senderId])
-```
-
-### Notification
-
-```prisma
-id String @id @default(uuid())
-userId String
-type NotificationType
-title String
-content String @db.Text
-relatedId String?
-relatedType String?
-isRead Boolean @default(false)
-readAt DateTime?
-createdAt DateTime @default(now())
-user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-@@index([userId, isRead, createdAt(sort: Desc)])
 ```
 
 ### Tournament
@@ -582,12 +533,11 @@ tournamentId String
 userId String
 seed Int?
 finalRank Int?
-registeredAt DateTime @default(now())
 tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 @@unique([tournamentId, userId])
 @@index([tournamentId, seed])
-@@index([userId, registeredAt(sort: Desc)])
+@@index([userId])
 ```
 
 ### TournamentMatch
@@ -622,10 +572,8 @@ id String @id @default(uuid())
 key String @unique
 name String
 description String @db.Text
-iconUrl String?
 xpReward Int @default(0)
 category AchievementCategory
-isSecret Boolean @default(false)
 createdAt DateTime @default(now())
 ```
 
@@ -713,10 +661,8 @@ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
 ## 解釈上の注意
 
-- Organization、OrgMembership、DataExportRequestモデルは存在しません。NotificationTypeのORG_INVITEはschemaに残るenum値であり、組織機能の実装を意味しません。
+- Organization、OrgMembership、DataExportRequest、Notificationモデルは存在しません。
 - GameResult.tournamentMatchIdは通常のnullable文字列とindexです。実際のFKはTournamentMatch.gameResultId → GameResult.idです。
 - nullのplayer/winner参照だけでAI・引き分け・ユーザー削除を区別できません。isAiGame、gameMode等と合わせて扱います。
 - schemaのonDeleteとサービスの削除処理は別です。アカウント削除サービスはChatMessage等を明示的に削除するため、SetNullだけが行われるとは限りません。
 - UserStats.winRateは現在の保存処理でwins / (wins + losses) × 100（分母0なら0）。GameAnalyticはUTC日次集計です。これらはschemaの制約ではなくアプリケーションの更新規則です。
-
-`node tools/schema-doc.cjs --check`

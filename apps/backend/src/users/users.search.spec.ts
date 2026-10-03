@@ -29,12 +29,12 @@ describe('ranked user search', () => {
     });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { deletedAt: null },
+        where: {},
         skip: 10,
         take: 10,
         orderBy: [{ stats: { rankPoints: 'desc' } }, { id: 'asc' }],
       }),
     );
-    expect(count).toHaveBeenCalledWith({ where: { deletedAt: null } });
+    expect(count).toHaveBeenCalledWith({ where: {} });
   });
 });

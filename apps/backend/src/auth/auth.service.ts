@@ -67,10 +67,6 @@ export class AuthService {
       );
     }
 
-    if (user.deletedAt) {
-      throw new UnauthorizedException('このアカウントは削除されています');
-    }
-
     if (user.bannedUntil && user.bannedUntil > new Date()) {
       throw new UnauthorizedException(
         `アカウントがBANされています（解除: ${user.bannedUntil.toISOString()}）`,
@@ -138,10 +134,6 @@ export class AuthService {
         },
       });
       this.logger.log(`42 OAuthで新規ユーザー登録: ${user.username}`);
-    }
-
-    if (user.deletedAt) {
-      throw new UnauthorizedException('このアカウントは削除されています');
     }
 
     if (user.bannedUntil && user.bannedUntil > new Date()) {
@@ -231,7 +223,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorEnabled: false,
         twoFactorSecret: user.twoFactorSecret,
       },
@@ -263,7 +254,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorSecret: user.twoFactorSecret,
       },
       data: { twoFactorEnabled: true },
@@ -287,7 +277,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorSecret: user.twoFactorSecret,
       },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
@@ -314,7 +303,6 @@ export class AuthService {
       !user ||
       !user.twoFactorEnabled ||
       !user.twoFactorSecret ||
-      user.deletedAt ||
       (user.bannedUntil && user.bannedUntil > new Date())
     )
       throw new UnauthorizedException();

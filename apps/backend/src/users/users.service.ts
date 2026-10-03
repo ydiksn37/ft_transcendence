@@ -52,7 +52,7 @@ export class UsersService {
   // ── 自分のプロフィール取得 ────────────────────────────────
   async getProgression(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       select: {
         stats: {
           select: {
@@ -114,7 +114,7 @@ export class UsersService {
 
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       include: { stats: true, gameSettings: true },
     });
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
@@ -160,7 +160,7 @@ export class UsersService {
     }
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       select: {
         id: true,
         passwordHash: true,
@@ -197,7 +197,7 @@ export class UsersService {
     // according to schema.prisma.
     await this.withSerializableUserWrite(async (tx) => {
       const current = await tx.user.findUnique({
-        where: { id: userId, deletedAt: null },
+        where: { id: userId },
         select: { role: true },
       });
       if (!current) throw new NotFoundException('ユーザーが見つかりません');
@@ -274,7 +274,7 @@ export class UsersService {
   // ── 他ユーザープロフィール取得 ────────────────────────────
   async getUserById(id: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id, deletedAt: null },
+      where: { id },
       include: { stats: true },
     });
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
@@ -287,9 +287,7 @@ export class UsersService {
     const limit = Math.min(Number(dto.limit ?? 20), 50);
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      deletedAt: null,
-    };
+    const where: any = {};
 
     if (dto.q) {
       where.OR = [
@@ -448,7 +446,7 @@ export class UsersService {
     }
 
     const addressee = await this.prisma.user.findUnique({
-      where: { id: addresseeId, deletedAt: null },
+      where: { id: addresseeId },
       select: { id: true },
     });
     if (!addressee) {
@@ -566,7 +564,7 @@ export class UsersService {
       throw new BadRequestException('自分をブロックできません');
 
     const target = await this.prisma.user.findUnique({
-      where: { id: blockedId, deletedAt: null },
+      where: { id: blockedId },
       select: { id: true },
     });
     if (!target) throw new NotFoundException('ユーザーが見つかりません');
@@ -597,13 +595,12 @@ export class UsersService {
     const skip = (page - 1) * limit;
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
-        where: { deletedAt: null },
         select: ADMIN_USER_SELECT,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.user.count({ where: { deletedAt: null } }),
+      this.prisma.user.count(),
     ]);
     return {
       data: users,
@@ -620,7 +617,7 @@ export class UsersService {
     try {
       return await this.withSerializableUserWrite(async (tx) => {
         const actor = await tx.user.findUnique({
-          where: { id: actorId, deletedAt: null },
+          where: { id: actorId },
           select: { role: true, bannedUntil: true },
         });
         if (
@@ -669,7 +666,7 @@ export class UsersService {
       );
     const target = await this.withSerializableUserWrite(async (tx) => {
       const actor = await tx.user.findUnique({
-        where: { id: actorId, deletedAt: null },
+        where: { id: actorId },
         select: { role: true, bannedUntil: true },
       });
       if (
@@ -680,7 +677,7 @@ export class UsersService {
         throw new ForbiddenException('管理操作の権限がありません');
       }
       const user = await tx.user.findUnique({
-        where: { id: targetId, deletedAt: null },
+        where: { id: targetId },
         select: {
           role: true,
           fileUploads: { select: { storageUrl: true } },
@@ -774,7 +771,7 @@ export class UsersService {
     // no usable administrator. A conflict retries with fresh authorization.
     return this.withSerializableUserWrite(async (tx) => {
       const actor = await tx.user.findUnique({
-        where: { id: actorId, deletedAt: null },
+        where: { id: actorId },
         select: { role: true, bannedUntil: true },
       });
       const now = new Date();
@@ -786,7 +783,7 @@ export class UsersService {
         throw new ForbiddenException('管理操作の権限がありません');
       }
       const target = await tx.user.findUnique({
-        where: { id: targetId, deletedAt: null },
+        where: { id: targetId },
         select: { role: true },
       });
       if (!target) throw new NotFoundException('ユーザーが見つかりません');
@@ -818,7 +815,6 @@ export class UsersService {
       where: {
         id: { not: targetId },
         role: 'ADMIN',
-        deletedAt: null,
         OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }],
       },
     });
@@ -864,7 +860,6 @@ export class UsersService {
       oauthId,
       bannedUntil,
       banReason,
-      deletedAt,
       ...publicUser
     } = user;
     return publicUser;

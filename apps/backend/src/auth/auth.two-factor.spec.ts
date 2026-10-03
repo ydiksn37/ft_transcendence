@@ -12,7 +12,6 @@ describe('2FA lifecycle protections', () => {
     role: 'USER',
     twoFactorEnabled: false,
     twoFactorSecret: null as string | null,
-    deletedAt: null,
     bannedUntil: null,
   };
   const findUnique = jest.fn(),
@@ -39,7 +38,6 @@ describe('2FA lifecycle protections', () => {
     expect(updateMany).toHaveBeenCalledWith({
       where: {
         id: 'owner',
-        deletedAt: null,
         twoFactorEnabled: false,
         twoFactorSecret: null,
       },
@@ -78,14 +76,13 @@ describe('2FA lifecycle protections', () => {
       success: true,
     });
     expect(updateMany).toHaveBeenLastCalledWith({
-      where: { id: 'owner', deletedAt: null, twoFactorSecret: secret },
+      where: { id: 'owner', twoFactorSecret: secret },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
     });
   });
 
   it.each([
     { twoFactorEnabled: false },
-    { deletedAt: new Date() },
     { bannedUntil: new Date('2999-01-01') },
   ])('rejects a no-longer-eligible login %j', async (overrides) => {
     findUnique.mockResolvedValue({

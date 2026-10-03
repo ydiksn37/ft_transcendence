@@ -25,7 +25,7 @@ describe('user progression', () => {
       result.achievements.every((a) => a.progress === 0 && a.earnedAt === null),
     ).toBe(true);
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'owner', deletedAt: null } }),
+      expect.objectContaining({ where: { id: 'owner' } }),
     );
   });
 

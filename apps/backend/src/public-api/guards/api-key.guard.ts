@@ -36,7 +36,6 @@ export class ApiKeyGuard implements CanActivate {
         keyPrefix: prefix,
         isActive: true,
         user: {
-          deletedAt: null,
           OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }],
         },
       },

@@ -151,14 +151,4 @@ export interface ChatRoom {
 	   ChatRoomMembership で「自分以外の参加者」を引き、User から詰めた結果。
 	   GLOBAL は参加者が多数で1人に決まらないので undefined */
 	peer?: PlayerSummary;
-	/* ER.md: ChatRoomMembership.lastReadAt (TIMESTAMP NULL) の自分の行。
-	   null = 一度も開いていない部屋（＝他人の発言が全部未読）。
-	   未読数は保持せず、これと ChatMessage.createdAt の比較で毎回算出する */
-	lastReadAt: string | null;
-}
-
-/* RoomList 表示用。ChatRoom に算出した未読数を載せた派生モデル */
-export interface RoomSummary {
-	room: ChatRoom;
-	unread: number;
 }

@@ -81,19 +81,6 @@ enum ChatRoomType {
   TOURNAMENT
 }
 
-enum NotificationType {
-  FRIEND_REQUEST
-  FRIEND_ACCEPT
-  GAME_INVITE
-  GAME_RESULT
-  TOURNAMENT_START
-  TOURNAMENT_MATCH
-  TOURNAMENT_RESULT
-  ACHIEVEMENT_UNLOCKED
-  SYSTEM_MESSAGE
-  ORG_INVITE
-}
-
 enum TournamentStatus {
   REGISTRATION
   SEEDING
@@ -144,7 +131,6 @@ model User {
   oauthId          String?
   twoFactorEnabled Boolean   @default(false)
   twoFactorSecret  String?
-  deletedAt        DateTime? // ソフトデリート (GDPR)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -161,7 +147,6 @@ model User {
   blocksReceived         Block[]               @relation("Blocked")
   chatMemberships        ChatRoomMembership[]
   chatMessages           ChatMessage[]
-  notifications          Notification[]
   tournamentEntries      TournamentEntry[]
   tournamentsCreated     Tournament[]          @relation("TournamentCreator")
   tournamentsWon         Tournament[]          @relation("TournamentWinner")
@@ -177,7 +162,6 @@ model User {
   @@index([username])
   @@index([email])
   @@index([isOnline])
-  @@index([deletedAt])
   @@index([oauthProvider, oauthId])
 }
 
@@ -353,7 +337,6 @@ model ChatRoom {
   id        String       @id @default(uuid())
   type      ChatRoomType
   name      String?
-  relatedId String? // gameRoomId or tournamentId
   createdAt DateTime     @default(now())
 
   memberships ChatRoomMembership[]
@@ -361,11 +344,9 @@ model ChatRoom {
 }
 
 model ChatRoomMembership {
-  id         String    @id @default(uuid())
-  roomId     String
-  userId     String
-  lastReadAt DateTime?
-  joinedAt   DateTime  @default(now())
+  id     String @id @default(uuid())
+  roomId String
+  userId String
 
   room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -376,41 +357,17 @@ model ChatRoomMembership {
 }
 
 model ChatMessage {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   roomId    String
   senderId  String? // GDPR: ユーザー削除時に null に
-  content   String    @db.Text
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-  editedAt  DateTime?
-  createdAt DateTime  @default(now())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
 
   room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   sender User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
 
   @@index([roomId, createdAt(sort: Desc)])
   @@index([senderId])
-}
-
-// ─────────────────────────────────────────────
-//  Notification
-// ─────────────────────────────────────────────
-
-model Notification {
-  id          String           @id @default(uuid())
-  userId      String
-  type        NotificationType
-  title       String
-  content     String           @db.Text
-  relatedId   String? // ポリモーフィック
-  relatedType String? // "friendship" | "game" | "tournament" | "org"
-  isRead      Boolean          @default(false)
-  readAt      DateTime?
-  createdAt   DateTime         @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, isRead, createdAt(sort: Desc)])
 }
 
 // ─────────────────────────────────────────────
@@ -440,12 +397,11 @@ model Tournament {
 }
 
 model TournamentEntry {
-  id           String   @id @default(uuid())
+  id           String @id @default(uuid())
   tournamentId String
   userId       String
   seed         Int? // null = 未シード
   finalRank    Int? // null = 進行中
-  registeredAt DateTime @default(now())
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -453,7 +409,7 @@ model TournamentEntry {
   @@unique([tournamentId, userId])
   // seed の UNIQUE は null を除外するため、アプリ層で担保
   @@index([tournamentId, seed])
-  @@index([userId, registeredAt(sort: Desc)])
+  @@index([userId])
 }
 
 model TournamentMatch {
@@ -490,10 +446,8 @@ model Achievement {
   key         String              @unique // "first_win", "tetris_master", etc.
   name        String
   description String              @db.Text
-  iconUrl     String?
   xpReward    Int                 @default(0)
   category    AchievementCategory
-  isSecret    Boolean             @default(false)
   createdAt   DateTime            @default(now())
 
   userAchievements UserAchievement[]

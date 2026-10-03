@@ -80,10 +80,7 @@ export class PublicApiService {
   async getLeaderboard(page = 1, limit = 20, rankFilter?: Rank) {
     const skip = (page - 1) * limit;
 
-    const where = {
-      deletedAt: null,
-      ...(rankFilter ? { stats: { rank: rankFilter } } : {}),
-    };
+    const where = rankFilter ? { stats: { rank: rankFilter } } : {};
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -127,7 +124,7 @@ export class PublicApiService {
   // ── 2. ユーザープロフィール (by username) ─────────────────
   async getUserByUsername(username: string) {
     const user = await this.prisma.user.findFirst({
-      where: { username, deletedAt: null },
+      where: { username },
       select: {
         id: true,
         username: true,
@@ -159,7 +156,7 @@ export class PublicApiService {
   // ── 3. ユーザー統計 ───────────────────────────────────────
   async getUserStats(username: string) {
     const user = await this.prisma.user.findFirst({
-      where: { username, deletedAt: null },
+      where: { username },
       select: { id: true },
     });
     if (!user) return null;
@@ -175,7 +172,7 @@ export class PublicApiService {
     mode?: GameMode,
   ) {
     const user = await this.prisma.user.findFirst({
-      where: { username, deletedAt: null },
+      where: { username },
       select: { id: true },
     });
     if (!user) return null;

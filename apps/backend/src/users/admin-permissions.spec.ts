@@ -123,7 +123,6 @@ describe('administrative permission hierarchy', () => {
       expect.objectContaining({
         id: { not: 'target' },
         role: 'ADMIN',
-        deletedAt: null,
       }),
     );
   });

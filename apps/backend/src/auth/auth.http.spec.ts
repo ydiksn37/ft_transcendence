@@ -25,7 +25,6 @@ describe('Auth HTTP 2FA response contract', () => {
     passwordHash: '',
     twoFactorEnabled: false,
     twoFactorSecret: null as string | null,
-    deletedAt: null as Date | null,
     bannedUntil: null as Date | null,
   };
 

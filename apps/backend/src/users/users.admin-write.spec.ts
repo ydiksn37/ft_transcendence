@@ -51,7 +51,7 @@ describe('admin user creation and profile edits', () => {
     expect(args.select).not.toHaveProperty('passwordHash');
     expect(args.select).not.toHaveProperty('twoFactorSecret');
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'admin', deletedAt: null } }),
+      expect.objectContaining({ where: { id: 'admin' } }),
     );
   });
 

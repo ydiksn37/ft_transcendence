@@ -327,7 +327,7 @@ export function getProfile(userId: string): PlayerProfile | undefined {
 /* 				チャットのモックデータ
 /***************************************************************** */
 
-import type { ChatMessage, RoomId, PlayerSummary, ChatRoom, RoomSummary } from "@/lib/types";
+import type { ChatMessage, RoomId, PlayerSummary, ChatRoom } from "@/lib/types";
 
 export const GLOBAL_ROOM_ID: RoomId = "room-global"
 
@@ -354,20 +354,18 @@ const gAt = (h: number, m: number) =>
    DMは会話が始まっている部屋だけ存在する（全フレンド分は作らない）。
    TODO: GET /rooms に置き換える */
 export const MOCK_ROOMS: ChatRoom[] = [
-	{ id: GLOBAL_ROOM_ID, type: "GLOBAL", title: "global", lastReadAt: gAt(23, 45) },
+	{ id: GLOBAL_ROOM_ID, type: "GLOBAL", title: "global" },
 	{
 		id: DM_ROOM_IDS.neon,
 		type: "DIRECT",
     title: senderById(MOCK_USER_IDS.neon).displayName,
 		peer: senderById(MOCK_USER_IDS.neon),
-		lastReadAt: gAt(23, 59),        // 最新メッセージより後 → 未読0
 	},
 	{
 		id: DM_ROOM_IDS.grid,
 		type: "DIRECT",
     title: senderById(MOCK_USER_IDS.grid).displayName,
 		peer: senderById(MOCK_USER_IDS.grid),
-		lastReadAt: gAt(23, 40),        // 23:55の発言より前 → 未読1
 	},
 ]
 
@@ -384,7 +382,7 @@ export const MOCK_MESSAGES: ChatMessage[] = [
 	{ id: "dmsg-0001", roomId: DM_ROOM_IDS.neon, sender: senderById(MOCK_USER_IDS.neon), content: "Ready for a rematch?",         createdAt: gAt(23, 50) },
 	{ id: "dmsg-0002", roomId: DM_ROOM_IDS.neon, sender: senderById(MOCK_USER_IDS.neon), content: "I've been practicing all day", createdAt: gAt(23, 51) },
 
-	// ── DM: 自分 × GRID_REAPER（lastReadAt 23:40 より後 → 未読1件）──
+	// ── DM: 自分 × GRID_REAPER ──
 	{ id: "dmsg-0003", roomId: DM_ROOM_IDS.grid, sender: senderById(MOCK_USER_IDS.grid), content: "Hey what's your high score?", createdAt: gAt(23, 55) },
 ]
 
@@ -408,24 +406,6 @@ export function getRoom(roomId: RoomId): ChatRoom | undefined {
   return (MOCK_ROOMS.find((r) => r.id === roomId));
 }
 
-export function countUnread(room: ChatRoom, meId: string): number {
-  return (
-    getMessagesByRoom(room.id)
-      .filter((m) => m.sender.id !== meId)
-      .filter((m) => room.lastReadAt === null || m.createdAt > room.lastReadAt)
-      .length
-  );
-}
-
-export function getRoomSummaries(meId: string): RoomSummary[] {
-  return (
-    MOCK_ROOMS.map((room) => ({
-      room,
-      unread: countUnread(room, meId)
-    }))
-  )
-}
-
 export function findDirectRoomByPeerId(peerId: string): ChatRoom | undefined {
 	return (MOCK_ROOMS.find((r) => r.type === "DIRECT" && r.peer?.id === peerId))
 }
@@ -440,18 +420,10 @@ export function findOrCreateDirectRoom(peer: PlayerSummary): ChatRoom {
 		type: "DIRECT",
     title: peer.displayName,
 		peer,
-		lastReadAt: null,               // 一度も開いていない
-	}
+		}
 	MOCK_ROOMS.push(room)
 	return (room)
 }
-
-export function markRoomRead(roomId: RoomId, readAt: string = new Date().toISOString()): void {
-	const room = getRoom(roomId)
-	if (room)
-		room.lastReadAt = readAt
-}
-
 
 /* メッセージを送信。mockでは MOCK_MESSAGES に push するだけ。
    TODO: POST /rooms/:roomId/messages に置き換える */

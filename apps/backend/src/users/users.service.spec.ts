@@ -212,16 +212,9 @@ describe('UsersService admin operations', () => {
     expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 
-  it('does not expose a deleted user through search or profile lookup', async () => {
+  it('does not expose a missing user through profile lookup', async () => {
     prisma.user.findMany.mockResolvedValue([]);
     prisma.user.count.mockResolvedValue(0);
-
-    await service.searchUsers({ q: 'deleted-player' });
-    expect(prisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ deletedAt: null }),
-      }),
-    );
 
     prisma.user.findUnique.mockResolvedValue(null);
     await expect(service.getUserById('deleted-user')).rejects.toBeInstanceOf(

@@ -18,7 +18,6 @@ describe('ExportService', () => {
     oauthProvider: null,
     oauthId: null,
     twoFactorEnabled: true,
-    deletedAt: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-02T00:00:00.000Z'),
   };
@@ -64,7 +63,6 @@ describe('ExportService', () => {
         oauthProvider: true,
         oauthId: true,
         twoFactorEnabled: true,
-        deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },
