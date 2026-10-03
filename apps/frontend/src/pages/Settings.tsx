@@ -125,7 +125,7 @@ export default function Settings() {
       if (document.activeElement?.tagName === 'INPUT') return;
 
       if (e.code === keyConfig.quitToMenu) {
-        navigate(mode ? `/profile?mode=${mode}` : '/profile');
+        navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview');
       }
 
       if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
@@ -134,7 +134,7 @@ export default function Settings() {
 
       if (e.code === 'Enter') {
         if (selectedIndex === 0) {
-          navigate(mode ? `/profile?mode=${mode}` : '/profile');
+          navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview');
         }
       }
     };
@@ -456,7 +456,7 @@ export default function Settings() {
       <div className="settings-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '900px', marginBottom: '40px', position: 'relative', zIndex: 10 }}>
         <button 
           className={`back-btn ${selectedIndex === 0 ? 'selected' : ''}`}
-          onClick={() => navigate(mode ? `/profile?mode=${mode}` : '/profile')}
+          onClick={() => navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview')}
           onMouseEnter={() => setSelectedIndex(0)}
           onMouseLeave={() => setSelectedIndex(-1)}
           style={selectedIndex === 0 ? { backgroundColor: '#555' } : {}}

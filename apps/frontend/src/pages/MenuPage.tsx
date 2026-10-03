@@ -320,22 +320,7 @@ const MenuPage = () => {
           {token && user ? (
             <div className="menu-page-auth-group">
               <button
-                onClick={() => navigate('/dashboard')}
-                style={{
-                  padding: '12px 20px',
-                  fontSize: '14px',
-                  fontFamily: "'Press Start 2P', monospace",
-                  backgroundColor: '#333',
-                  color: 'white',
-                  border: '4px solid white',
-                  cursor: 'pointer',
-                  boxShadow: '4px 4px 0px #000'
-                }}
-              >
-                DASHBOARD
-              </button>
-              <button
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/profile?tab=overview')}
                 style={{
                   padding: '12px 20px',
                   fontSize: '14px',

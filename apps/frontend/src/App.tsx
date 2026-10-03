@@ -1,9 +1,9 @@
-import { Routes, Route, Navigate } from "react-router-dom"
+import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { lazy, Suspense } from 'react'
+import { legacyDashboardDestination } from '@/lib/profileHub'
 
 
 const Login = lazy(() => import('@/pages/Login'))
-const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Chat = lazy(() => import('@/pages/Chat'))
 const Friends = lazy(() => import('@/pages/Friends'))
 const AdvancedSearch = lazy(() => import('@/pages/AdvancedSearch'))
@@ -21,6 +21,11 @@ const TermsOfService = lazy(() => import('@/pages/TermsOfService'))
 
 const OAuthCallback = lazy(() => import('@/pages/OAuthCallback').then(module => ({ default: module.OAuthCallback })))
 
+function LegacyDashboardRedirect() {
+  const location = useLocation();
+  return <Navigate to={legacyDashboardDestination(location.search)} replace />;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<div role="status" aria-live="polite" style={{ padding: 32 }}>LOADING…</div>}>
@@ -31,7 +36,7 @@ export default function App() {
       <Route path="/friends" element={<Friends />} />
       <Route path="/search" element={<AdvancedSearch />} />
 
-      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/dashboard" element={<LegacyDashboardRedirect />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/profile/:id" element={<PublicProfile />} />
       <Route path="/settings" element={<Settings />} />

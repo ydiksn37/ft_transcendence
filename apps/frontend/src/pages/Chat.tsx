@@ -25,7 +25,7 @@ export default function Chat() {
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.code === keyConfig.quitToMenu && document.activeElement?.tagName !== 'INPUT') {
-				navigate(mode ? `/dashboard?mode=${mode}` : '/dashboard', { state: { skipLoading: true } });
+				navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview');
 			}
 		};
 		window.addEventListener('keydown', handleKeyDown);
@@ -105,8 +105,8 @@ export default function Chat() {
 	return (
 		<div className="dashboard-container">
 			<div className="dashboard-header">
-				<button className="back-btn" onClick={() => navigate(mode ? `/dashboard?mode=${mode}` : '/dashboard', { state: { skipLoading: true } })}>
-					◀ BACK TO DASHBOARD
+				<button className="back-btn" onClick={() => navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview')}>
+					◀ BACK TO PROFILE
 				</button>
 			</div>
 

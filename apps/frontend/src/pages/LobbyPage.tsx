@@ -25,7 +25,7 @@ export default function LobbyPage() {
   const aiActionDelayMs = Math.round(
     MAX_AI_ACTION_DELAY_MS * (1 - aiSpeedPercent / 100),
   );
-  const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: ACTION (Register/Login or Dashboard)
+  const [selectedIndex, setSelectedIndex] = useState(0); // 0: START GAME, 1: PROFILE/LOGIN, 2: LOGOUT
   const { tuning, setTuning, keyConfig, listeningAction, setListeningAction, volume, setVolume, minoSkin, setMinoSkin, showGhost, setShowGhost, displayTheme, setDisplayTheme, mapStyle, setMapStyle, backgroundStyle, setBackgroundStyle, settingsError, reloadSettings } = useConfig();
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
@@ -76,7 +76,7 @@ export default function LobbyPage() {
         return;
       }
 
-      const maxIndex = (token && user) ? 3 : 1;
+      const maxIndex = (token && user) ? 2 : 1;
 
       if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'KeyW' || e.code === 'KeyS') {
         if (mode !== 'CONFIG') {
@@ -119,11 +119,9 @@ export default function LobbyPage() {
           if (!token || !user) {
             navigate(`/login?redirectTo=/lobby/${mode}&cancelTo=/lobby/${mode}`);
           } else {
-            navigate(`/dashboard?mode=${mode}`);
+            navigate(`/profile?tab=overview&mode=${mode}`);
           }
         } else if (selectedIndex === 2) {
-          navigate(`/profile?mode=${mode}`);
-        } else if (selectedIndex === 3) {
           logout();
           navigate('/');
         }
@@ -200,27 +198,19 @@ export default function LobbyPage() {
             <div className="user-controls">
               <button 
                 className={`nav-btn ${selectedIndex === 1 ? 'selected' : ''}`} 
-                onClick={() => navigate(`/dashboard?mode=${mode}`)}
+                onClick={() => navigate(`/profile?tab=overview&mode=${mode}`)}
                 onMouseEnter={() => setSelectedIndex(1)}
                 style={selectedIndex === 1 ? { backgroundColor: '#555' } : {}}
               >
-                {selectedIndex === 1 ? '▶ Dashboard' : 'Dashboard'}
+                {selectedIndex === 1 ? '▶ Profile' : 'Profile'}
               </button>
               <button 
                 className={`nav-btn ${selectedIndex === 2 ? 'selected' : ''}`} 
-                onClick={() => navigate(`/profile?mode=${mode}`)}
+                onClick={() => { logout(); navigate('/'); }}
                 onMouseEnter={() => setSelectedIndex(2)}
                 style={selectedIndex === 2 ? { backgroundColor: '#555' } : {}}
               >
-                {selectedIndex === 2 ? '▶ Profile' : 'Profile'}
-              </button>
-              <button 
-                className={`nav-btn ${selectedIndex === 3 ? 'selected' : ''}`} 
-                onClick={() => { logout(); navigate('/'); }}
-                onMouseEnter={() => setSelectedIndex(3)}
-                style={selectedIndex === 3 ? { backgroundColor: '#555' } : {}}
-              >
-                {selectedIndex === 3 ? '▶ Logout' : 'Logout'}
+                {selectedIndex === 2 ? '▶ Logout' : 'Logout'}
               </button>
             </div>
           ) : (

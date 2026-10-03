@@ -65,7 +65,7 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (!user || (user.role !== 'ADMIN' && user.role !== 'MODERATOR')) {
-      navigate(mode ? `/profile?mode=${mode}` : '/profile');
+      navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview');
       return;
     }
     fetchUsers();
@@ -174,7 +174,7 @@ export default function AdminPanel() {
   return (
     <div className="dashboard-container">
       <div className="dashboard-header" style={{ justifyContent: 'space-between', width: '100%', maxWidth: '1000px', margin: '0 auto', marginBottom: '20px' }}>
-        <button className="back-btn" onClick={() => navigate(mode ? `/profile?mode=${mode}` : '/profile')}>◀ BACK</button>
+        <button className="back-btn" onClick={() => navigate(mode ? `/profile?tab=overview&mode=${mode}` : '/profile?tab=overview')}>◀ BACK</button>
         <h1 style={{ color: '#e74c3c', fontSize: 'clamp(16px, 4vw, 32px)', textAlign: 'center', margin: '10px 0' }}>ADMIN PANEL</h1>
         <div style={{ width: '80px', visibility: 'hidden' }} className="mobile-hide"></div>
       </div>

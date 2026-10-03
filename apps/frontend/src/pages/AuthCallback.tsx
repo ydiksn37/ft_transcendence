@@ -24,7 +24,7 @@ export default function AuthCallback() {
       })
       .then(user => {
         setAuth({ accessToken, refreshToken: refreshToken || undefined, user });
-        navigate('/dashboard', { replace: true });
+        navigate('/profile?tab=overview', { replace: true });
       })
       .catch(() => {
         navigate('/login?oauthError=profile_fetch_failed', { replace: true });

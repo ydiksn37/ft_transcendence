@@ -5,7 +5,6 @@
 
 /* サイドバーに並ぶメニュー */
 export type NavPage = 
-	| "dashboard"
 	| "game"
 	| "battle-setup" 
 	| "chat"

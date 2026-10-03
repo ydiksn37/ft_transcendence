@@ -1,435 +1,316 @@
-import { useEffect, useState } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
-import { RecentBattles } from "@/components/dashboard/RecentBattles"
-import { Progression } from "@/components/dashboard/Progression"
-import type { UserStats, GameRecordView } from "@/lib/types"
-import { useConfig } from '../hooks/useConfig'
-import { TETROMINOS } from '../utils/tetrominos'
-import { AVATAR_PRESETS, getAvatarPreset } from "@/lib/avatarPresets"
-import { AvatarIcon } from "@/components/UI/AvatarIcon"
-import Cropper from 'react-easy-crop'
-import { getCroppedImg } from '../utils/cropImage'
-import '../pages/Dashboard.css'
-import '../pages/JoinPage.css'
-import './LobbyPage.css'
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import Cropper from 'react-easy-crop';
+import { io } from 'socket.io-client';
+import { AchievementProgression, ProgressionSummary, type ProgressionData } from '@/components/dashboard/Progression';
+import { DataExportButtons } from '@/components/dashboard/DataExportButtons';
+import { RecentBattles } from '@/components/dashboard/RecentBattles';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { TrendChart } from '@/components/dashboard/TrendChart';
+import { WinRatePanel } from '@/components/dashboard/WinRatePanel';
+import { AvatarIcon } from '@/components/UI/AvatarIcon';
+import { DsAlert, DsButton, DsInput, DsSelect, DsSpinner } from '@/components/design-system';
+import { useConfig } from '@/hooks/useConfig';
+import { AVATAR_PRESETS, getAvatarPreset } from '@/lib/avatarPresets';
+import { getProfileTab, mapAnalytics, mapGameHistory, normalizeStats, PROFILE_TABS, profileSearch, type ProfileTab } from '@/lib/profileHub';
+import type { DailyAnalyticView, GameRecordView, UserStats } from '@/lib/types';
+import { startVisibleRefresh } from '@/lib/visibleRefresh';
+import { getCroppedImg } from '@/utils/cropImage';
+import './Dashboard.css';
+import './Profile.css';
+import './LobbyPage.css';
+
+type ProfileUser = {
+  id: string; username: string; displayName: string | null; bio: string | null;
+  avatarUrl: string | null; role?: string;
+};
+type HistoryMode = 'ALL' | 'VERSUS' | 'AI' | 'TOURNAMENT' | 'LINES_40' | 'MARATHON';
+type HistoryResult = 'ALL' | 'WIN' | 'LOSE';
 
 export default function Profile() {
-	const navigate = useNavigate();
-	const location = useLocation();
-	const mode = new URLSearchParams(location.search).get('mode');
-	const { keyConfig } = useConfig();
-	const [stats, setStats] = useState<UserStats | null>(null);
-	const [games, setGames] = useState<GameRecordView[]>([]);
-	const [user, setUser] = useState<any>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState('');
-	const [loadingPiece, setLoadingPiece] = useState<any>(null);
-	const [selectedIndex, setSelectedIndex] = useState(-1); // 0: BACK, 1: SETTINGS, 2: ADMIN
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { keyConfig } = useConfig();
+  const tab = getProfileTab(location.search);
+  const mode = new URLSearchParams(location.search).get('mode');
+  const [user, setUser] = useState<ProfileUser | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [progression, setProgression] = useState<ProgressionData | null>(null);
+  const [coreLoading, setCoreLoading] = useState(true);
+  const [coreError, setCoreError] = useState('');
+  const [coreAttempt, setCoreAttempt] = useState(0);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [games, setGames] = useState<GameRecordView[]>([]);
+  const [analytics, setAnalytics] = useState<DailyAnalyticView[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [performanceError, setPerformanceError] = useState('');
+  const [historyMode, setHistoryMode] = useState<HistoryMode>('ALL');
+  const [historyResult, setHistoryResult] = useState<HistoryResult>('ALL');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
+  const [editError, setEditError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-	// Cropper states
-	const [imageSrc, setImageSrc] = useState<string | null>(null);
-	const [crop, setCrop] = useState({ x: 0, y: 0 });
-	const [zoom, setZoom] = useState(1);
-	const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const goBack = useCallback(() => navigate(mode ? `/lobby/${mode}` : '/menu'), [mode, navigate]);
+  const withMode = useCallback((path: string) => mode ? `${path}?mode=${encodeURIComponent(mode)}` : path, [mode]);
 
-	useEffect(() => {
-		const pieces = 'IJLOSTZ';
-		const randomPiece = pieces[Math.floor(Math.random() * pieces.length)];
-		setLoadingPiece(TETROMINOS[randomPiece as keyof typeof TETROMINOS]);
-	}, []);
+  useEffect(() => {
+    const raw = new URLSearchParams(location.search).get('tab');
+    if (raw !== tab) {
+      navigate({ pathname: '/profile', search: profileSearch(location.search, 'overview') }, { replace: true });
+    }
+  }, [location.search, navigate, tab]);
 
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.code === keyConfig.quitToMenu) {
-				navigate(mode ? `/lobby/${mode}` : '/menu');
-			}
-			
-			if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
-				setSelectedIndex(0);
-			} else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
-				setSelectedIndex(1);
-			} else if (e.code === 'Enter') {
-				if (selectedIndex === 0) {
-					navigate(mode ? `/lobby/${mode}` : '/menu');
-				} else if (selectedIndex === 1) {
-					navigate(mode ? `/settings?mode=${mode}` : '/settings');
-				} else if (selectedIndex === 2) {
-					navigate(mode ? `/admin?mode=${mode}` : '/admin');
-				}
-			}
-		};
-		window.addEventListener('keydown', handleKeyDown);
-		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [navigate, keyConfig.quitToMenu, mode, selectedIndex]);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) { navigate('/login'); return; }
+    const controller = new AbortController();
+    const fetchCore = async () => {
+      setCoreError('');
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const [meRes, statsRes, progressionRes] = await Promise.all([
+          fetch('/api/users/me', { headers, signal: controller.signal }),
+          fetch('/api/users/me/stats', { headers, signal: controller.signal }),
+          fetch('/api/users/me/progression', { headers, signal: controller.signal }),
+        ]);
+        if (!meRes.ok || !statsRes.ok || !progressionRes.ok) throw new Error('Profile unavailable');
+        const [me, statsData, progressionData] = await Promise.all([meRes.json(), statsRes.json(), progressionRes.json()]);
+        if (controller.signal.aborted) return;
+        setUser(me); setStats(normalizeStats(statsData)); setProgression(progressionData);
+        setRefreshVersion(value => value + 1);
+      } catch (error) {
+        if (!controller.signal.aborted) setCoreError(error instanceof Error ? error.message : 'Could not load your profile.');
+      } finally {
+        if (!controller.signal.aborted) setCoreLoading(false);
+      }
+    };
+    const stopRefresh = startVisibleRefresh(fetchCore);
+    const socket = io(import.meta.env.VITE_WS_URL || window.location.origin, { transports: ['websocket'], auth: { token } });
+    const handleUpdate = () => { if (document.visibilityState === 'visible') void fetchCore(); };
+    socket.on('analytics:updated', handleUpdate);
+    return () => { stopRefresh(); controller.abort(); socket.off('analytics:updated', handleUpdate); socket.disconnect(); };
+  }, [coreAttempt, navigate]);
 
-	useEffect(() => {
-		const token = localStorage.getItem('token');
-		if (!token) {
-			navigate('/login');
-			return;
-		}
+  useEffect(() => {
+    if (tab !== 'performance' || !user) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const controller = new AbortController();
+    const loadHistory = async () => {
+      setPerformanceLoading(true); setPerformanceError('');
+      try {
+        const params = new URLSearchParams({ mode: historyMode, result: historyResult, limit: '50' });
+        if (fromDate) params.set('from', fromDate);
+        if (toDate) params.set('to', toDate);
+        const response = await fetch(`/api/users/me/history?${params}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('History unavailable');
+        const body = await response.json();
+        if (!controller.signal.aborted) setGames(mapGameHistory(body.data, user.id));
+      } catch {
+        if (!controller.signal.aborted) setPerformanceError('Could not load matching history. Check the date range and retry.');
+      } finally { if (!controller.signal.aborted) setPerformanceLoading(false); }
+    };
+    void loadHistory();
+    return () => controller.abort();
+  }, [tab, user, historyMode, historyResult, fromDate, toDate, refreshVersion]);
 
-		async function fetchData() {
-			try {
-				const headers = { Authorization: `Bearer ${token}` };
+  useEffect(() => {
+    if (tab !== 'performance') return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const controller = new AbortController();
+    fetch('/api/users/me/analytics?days=30', { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      .then(response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then(body => { if (!controller.signal.aborted) setAnalytics(mapAnalytics(body)); })
+      .catch(() => { if (!controller.signal.aborted) setPerformanceError('Could not load performance analytics.'); });
+    return () => controller.abort();
+  }, [tab, refreshVersion]);
 
-				const meRes = await fetch('/api/users/me', { headers });
-				if (!meRes.ok) throw new Error('Failed to fetch user');
-				const me = await meRes.json();
-				setUser(me);
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (editOpen) {
+        if (event.key === 'Escape') {
+          if (imageSrc) setImageSrc(null);
+          else setEditOpen(false);
+        }
+        return;
+      }
+      if (event.code === keyConfig.quitToMenu) goBack();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [editOpen, goBack, imageSrc, keyConfig.quitToMenu]);
 
-				const statsRes = await fetch('/api/users/me/stats', { headers });
-				if (!statsRes.ok) throw new Error('Failed to fetch stats');
-				const statsData = await statsRes.json();
+  const selectTab = (next: ProfileTab) => navigate({ pathname: '/profile', search: profileSearch(location.search, next) });
+  const handleTabKey = (event: React.KeyboardEvent, index: number) => {
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % PROFILE_TABS.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + PROFILE_TABS.length) % PROFILE_TABS.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = PROFILE_TABS.length - 1;
+    else return;
+    event.preventDefault(); selectTab(PROFILE_TABS[next]);
+    requestAnimationFrame(() => tabRefs.current[next]?.focus());
+  };
 
-				const historyRes = await fetch('/api/users/me/history', { headers });
-				if (!historyRes.ok) throw new Error('Failed to fetch history');
-				const historyData = await historyRes.json();
+  const openEditor = () => {
+    if (!user) return;
+    setEditName(user.displayName || user.username); setEditBio(user.bio || ''); setEditError('');
+    setSelectedPreset(user.avatarUrl?.startsWith('preset:') ? Number(user.avatarUrl.split(':')[1]) : null);
+    setEditOpen(true);
+  };
 
-				const mappedGames: GameRecordView[] = historyData.data.map((g: any) => {
-					const isP1 = g.player1Id === me.id;
-					return {
-						id: g.id,
-						date: new Date(g.createdAt).toISOString().split('T')[0],
-						mode: g.gameMode,
-						apm: isP1 ? Number(g.player1Apm) : Number(g.player2Apm),
-						pps: isP1 ? Number(g.player1Pps) : Number(g.player2Pps),
-						lines: isP1 ? g.player1LinesCleared : g.player2LinesCleared,
-						result: g.winnerId === me.id ? "WIN" : (g.winnerId ? "LOSE" : null)
-					};
-				});
+  const saveProfile = async () => {
+    if (!user) return;
+    const name = editName.trim();
+    if (!name || name.length > 50) { setEditError('Display name must be between 1 and 50 characters.'); return; }
+    if (editBio.length > 200) { setEditError('Bio must not exceed 200 characters.'); return; }
+    setSaving(true); setEditError('');
+    try {
+      const body: Record<string, string> = { displayName: name, bio: editBio };
+      if (selectedPreset !== null) body.avatarUrl = `preset:${selectedPreset}`;
+      const response = await fetch('/api/users/me', { method: 'PATCH', headers: {
+        'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify(body) });
+      if (!response.ok) throw new Error((await response.json()).message || 'Could not update profile.');
+      setUser(await response.json()); setEditOpen(false);
+    } catch (error) { setEditError(error instanceof Error ? error.message : 'Could not update profile.'); }
+    finally { setSaving(false); }
+  };
 
-				setStats({
-					...statsData,
-					bestApm: Number(statsData.bestApm),
-					avgApm: Number(statsData.avgApm),
-					bestPps: Number(statsData.bestPps),
-					avgPps: Number(statsData.avgPps),
-					winRate: Number(statsData.winRate),
-				});
-				setGames(mappedGames);
-			} catch {
-				setError('Could not load your profile. Please retry.');
-			} finally {
-				setLoading(false);
-			}
-		}
+  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) { setEditError('Avatar must be a JPG, PNG, GIF, or WebP image.'); return; }
+    if (file.size > 2 * 1024 * 1024) { setEditError('Avatar must not exceed 2 MB.'); return; }
+    const reader = new FileReader(); reader.addEventListener('load', () => setImageSrc(reader.result?.toString() || null)); reader.readAsDataURL(file);
+  };
 
-		fetchData();
-	}, [navigate]);
+  const uploadCroppedImage = async () => {
+    if (!imageSrc || !croppedAreaPixels) return;
+    setSaving(true); setEditError('');
+    try {
+      const blob = await getCroppedImg(imageSrc, croppedAreaPixels);
+      const form = new FormData(); form.append('avatar', blob, 'avatar.jpg');
+      const response = await fetch('/api/users/me/avatar', { method: 'POST', headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}` }, body: form });
+      if (!response.ok) throw new Error((await response.json()).message || 'Failed to upload avatar.');
+      const meResponse = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      if (meResponse.ok) setUser(await meResponse.json());
+      setSelectedPreset(null); setImageSrc(null);
+    } catch (error) { setEditError(error instanceof Error ? error.message : 'Failed to upload avatar.'); }
+    finally { setSaving(false); }
+  };
 
-	const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-		if (event.target.files && event.target.files.length > 0) {
-			const file = event.target.files[0];
-			if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
-				setError('Avatar must be a JPG, PNG, GIF, or WebP image.');
-				event.target.value = '';
-				return;
-			}
-			if (file.size > 2 * 1024 * 1024) {
-				setError('Avatar must not exceed 2 MB.');
-				event.target.value = '';
-				return;
-			}
-			setError('');
-			const reader = new FileReader();
-			reader.addEventListener('load', () => setImageSrc(reader.result?.toString() || null));
-			reader.readAsDataURL(file);
-		}
-		// Reset input value so the same file can be selected again
-		event.target.value = '';
-	};
+  if (coreLoading) return <div className="dashboard-container profile-centered"><DsSpinner label="Loading profile" /></div>;
+  if (!user || !stats || !progression) return <div className="dashboard-container profile-centered">
+    <DsAlert tone="danger">{coreError || 'Could not load your profile.'}</DsAlert>
+    <DsButton onClick={() => { setCoreLoading(true); setCoreAttempt(value => value + 1); }}>RETRY</DsButton>
+  </div>;
 
-	const onCropComplete = (_croppedArea: any, croppedAreaPixels: any) => {
-		setCroppedAreaPixels(croppedAreaPixels);
-	};
+  const isPreset = user.avatarUrl?.startsWith('preset:');
+  const presetIndex = isPreset ? Number(user.avatarUrl?.split(':')[1]) : 0;
+  const preset = getAvatarPreset(presetIndex);
+  const photoUrl = !isPreset && user.avatarUrl ? user.avatarUrl : undefined;
 
-	const uploadCroppedImage = async () => {
-		if (!imageSrc || !croppedAreaPixels) return;
-		try {
-			setLoading(true);
-			const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
-			
-			const formData = new FormData();
-			formData.append('avatar', croppedImageBlob, 'avatar.jpg');
+  return <div className="dashboard-container profile-hub">
+    <header className="dashboard-header profile-header">
+      <DsButton className="back-btn" onClick={goBack}>◀ BACK</DsButton>
+      {(user.role === 'ADMIN' || user.role === 'MODERATOR') && <DsButton onClick={() => navigate(withMode('/admin'))}>ADMIN PANEL</DsButton>}
+    </header>
+    <main className="dashboard-content">
+      <h1 className="dashboard-title">PROFILE</h1>
+      <div className="profile-tabs" role="tablist" aria-label="Profile sections">
+        {PROFILE_TABS.map((item, index) => <button key={item} ref={element => { tabRefs.current[index] = element; }}
+          id={`profile-tab-${item}`} role="tab" aria-selected={tab === item} aria-controls={`profile-panel-${item}`}
+          tabIndex={tab === item ? 0 : -1} onClick={() => selectTab(item)} onKeyDown={event => handleTabKey(event, index)}>
+          {item.toUpperCase()}
+        </button>)}
+      </div>
+      {coreError && <DsAlert tone="danger">Profile refresh failed. Showing the last available data.</DsAlert>}
 
-			const token = localStorage.getItem('token');
-			const res = await fetch('/api/users/me/avatar', {
-				method: 'POST',
-				headers: { Authorization: `Bearer ${token}` },
-				body: formData
-			});
+      {tab === 'overview' && <section id="profile-panel-overview" role="tabpanel" aria-labelledby="profile-tab-overview" className="profile-tab-panel">
+        <div className="profile-hero arcade-panel">
+          <AvatarIcon color={preset.color} symbol={preset.symbol} photo={photoUrl} size={96} />
+          <div className="profile-identity"><h2>{user.displayName || user.username}</h2><span>@{user.username}</span><p>{user.bio || 'No bio set.'}</p></div>
+          <DsButton onClick={openEditor}>EDIT PROFILE</DsButton>
+        </div>
+        <ProgressionSummary data={progression} />
+        <div className="dashboard-grid profile-stat-grid">
+          <StatCard label="BATTLES" value={stats.totalGames} />
+          <StatCard label="WINS" value={stats.wins} sub={`${stats.losses} losses`} />
+          <StatCard label="BEST APM" value={stats.bestApm} />
+          <StatCard label="BEST STREAK" value={stats.bestWinStreak} />
+        </div>
+        <nav className="profile-quick-actions" aria-label="Profile actions">
+          <DsButton onClick={() => navigate(withMode('/settings'))}>SETTINGS</DsButton>
+          <DsButton onClick={() => navigate(withMode('/chat'))}>GLOBAL CHAT</DsButton>
+          <DsButton onClick={() => navigate(withMode('/friends'))}>FRIENDS</DsButton>
+          <DsButton onClick={() => navigate('/search')}>SEARCH USERS</DsButton>
+        </nav>
+      </section>}
 
-			if (!res.ok) {
-				const errorData = await res.json();
-				throw new Error(errorData.message || 'Failed to upload avatar');
-			}
+      {tab === 'performance' && <section id="profile-panel-performance" role="tabpanel" aria-labelledby="profile-tab-performance" className="profile-tab-panel dashboard-panels">
+        <div className="performance-toolbar"><p>Updates every 15 seconds while this tab is visible.</p><DataExportButtons stats={stats} games={games} username={user.username} /></div>
+        <div className="dashboard-grid"><StatCard label="BATTLES" value={stats.totalGames} /><StatCard label="BEST APM" value={stats.bestApm} />
+          <StatCard label="BEST STREAK" value={stats.bestWinStreak} /><StatCard label="WINS" value={stats.wins} sub={`${stats.losses} losses`} /></div>
+        <WinRatePanel stats={stats} />
+        <div className="profile-filters">
+          <label>FROM <DsInput type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)} /></label>
+          <label>TO <DsInput type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)} /></label>
+          <DsSelect aria-label="Game mode" value={historyMode} onChange={event => setHistoryMode(event.target.value as HistoryMode)}>
+            <option value="ALL">ALL MODES</option><option value="VERSUS">VERSUS</option><option value="AI">AI</option>
+            <option value="TOURNAMENT">TOURNAMENT</option><option value="LINES_40">40 LINES</option><option value="MARATHON">MARATHON</option>
+          </DsSelect>
+          <DsSelect aria-label="Game result" value={historyResult} onChange={event => setHistoryResult(event.target.value as HistoryResult)}>
+            <option value="ALL">ALL RESULTS</option><option value="WIN">WINS</option><option value="LOSE">LOSSES</option>
+          </DsSelect>
+        </div>
+        {performanceError && <DsAlert tone="danger">{performanceError}</DsAlert>}
+        {performanceLoading && <DsSpinner label="Loading match history" />}
+        <TrendChart games={games} analytics={analytics} />
+        <RecentBattles games={games} />
+      </section>}
 
-			// Refetch user data
-			const meRes = await fetch('/api/users/me', {
-				headers: { Authorization: `Bearer ${token}` }
-			});
-			if (meRes.ok) {
-				const me = await meRes.json();
-				setUser(me);
-			}
-			
-			// Close cropper modal
-			setImageSrc(null);
-		} catch (error: unknown) {
-			setError(error instanceof Error ? error.message : 'Failed to upload avatar.');
-		} finally {
-			setLoading(false);
-		}
-	};
+      {tab === 'achievements' && <section id="profile-panel-achievements" role="tabpanel" aria-labelledby="profile-tab-achievements" className="profile-tab-panel">
+        <AchievementProgression data={progression} />
+      </section>}
+    </main>
 
-	if (!loading && error && (!user || !stats)) {
-		return (
-			<div className="dashboard-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
-				<p role="alert">{error}</p>
-				<button onClick={() => window.location.reload()}>RETRY</button>
-			</div>
-		);
-	}
+    {editOpen && <div className="profile-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setEditOpen(false); }}>
+      <section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title">
+        <div className="profile-modal-heading"><h2 id="profile-edit-title">EDIT PROFILE</h2><button aria-label="Close profile editor" onClick={() => setEditOpen(false)}>×</button></div>
+        {editError && <DsAlert tone="danger">{editError}</DsAlert>}
+        <label>DISPLAY NAME <DsInput value={editName} maxLength={50} onChange={event => setEditName(event.target.value)} /></label>
+        <label>BIO <textarea value={editBio} maxLength={200} rows={4} onChange={event => setEditBio(event.target.value)} /></label>
+        <span className="profile-character-count">{editBio.length} / 200</span>
+        <label className="profile-upload-button">UPLOAD CUSTOM IMAGE<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleAvatarUpload} /></label>
+        <p className="profile-upload-note">Max: 2 MB (JPG / PNG / GIF / WebP)</p>
+        <div className="profile-avatar-presets" role="radiogroup" aria-label="Avatar preset">
+          {AVATAR_PRESETS.map((item, index) => <button key={index} type="button" role="radio" aria-checked={selectedPreset === index}
+            className={selectedPreset === index ? 'is-selected' : ''} style={{ '--avatar-color': item.color } as React.CSSProperties}
+            onClick={() => setSelectedPreset(index)}><AvatarIcon color={item.color} symbol={item.symbol} size={36} /></button>)}
+        </div>
+        <div className="profile-modal-actions"><DsButton onClick={() => setEditOpen(false)}>CANCEL</DsButton><DsButton disabled={saving} onClick={saveProfile}>{saving ? 'SAVING…' : 'SAVE'}</DsButton></div>
+      </section>
+    </div>}
 
-	if (loading || !user || !stats) {
-		return (
-			<div className="dashboard-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
-				<div className="loading-content">
-					<div className="tetris-spinner" style={{ 
-							width: loadingPiece ? loadingPiece.shape[0].length * 20 : 60, 
-							height: loadingPiece ? loadingPiece.shape.length * 20 : 60 
-						}}>
-						{loadingPiece && loadingPiece.shape.map((row: any[], y: number) => 
-							row.map((cell: any, x: number) => {
-								if (cell !== 0) {
-									return (
-										<div 
-											key={`${y}-${x}`} 
-											style={{ 
-												position: 'absolute', 
-												top: y * 20, 
-												left: x * 20, 
-												width: 20, 
-												height: 20, 
-												backgroundColor: loadingPiece.color, 
-												boxShadow: 'inset 0 0 0 2px #111' 
-											}} 
-										/>
-									);
-								}
-								return null;
-							})
-						)}
-					</div>
-					<div className="loading-text">LOADING...</div>
-				</div>
-			</div>
-		)
-	}
-
-	const isPreset = user.avatarUrl?.startsWith('preset:');
-	const presetIndex = isPreset ? parseInt(user.avatarUrl.split(':')[1]) : 0;
-	const preset = getAvatarPreset(presetIndex);
-	const photoUrl = (!isPreset && user.avatarUrl) ? user.avatarUrl : undefined;
-
-	return (
-		<div className="dashboard-container">
-			<div className="dashboard-header">
-				<button 
-					className={`back-btn ${selectedIndex === 0 ? 'selected' : ''}`} 
-					onClick={() => navigate(mode ? `/lobby/${mode}` : '/menu')}
-					onMouseEnter={() => setSelectedIndex(0)}
-					onMouseLeave={() => setSelectedIndex(-1)}
-					style={selectedIndex === 0 ? { backgroundColor: '#555' } : {}}
-				>
-					◀ BACK TO LOBBY
-				</button>
-				<button 
-					className={`nav-btn ${selectedIndex === 1 ? 'selected' : ''}`} 
-					onClick={() => navigate(mode ? `/settings?mode=${mode}` : '/settings')} 
-					onMouseEnter={() => setSelectedIndex(1)}
-					onMouseLeave={() => setSelectedIndex(-1)}
-					style={selectedIndex === 1 ? { backgroundColor: '#555' } : {}}
-				>
-					{selectedIndex === 1 ? '▶ SETTINGS' : 'SETTINGS'}
-				</button>
-				{(user.role === 'ADMIN' || user.role === 'MODERATOR') && (
-					<button 
-						className={`nav-btn ${selectedIndex === 2 ? 'selected' : ''}`} 
-						onClick={() => navigate(mode ? `/admin?mode=${mode}` : '/admin')} 
-						onMouseEnter={() => setSelectedIndex(2)}
-						onMouseLeave={() => setSelectedIndex(-1)}
-						style={selectedIndex === 2 ? { backgroundColor: '#e74c3c' } : { borderColor: '#e74c3c', color: '#e74c3c' }}
-					>
-						{selectedIndex === 2 ? '▶ ADMIN PANEL' : 'ADMIN PANEL'}
-					</button>
-				)}
-			</div>
-
-			<div className="dashboard-content">
-				<h1 className="dashboard-title">MY PROFILE</h1>
-				{error && <p role="alert" style={{ color: '#ff6b6b' }}>{error}</p>}
-				<div className="dashboard-subtitle">@{user.username}</div>
-
-				<div className="dashboard-panels">
-					<div style={{ display: 'flex', gap: '30px', width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
-						
-						{/* プロフィール情報 */}
-						<div className="arcade-panel" style={{ flex: '1 1 300px', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-							<AvatarIcon color={preset.color} symbol={preset.symbol} photo={photoUrl} size={96} />
-							<div style={{ textAlign: 'center' }}>
-								<div style={{ fontSize: '24px', fontWeight: 'bold' }}>{user.displayName || user.username}</div>
-								<div style={{ fontSize: '12px', color: '#888', marginTop: '10px' }}>@{user.username}</div>
-							</div>
-							<div style={{ width: '100%', borderTop: '2px solid #444', paddingTop: '15px', marginTop: '10px' }}>
-								<div style={{ fontSize: '10px', color: '#888', marginBottom: '10px' }}>BIO</div>
-								<div style={{ fontSize: '12px', lineHeight: '1.5', color: '#ccc' }}>
-									{user.bio || "No bio set."}
-								</div>
-							</div>
-						</div>
-
-						{/* スタッツ */}
-						<div className="arcade-panel" style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-							<div style={{ fontSize: '14px', color: 'white', borderBottom: '4px solid #444', paddingBottom: '10px' }}>STATS</div>
-							{[
-								{ label: "GAMES", value: stats.totalGames, color: "#00f5ff" },
-								{ label: "WINS", value: stats.wins, color: "#4caf50" },
-								{ label: "LOSSES", value: stats.losses, color: "#f44336" },
-								{ label: "WIN RATE", value: `${stats.winRate}%`, color: "#ff00aa" },
-								{ label: "BEST APM", value: stats.bestApm, color: "#bf00ff" },
-								{ label: "BEST STREAK", value: stats.bestWinStreak, color: "#00f5ff" },
-							].map(s => (
-								<div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #222', paddingBottom: '10px' }}>
-									<span style={{ fontSize: '12px', color: '#aaa' }}>{s.label}</span>
-									<span style={{ fontSize: '14px', color: s.color, fontWeight: 'bold' }}>{s.value}</span>
-								</div>
-							))}
-						</div>
-
-						{/* アバターピッカー */}
-						<div className="arcade-panel" style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-							<div style={{ fontSize: '14px', color: 'white', borderBottom: '4px solid #444', paddingBottom: '10px' }}>AVATAR</div>
-							
-							<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-								<label style={{ 
-									cursor: 'pointer', backgroundColor: '#3498db', color: 'white', 
-									padding: '10px', textAlign: 'center', borderRadius: '4px',
-									fontFamily: "'Press Start 2P', monospace", fontSize: '10px',
-									border: '2px solid white', boxShadow: '2px 2px 0px #000'
-								}}>
-									UPLOAD CUSTOM IMAGE
-									<input 
-										type="file" 
-										accept="image/png, image/jpeg, image/gif, image/webp" 
-										style={{ display: 'none' }} 
-										onChange={handleAvatarUpload}
-									/>
-								</label>
-								<div style={{ fontSize: '10px', color: '#888', textAlign: 'center' }}>
-									Max: 2MB (JPG/PNG/GIF/WebP)
-								</div>
-							</div>
-
-							<div style={{ marginTop: '10px', fontSize: '12px', color: '#ccc' }}>Or choose a preset:</div>
-							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-								{AVATAR_PRESETS.map((p, i) => {
-									const selected = isPreset ? presetIndex === i : (!photoUrl && i === 0);
-									return (
-										<div key={i} style={{ 
-											display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
-											padding: '10px', backgroundColor: selected ? 'rgba(255,255,255,0.1)' : '#111',
-											border: `2px solid ${selected ? p.color : '#333'}`,
-											cursor: 'pointer'
-										}} onClick={async () => {
-											try {
-												const token = localStorage.getItem('token');
-												await fetch('/api/users/me', {
-													method: 'PATCH',
-													headers: { 
-														'Content-Type': 'application/json',
-														Authorization: `Bearer ${token}` 
-													},
-													body: JSON.stringify({ avatarUrl: `preset:${i}` })
-												});
-												setUser((prev: any) => ({ ...prev, avatarUrl: `preset:${i}` }));
-											} catch {
-												setError('Failed to update avatar.');
-											}
-										}}>
-											<AvatarIcon color={p.color} symbol={p.symbol} size={32} />
-										</div>
-									)
-								})}
-							</div>
-						</div>
-
-					</div>
-
-					<Progression />
-					<RecentBattles games={games} />
-				</div>
-			</div>
-
-			{/* Cropper Modal */}
-			{imageSrc && (
-				<div style={{
-					position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-					backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999,
-					display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-				}}>
-					<div style={{ position: 'relative', width: '80%', height: '60%', backgroundColor: '#333', border: '4px solid #555' }}>
-						<Cropper
-							image={imageSrc}
-							crop={crop}
-							zoom={zoom}
-							aspect={1}
-							onCropChange={setCrop}
-							onCropComplete={onCropComplete}
-							onZoomChange={setZoom}
-						/>
-					</div>
-					<div style={{ marginTop: '20px', width: '80%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-							<span style={{ color: 'white', fontSize: '12px', fontFamily: "'Press Start 2P', monospace" }}>ZOOM</span>
-							<input
-								type="range"
-								value={zoom}
-								min={1}
-								max={3}
-								step={0.1}
-								aria-labelledby="Zoom"
-								onChange={(e) => setZoom(Number(e.target.value))}
-								style={{ flex: 1 }}
-							/>
-						</div>
-						<div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
-							<button 
-								onClick={() => setImageSrc(null)}
-								style={{ 
-									flex: 1, padding: '15px', backgroundColor: '#e74c3c', color: 'white', 
-									fontFamily: "'Press Start 2P', monospace", border: '2px solid white', 
-									cursor: 'pointer', boxShadow: '4px 4px 0px #000' 
-								}}
-							>
-								CANCEL
-							</button>
-							<button 
-								onClick={uploadCroppedImage}
-								disabled={loading}
-								style={{ 
-									flex: 1, padding: '15px', backgroundColor: '#4caf50', color: 'white', 
-									fontFamily: "'Press Start 2P', monospace", border: '2px solid white', 
-									cursor: 'pointer', boxShadow: '4px 4px 0px #000' 
-								}}
-							>
-								{loading ? 'UPLOADING...' : 'CROP & UPLOAD'}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-		</div>
-	)
+    {imageSrc && <div className="profile-cropper" role="dialog" aria-modal="true" aria-label="Crop avatar">
+      <div className="profile-cropper-stage"><Cropper image={imageSrc} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop}
+        onCropComplete={(_area, pixels) => setCroppedAreaPixels(pixels)} onZoomChange={setZoom} /></div>
+      <label>ZOOM <input type="range" value={zoom} min={1} max={3} step={0.1} onChange={event => setZoom(Number(event.target.value))} /></label>
+      <div className="profile-modal-actions"><DsButton onClick={() => setImageSrc(null)}>CANCEL</DsButton><DsButton disabled={saving} onClick={uploadCroppedImage}>{saving ? 'UPLOADING…' : 'CROP & UPLOAD'}</DsButton></div>
+    </div>}
+  </div>;
 }
