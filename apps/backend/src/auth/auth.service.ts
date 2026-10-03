@@ -20,7 +20,6 @@ export const OAUTH_EMAIL_CONFLICT = 'oauth_email_conflict';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly SALT_ROUNDS = 12;
-  private readonly OTP_TTL = Number(process.env.OTP_EXPIRES_MINUTES ?? 10) * 60;
   private readonly TEMP_TOKEN_TTL = 300; // 5分
 
   constructor(

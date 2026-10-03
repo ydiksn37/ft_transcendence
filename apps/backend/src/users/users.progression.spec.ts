@@ -1,17 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 import { GAME_ACHIEVEMENTS } from '../game/achievements';
 
 describe('user progression', () => {
   const findUnique = jest.fn();
-  const service = new UsersService(
-    { user: { findUnique } } as unknown as PrismaService,
-    {} as RedisService,
-    {} as MailService,
-  );
+  const service = new UsersService({
+    user: { findUnique },
+  } as unknown as PrismaService);
   beforeEach(() => jest.resetAllMocks());
 
   it('returns defaults and all locked goals for an account without statistics', async () => {

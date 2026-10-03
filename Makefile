@@ -192,7 +192,7 @@ test-cov: ## テストカバレッジを測定する
 	npm run test:cov
 
 # --- インフラ & セキュリティテスト ---
-vault-init: ## 開発用Vaultを初期化・unsealし、.envの秘密情報を同期する
+vault-init: ## 開発用の秘密ファイルを生成し、Vaultを初期化・同期する
 	VAULT_ENV=development ./tools/vault-init.sh
 
 prod-vault-init: ## 本番構成のVaultを初期化・unsealし、秘密情報とbackend用トークンを用意する

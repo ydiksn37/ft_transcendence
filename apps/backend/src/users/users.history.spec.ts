@@ -2,17 +2,13 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { SearchHistoryDto } from './dto/user.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 
 describe('history UTC date filters', () => {
   const findMany = jest.fn().mockResolvedValue([]);
   const count = jest.fn().mockResolvedValue(0);
-  const service = new UsersService(
-    { gameResult: { findMany, count } } as unknown as PrismaService,
-    {} as RedisService,
-    {} as MailService,
-  );
+  const service = new UsersService({
+    gameResult: { findMany, count },
+  } as unknown as PrismaService);
   const pipe = new ValidationPipe({
     transform: true,
     whitelist: true,
