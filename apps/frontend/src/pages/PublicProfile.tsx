@@ -15,9 +15,14 @@ export default function PublicProfile() {
 function ProfileDetails({ id }: { id: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const requestedSearchReturnTo = (location.state as { searchReturnTo?: unknown } | null)?.searchReturnTo;
-  const searchReturnTo = typeof requestedSearchReturnTo === 'string' && requestedSearchReturnTo.startsWith('/') && !requestedSearchReturnTo.startsWith('//')
-    ? requestedSearchReturnTo : '/profile?tab=overview';
+  const navigationState = location.state as { returnTo?: unknown; returnLabel?: unknown; returnState?: unknown } | null;
+  const requestedReturnTo = navigationState?.returnTo;
+  const returnTo = typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//')
+    ? requestedReturnTo : '/search';
+  const returnLabel = typeof navigationState?.returnLabel === 'string' && ['SEARCH', 'FRIENDS', 'CHAT'].includes(navigationState.returnLabel)
+    ? navigationState.returnLabel : 'SEARCH';
+  const returnState = navigationState?.returnState && typeof navigationState.returnState === 'object'
+    ? navigationState.returnState : undefined;
   const [data, setData] = useState<Awaited<ReturnType<typeof loadPublicProfile>> | null>(null);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -65,9 +70,9 @@ function ProfileDetails({ id }: { id: string }) {
     ? Number(user.avatarUrl.slice(7)) : 0);
   const friend = data?.friendship;
   return <main className="dashboard-container public-profile-page">
-    <div className="dashboard-header"><button className="back-btn" onClick={() => navigate('/search', {
-      replace: true, state: { returnTo: searchReturnTo },
-    })}>◀ BACK TO SEARCH</button></div>
+    <div className="dashboard-header"><button className="back-btn" onClick={() => navigate(returnTo, {
+      replace: true, state: returnState,
+    })}>◀ BACK TO {returnLabel}</button></div>
     <div className="dashboard-content public-profile-content">
       {error ? <div role="alert" className="arcade-panel">{error}
         <button className="nav-btn" onClick={() => setRevision(value => value + 1)}>RETRY</button>

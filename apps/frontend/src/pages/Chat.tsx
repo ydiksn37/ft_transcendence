@@ -6,6 +6,7 @@ import { io, Socket } from "socket.io-client";
 import { AvatarIcon } from "@/components/UI/AvatarIcon";
 import { getAvatarPreset } from "@/lib/avatarPresets";
 import '../pages/Dashboard.css'
+import './ProfileLinks.css'
 
 export default function Chat() {
 	const navigate = useNavigate();
@@ -21,6 +22,17 @@ export default function Chat() {
 	const [messages, setMessages] = useState<any[]>([]);
 	const [inputText, setInputText] = useState("");
 	const [socket, setSocket] = useState<Socket | null>(null);
+	const openProfile = (id: string) => {
+		if (!id) return;
+		const params = new URLSearchParams();
+		if (activeRoomId) params.set('room', activeRoomId);
+		if (mode) params.set('mode', mode);
+		const query = params.toString();
+		navigate(`/profile/${id}`, { state: {
+			returnTo: `/chat${query ? `?${query}` : ''}`,
+			returnLabel: 'CHAT',
+		} });
+	};
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -158,9 +170,11 @@ export default function Chat() {
 							const preset = getAvatarPreset(m.sender.avatarId || m.sender.id?.charCodeAt(0) % 8 || 0);
 							return (
 								<div key={m.id} style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
-									<AvatarIcon color={preset.color} symbol={preset.symbol} photo={m.sender.avatarUrl} size={32} />
+									<button type="button" className="user-profile-avatar" onClick={() => openProfile(m.sender.id)} aria-label={`View ${m.sender.displayName || m.sender.username}'s profile`}>
+										<AvatarIcon color={preset.color} symbol={preset.symbol} photo={m.sender.avatarUrl} size={32} />
+									</button>
 									<div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
-										<div style={{ fontSize: '10px', color: '#888', marginBottom: '5px' }}>{m.sender.displayName || m.sender.username}</div>
+										<button type="button" className="user-profile-name chat-profile-name" onClick={() => openProfile(m.sender.id)}>{m.sender.displayName || m.sender.username}</button>
 										<div style={{ 
 											backgroundColor: isMe ? '#e91e63' : '#333',
 											color: 'white',

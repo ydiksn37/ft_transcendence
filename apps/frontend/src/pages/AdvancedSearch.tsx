@@ -80,7 +80,11 @@ export default function AdvancedSearch() {
   };
 
   const handleUserClick = (id: string) => {
-    navigate(`/profile/${id}`, { state: { searchReturnTo: returnTo } });
+    navigate(`/profile/${id}`, { state: {
+      returnTo: `${location.pathname}${location.search}`,
+      returnLabel: 'SEARCH',
+      returnState: { returnTo },
+    } });
   };
 
   const inputStyle = {

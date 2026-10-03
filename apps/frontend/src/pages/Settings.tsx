@@ -13,14 +13,6 @@ interface ApiKey {
   createdAt: string;
 }
 
-interface ImportedArchiveRow {
-  id: string;
-  playedAt: string;
-  mode: string;
-  result: string;
-  opponent: string | null;
-}
-
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,7 +31,6 @@ export default function Settings() {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(user?.twoFactorEnabled || false);
-  const [archiveRows, setArchiveRows] = useState<ImportedArchiveRow[]>([]);
   const [operationError, setOperationError] = useState('');
 
   const handleGenerate2FA = async () => {
@@ -159,15 +150,6 @@ export default function Settings() {
 
   useEffect(() => {
     fetchApiKeys();
-    const token = localStorage.getItem('token');
-    if (token) {
-      void fetch('/api/users/me/export/archive', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(response => response.ok ? response.json() : [])
-        .then(rows => setArchiveRows(Array.isArray(rows) ? rows : []))
-        .catch(() => setArchiveRows([]));
-    }
   }, []);
 
   const handleCreateApiKey = async () => {
@@ -301,52 +283,6 @@ export default function Settings() {
     }
   };
 
-  const handleImportArchive = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,.csv,application/json,text/csv';
-    input.onchange = async event => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      if (file.size > 1_000_000) {
-        setOperationError('Archive file must not exceed 1 MB.');
-        return;
-      }
-      const format = file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
-      const data = await file.text();
-      const token = localStorage.getItem('token');
-      try {
-        const previewResponse = await fetch('/api/users/me/export/archive/preview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ format, data }),
-        });
-        const preview = await previewResponse.json();
-        if (!previewResponse.ok || preview.invalidRows > 0) {
-          const errors = Array.isArray(preview.errors)
-            ? preview.errors.map((item: { row: number; errors: string[] }) => `Row ${item.row}: ${item.errors.join(', ')}`).join('\n')
-            : preview.message;
-          alert(`Archive validation failed:\n${errors || previewResponse.status}`);
-          return;
-        }
-        if (!window.confirm(`Import ${preview.validRows} private archive rows?\n\n${preview.note}`)) return;
-        const response = await fetch('/api/users/me/export/archive/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ format, data }),
-        });
-        if (!response.ok) throw new Error('Archive import failed');
-        const rowsResponse = await fetch('/api/users/me/export/archive', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setArchiveRows(rowsResponse.ok ? await rowsResponse.json() : []);
-      } catch {
-        alert('Archive import failed. Check the file and connection.');
-      }
-    };
-    input.click();
-  };
-
   const handleDeleteAccount = async () => {
     const password = window.prompt(
       'Enter your current password. Leave it blank for an OAuth-only account.'
@@ -469,18 +405,6 @@ export default function Settings() {
 
       <div style={{ width: '100%', maxWidth: '900px' }}>
         {operationError && <p role="alert" style={{ color: '#ff6b6b' }}>{operationError}</p>}
-        <div style={panelStyle}>
-          <h2>PRIVATE GAME ARCHIVE</h2>
-          <p>Import up to 500 JSON/CSV rows. Archive rows never affect rank, XP, achievements, or official match history.</p>
-          <button style={buttonStyle} onClick={handleImportArchive}>PREVIEW &amp; IMPORT ARCHIVE</button>
-          <p>{archiveRows.length} archived match{archiveRows.length === 1 ? '' : 'es'}</p>
-          {archiveRows.slice(0, 5).map(row => (
-            <div key={row.id} style={{ fontSize: '10px', marginTop: '8px' }}>
-              {new Date(row.playedAt).toLocaleDateString()} · {row.mode} · {row.result}{row.opponent ? ` · ${row.opponent}` : ''}
-            </div>
-          ))}
-        </div>
-        
         {/* PUBLIC API KEYS SECTION */}
         <div style={panelStyle}>
           <h2 style={{ fontSize: '16px', color: '#3498db', marginBottom: '20px', borderBottom: '2px solid #444', paddingBottom: '10px' }}>PUBLIC API KEYS</h2>

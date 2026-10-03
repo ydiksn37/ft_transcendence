@@ -5,12 +5,17 @@ import { AvatarIcon } from "@/components/UI/AvatarIcon";
 import { getAvatarPreset } from "@/lib/avatarPresets";
 import { io } from "socket.io-client";
 import '../pages/Dashboard.css'
+import './ProfileLinks.css'
 
 export default function Friends() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const mode = new URLSearchParams(location.search).get('mode');
 	const { keyConfig } = useConfig();
+	const openProfile = (id: string) => navigate(`/profile/${id}`, { state: {
+		returnTo: `${location.pathname}${location.search}`,
+		returnLabel: 'FRIENDS',
+	} });
 
 	const [friendships, setFriendships] = useState<any[]>([]);
 	const [search, setSearch] = useState("");
@@ -238,11 +243,13 @@ export default function Friends() {
 								const preset = getAvatarPreset(f.avatarId || f.id?.charCodeAt(0) % 8 || 0);
 								return (
 									<div key={f.id} className="friend-item" style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: '#1a1a1a', border: '2px solid #333' }}>
-										<AvatarIcon color={preset.color} symbol={preset.symbol} photo={f.avatarUrl} size={48} />
-										<div style={{ flex: 1, minWidth: '120px' }}>
+										<button type="button" className="user-profile-link friend-profile-link" onClick={() => openProfile(f.id)} aria-label={`View ${f.displayName || f.username}'s profile`}>
+											<AvatarIcon color={preset.color} symbol={preset.symbol} photo={f.avatarUrl} size={48} />
+											<div style={{ flex: 1, minWidth: '120px' }}>
 											<div style={{ fontSize: '16px', fontWeight: 'bold' }}>{f.displayName || f.username}</div>
 											<div style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>@{f.username}</div>
-										</div>
+											</div>
+										</button>
 										<div className="friend-actions" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
 											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 												<div style={{ width: '10px', height: '10px', backgroundColor: f.isOnline ? '#4caf50' : '#555', borderRadius: '50%', boxShadow: f.isOnline ? '0 0 10px #4caf50' : 'none' }} />
@@ -347,7 +354,7 @@ export default function Friends() {
 								{pendingRequests.map(r => (
 									<div key={r.friendshipId} style={{ padding: '10px', backgroundColor: '#1a1a1a', border: '2px solid #333', display: 'flex', flexDirection: 'column', gap: '10px', boxSizing: 'border-box' }}>
 										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-											<span style={{ fontSize: '12px', wordBreak: 'break-all' }}>@{r.username}</span>
+											<button type="button" className="user-profile-name" onClick={() => openProfile(r.id)}>@{r.username}</button>
 										</div>
 										<div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
 											{r.type === 'incoming' ? (

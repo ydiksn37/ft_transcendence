@@ -1,0 +1,61 @@
+.user-profile-link,
+.user-profile-avatar,
+.user-profile-name {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.user-profile-link {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.friend-profile-link {
+  flex: 1 1 auto;
+}
+
+.user-profile-avatar {
+  flex: none;
+  padding: 0;
+  line-height: 0;
+}
+
+.user-profile-name {
+  padding: 2px 0;
+  color: #ddd;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.chat-profile-name {
+  margin-bottom: 5px;
+  color: #888;
+  font-size: 10px;
+}
+
+.user-profile-link:hover .user-profile-name,
+.user-profile-name:hover,
+.user-profile-link:focus-visible,
+.user-profile-avatar:focus-visible,
+.user-profile-name:focus-visible {
+  color: #00f5ff;
+  text-decoration-color: currentColor;
+  outline: 2px solid #00f5ff;
+  outline-offset: 3px;
+}
+
+@media (max-width: 768px) {
+  .friend-profile-link {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+}

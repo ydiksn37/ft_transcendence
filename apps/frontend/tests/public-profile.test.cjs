@@ -68,7 +68,9 @@ test('profile requests propagate cancellation', async () => {
   await assert.rejects(service.loadPublicProfile('other', 'token', controller.signal), /aborted/);
 });
 
-function render(friendship, self = false, error = '') {
+function render(friendship, self = false, error = '', navigationState = {
+  returnTo: '/search', returnLabel: 'SEARCH', returnState: { returnTo: '/profile?tab=overview' },
+}) {
   let stateIndex = 0;
   const actions = [];
   const navigations = [];
@@ -84,7 +86,7 @@ function render(friendship, self = false, error = '') {
       if (name === 'react/jsx-runtime') return require(name);
       if (name === 'react-router-dom') return {
         useParams: () => ({ id: 'other' }),
-        useLocation: () => ({ state: { searchReturnTo: '/profile?tab=overview' } }),
+        useLocation: () => ({ state: navigationState }),
         useNavigate: () => (...args) => navigations.push(args), Link: 'a',
       };
       if (name.includes('avatarPresets')) return { getAvatarPreset: () => ({ color: 'cyan', symbol: 'T' }) };
@@ -128,6 +130,20 @@ test('profile friend controls use user IDs for removal and friendship IDs for re
   }
 });
 
+test('public profile returns directly to friends or the selected chat room', () => {
+  for (const [returnTo, returnLabel] of [
+    ['/friends?mode=MULTI_PLAY', 'FRIENDS'],
+    ['/chat?room=global&mode=MULTI_PLAY', 'CHAT'],
+  ]) {
+    const view = render(null, false, '', { returnTo, returnLabel });
+    const back = view.nodes.find(node => node.type === 'button' && node.props.className === 'back-btn');
+    assert.equal(back.props.children.join(''), `◀ BACK TO ${returnLabel}`);
+    back.props.onClick();
+    assert.equal(view.navigations[0][0], returnTo);
+    assert.equal(view.navigations[0][1].replace, true);
+  }
+});
+
 test('own profile has no self-friend action; missing user shows an error instead of a spinner', () => {
   const own = render(null, true);
   assert.ok(own.nodes.some(node => node.props?.to === '/profile?tab=overview'));
@@ -139,7 +155,7 @@ test('own profile has no self-friend action; missing user shows an error instead
 
 test('back to search replaces the public profile and preserves the search origin', () => {
   const view = render(null);
-  const back = view.nodes.find(node => node.type === 'button' && node.props.children === '◀ BACK TO SEARCH');
+  const back = view.nodes.find(node => node.type === 'button' && node.props.className === 'back-btn');
   back.props.onClick();
   assert.equal(view.navigations[0][0], '/search');
   assert.equal(view.navigations[0][1].replace, true);
