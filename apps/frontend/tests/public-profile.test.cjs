@@ -71,6 +71,7 @@ test('profile requests propagate cancellation', async () => {
 function render(friendship, self = false, error = '') {
   let stateIndex = 0;
   const actions = [];
+  const navigations = [];
   const data = { user, games: [], me: { id: self ? 'other' : 'me' }, friendship };
   const page = compile('pages/PublicProfile.tsx', {
     AbortController,
@@ -81,7 +82,11 @@ function render(friendship, self = false, error = '') {
         useState(initial) { return [stateIndex++ === 0 ? data : stateIndex === 2 ? error : initial, () => {}]; },
       };
       if (name === 'react/jsx-runtime') return require(name);
-      if (name === 'react-router-dom') return { useParams: () => ({ id: 'other' }), useNavigate: () => () => {}, Link: 'a' };
+      if (name === 'react-router-dom') return {
+        useParams: () => ({ id: 'other' }),
+        useLocation: () => ({ state: { searchReturnTo: '/profile?tab=overview' } }),
+        useNavigate: () => (...args) => navigations.push(args), Link: 'a',
+      };
       if (name.includes('avatarPresets')) return { getAvatarPreset: () => ({ color: 'cyan', symbol: 'T' }) };
       if (name.includes('AvatarIcon')) return { AvatarIcon: 'avatar' };
       if (name.includes('RecentBattles')) return { RecentBattles: 'history' };
@@ -102,7 +107,7 @@ function render(friendship, self = false, error = '') {
     visit(node.props?.children);
   }
   visit(tree);
-  return { nodes, actions };
+  return { nodes, actions, navigations };
 }
 
 test('profile friend controls use user IDs for removal and friendship IDs for responses', async () => {
@@ -125,9 +130,18 @@ test('profile friend controls use user IDs for removal and friendship IDs for re
 
 test('own profile has no self-friend action; missing user shows an error instead of a spinner', () => {
   const own = render(null, true);
-  assert.ok(own.nodes.some(node => node.props?.to === '/profile'));
+  assert.ok(own.nodes.some(node => node.props?.to === '/profile?tab=overview'));
   assert.ok(!own.nodes.some(node => node.props?.children === 'ADD FRIEND'));
   const missing = render(null, false, 'User not found.');
   assert.ok(missing.nodes.some(node => node.props?.role === 'alert'));
   assert.ok(!missing.nodes.some(node => node.props?.role === 'status'));
+});
+
+test('back to search replaces the public profile and preserves the search origin', () => {
+  const view = render(null);
+  const back = view.nodes.find(node => node.type === 'button' && node.props.children === '◀ BACK TO SEARCH');
+  back.props.onClick();
+  assert.equal(view.navigations[0][0], '/search');
+  assert.equal(view.navigations[0][1].replace, true);
+  assert.equal(view.navigations[0][1].state.returnTo, '/profile?tab=overview');
 });

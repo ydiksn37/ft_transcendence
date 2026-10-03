@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AvatarIcon } from '@/components/UI/AvatarIcon';
 import { getAvatarPreset } from '@/lib/avatarPresets';
 import '../pages/Dashboard.css';
@@ -21,6 +21,10 @@ interface UserResult {
 
 export default function AdvancedSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const requestedReturnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  const returnTo = typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//')
+    ? requestedReturnTo : '/profile?tab=overview';
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
   const [sortBy, setSortBy] = useState<'RANK_POINTS_DESC' | 'WIN_RATE_DESC' | 'WIN_RATE_ASC' | 'GAMES_DESC'>('RANK_POINTS_DESC');
@@ -76,7 +80,7 @@ export default function AdvancedSearch() {
   };
 
   const handleUserClick = (id: string) => {
-    navigate(`/profile/${id}`);
+    navigate(`/profile/${id}`, { state: { searchReturnTo: returnTo } });
   };
 
   const inputStyle = {
@@ -91,7 +95,7 @@ export default function AdvancedSearch() {
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>
+        <button className="back-btn" onClick={() => navigate(returnTo, { replace: true })}>
           ◀ BACK
         </button>
       </div>

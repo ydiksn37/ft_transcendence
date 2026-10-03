@@ -257,7 +257,7 @@ export default function Profile() {
           <DsButton onClick={() => navigate(withMode('/settings'))}>SETTINGS</DsButton>
           <DsButton onClick={() => navigate(withMode('/chat'))}>GLOBAL CHAT</DsButton>
           <DsButton onClick={() => navigate(withMode('/friends'))}>FRIENDS</DsButton>
-          <DsButton onClick={() => navigate('/search')}>SEARCH USERS</DsButton>
+          <DsButton onClick={() => navigate('/search', { state: { returnTo: `${location.pathname}${location.search}` } })}>SEARCH USERS</DsButton>
         </nav>
       </section>}
 

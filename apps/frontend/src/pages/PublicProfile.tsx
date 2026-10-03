@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AvatarIcon } from '@/components/UI/AvatarIcon';
 import { RecentBattles } from '@/components/dashboard/RecentBattles';
 import { getAvatarPreset } from '@/lib/avatarPresets';
 import { loadPublicProfile, profileRequest, ProfileRequestError } from '@/lib/publicProfile';
 import './Dashboard.css';
+import './PublicProfile.css';
 
 export default function PublicProfile() {
   const { id = '' } = useParams();
@@ -13,6 +14,10 @@ export default function PublicProfile() {
 
 function ProfileDetails({ id }: { id: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const requestedSearchReturnTo = (location.state as { searchReturnTo?: unknown } | null)?.searchReturnTo;
+  const searchReturnTo = typeof requestedSearchReturnTo === 'string' && requestedSearchReturnTo.startsWith('/') && !requestedSearchReturnTo.startsWith('//')
+    ? requestedSearchReturnTo : '/profile?tab=overview';
   const [data, setData] = useState<Awaited<ReturnType<typeof loadPublicProfile>> | null>(null);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -59,47 +64,55 @@ function ProfileDetails({ id }: { id: string }) {
   const preset = getAvatarPreset(user?.avatarUrl?.startsWith('preset:')
     ? Number(user.avatarUrl.slice(7)) : 0);
   const friend = data?.friendship;
-  return <main className="dashboard-container">
-    <div className="dashboard-header"><Link className="back-btn" to="/search">◀ BACK TO SEARCH</Link></div>
-    <div className="dashboard-content">
+  return <main className="dashboard-container public-profile-page">
+    <div className="dashboard-header"><button className="back-btn" onClick={() => navigate('/search', {
+      replace: true, state: { returnTo: searchReturnTo },
+    })}>◀ BACK TO SEARCH</button></div>
+    <div className="dashboard-content public-profile-content">
       {error ? <div role="alert" className="arcade-panel">{error}
         <button className="nav-btn" onClick={() => setRevision(value => value + 1)}>RETRY</button>
       </div> : !data || !user ? <p role="status">LOADING...</p> : <>
         <h1 className="dashboard-title">PLAYER PROFILE</h1>
-        <section className="arcade-panel" style={{ gap: 16 }}>
-          <AvatarIcon color={preset.color} symbol={preset.symbol} size={96}
-            photo={user.avatarUrl?.startsWith('preset:') ? undefined : user.avatarUrl ?? undefined} />
-          <h2>{user.displayName || user.username}</h2>
-          <p>@{user.username}</p>
-          <p aria-label="Online status">{user.isOnline ? 'ONLINE' : 'OFFLINE'}</p>
-          <p>{user.bio || 'No bio set.'}</p>
-          {data.me.id === user.id ? <Link to="/profile">EDIT MY PROFILE</Link> :
-            <div aria-label="Friend actions">
-              {!friend || friend.status === 'REJECTED' ?
-                <button disabled={busy} onClick={() => act('friends/request', 'POST', { addresseeId: user.id })}>ADD FRIEND</button> :
-                friend.status === 'ACCEPTED' ? <>
-                  <span>FRIENDS </span>
-                  <button disabled={busy} onClick={() => act(`friends/${user.id}`, 'DELETE')}>REMOVE FRIEND</button>
-                </> : friend.addresseeId === data.me.id ? <>
-                  <button disabled={busy} onClick={() => act(`friends/${friend.id}`, 'PATCH', { accept: true })}>ACCEPT</button>
-                  <button disabled={busy} onClick={() => act(`friends/${friend.id}`, 'PATCH', { accept: false })}>DECLINE</button>
-                </> : <>
-                  <span>REQUEST PENDING </span>
-                  <button disabled={busy} onClick={() => act(`friends/${user.id}`, 'DELETE')}>CANCEL REQUEST</button>
-                </>}
-            </div>}
-          {actionError && <p role="alert">{actionError}</p>}
-        </section>
-        <section className="arcade-panel" aria-label="Player statistics">
-          <h2>STATS</h2>
-          {user.stats ? <dl>
-            <dt>GAMES</dt><dd>{user.stats.totalGames}</dd>
-            <dt>WINS / LOSSES</dt><dd>{user.stats.wins} / {user.stats.losses}</dd>
-            <dt>WIN RATE</dt><dd>{Number(user.stats.winRate).toFixed(1)}%</dd>
-            <dt>BEST APM / PPS</dt><dd>{Number(user.stats.bestApm).toFixed(1)} / {Number(user.stats.bestPps).toFixed(2)}</dd>
-          </dl> : <p>No statistics yet.</p>}
-        </section>
-        <RecentBattles games={data.games} />
+        <div className="public-profile-grid">
+          <section className="arcade-panel public-profile-card">
+            <div className="public-profile-hero">
+              <AvatarIcon color={preset.color} symbol={preset.symbol} size={112}
+                photo={user.avatarUrl?.startsWith('preset:') ? undefined : user.avatarUrl ?? undefined} />
+              <div className="public-profile-identity">
+                <h2>{user.displayName || user.username}</h2>
+                <p>@{user.username}</p>
+                <span className={`public-profile-status ${user.isOnline ? 'is-online' : ''}`} aria-label="Online status">
+                  <i />{user.isOnline ? 'ONLINE' : 'OFFLINE'}
+                </span>
+              </div>
+            </div>
+            <div className="public-profile-bio"><span>BIO</span><p>{user.bio || 'No bio set.'}</p></div>
+            <div className="public-profile-actions" aria-label="Friend actions">
+              {data.me.id === user.id ? <Link className="public-profile-action" to="/profile?tab=overview">EDIT MY PROFILE</Link> :
+                !friend || friend.status === 'REJECTED' ?
+                  <button disabled={busy} onClick={() => act('friends/request', 'POST', { addresseeId: user.id })}>ADD FRIEND</button> :
+                  friend.status === 'ACCEPTED' ? <><span>✓ FRIENDS</span><button disabled={busy} onClick={() => act(`friends/${user.id}`, 'DELETE')}>REMOVE FRIEND</button></> :
+                  friend.addresseeId === data.me.id ? <><button disabled={busy} onClick={() => act(`friends/${friend.id}`, 'PATCH', { accept: true })}>ACCEPT</button>
+                    <button disabled={busy} onClick={() => act(`friends/${friend.id}`, 'PATCH', { accept: false })}>DECLINE</button></> :
+                    <><span>REQUEST PENDING</span><button disabled={busy} onClick={() => act(`friends/${user.id}`, 'DELETE')}>CANCEL REQUEST</button></>}
+            </div>
+            {actionError && <p role="alert" className="public-profile-action-error">{actionError}</p>}
+          </section>
+          <section className="arcade-panel public-profile-stats" aria-label="Player statistics">
+            <div className="public-profile-section-heading"><h2>PERFORMANCE</h2><span>{user.stats?.rank ?? 'UNRANKED'}</span></div>
+            {user.stats ? <dl>
+              <div><dt>GAMES</dt><dd>{user.stats.totalGames}</dd></div>
+              <div><dt>WIN RATE</dt><dd>{Number(user.stats.winRate).toFixed(1)}%</dd></div>
+              <div><dt>WINS</dt><dd>{user.stats.wins}</dd></div>
+              <div><dt>LOSSES</dt><dd>{user.stats.losses}</dd></div>
+              <div><dt>BEST APM</dt><dd>{Number(user.stats.bestApm).toFixed(1)}</dd></div>
+              <div><dt>BEST PPS</dt><dd>{Number(user.stats.bestPps).toFixed(2)}</dd></div>
+              <div><dt>BEST STREAK</dt><dd>{user.stats.bestWinStreak}</dd></div>
+              <div><dt>RANK POINTS</dt><dd>{user.stats.rankPoints}</dd></div>
+            </dl> : <p className="public-profile-empty">No statistics yet.</p>}
+          </section>
+          <section className="public-profile-history" aria-label="Recent battles"><RecentBattles games={data.games} /></section>
+        </div>
       </>}
     </div>
   </main>;
