@@ -53,7 +53,10 @@ seed: ## データベースに初期データ(Seed)を投入する (ホスト側
 	npm run db:seed
 
 studio: ## Prisma Studioを起動してDBを閲覧・編集する (ホスト側)
-	npx prisma studio --schema apps/backend/prisma/schema.prisma
+	@test -s secrets/dev/postgres_password.txt || { echo "Run 'make vault-init' first"; exit 1; }
+	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+		DATABASE_URL="postgresql://$${POSTGRES_USER:-transcendence}:$$(cat secrets/dev/postgres_password.txt)@127.0.0.1:$${POSTGRES_PORT:-54320}/$${POSTGRES_DB:-transcendence_db}?schema=public" \
+		npm exec --workspace apps/backend -- prisma studio --schema prisma/schema.prisma
 
 install: ## 依存パッケージをすべてインストールする
 	npm install
