@@ -21,7 +21,7 @@ export function MinoSkinPicker({ value, onChange }: { value: Skin; onChange: (sk
         ))}
       </div>
       <div role="img" aria-label={`${value} skin preview: I, J, L, O, S, T, Z`} style={{ width: '100%', maxWidth: 400, margin: '0 auto' }}>
-        <Stage width={400} height={180} options={{ backgroundColor: 0x111111, antialias: true }} style={{ width: '100%', height: 'auto', display: 'block' }}>
+        <Stage width={400} height={180} options={{ backgroundColor: 0x111111, antialias: true, resolution: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1 }} style={{ width: '100%', height: 'auto', display: 'block' }}>
           {pieces.map((piece, index) => {
             const shape = TETROMINOS[piece].shape;
             const cells = shape.flatMap((row, y) => row.flatMap((cell, x) => cell === 0 ? [] : [{ x, y }]));

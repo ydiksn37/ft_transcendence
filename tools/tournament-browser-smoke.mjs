@@ -1,7 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { readFile, access } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
+import { attachBrowserDiagnostics, findChrome } from './browser-test-utils.mjs';
 
 const baseUrl = process.env.BROWSER_BASE_URL ?? 'https://localhost:8443';
 const envText = await readFile(new URL('../.env', import.meta.url), 'utf8');
@@ -25,24 +26,6 @@ const requireFromBackend = createRequire(new URL('../apps/backend/package.json',
 const { PrismaClient } = requireFromBackend('@prisma/client');
 const prisma = new PrismaClient({ datasourceUrl: databaseUrl.toString() });
 
-const candidates = [
-  process.env.CHROME_BIN,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-].filter(Boolean);
-let executablePath;
-for (const candidate of candidates) {
-  try {
-    await access(candidate);
-    executablePath = candidate;
-    break;
-  } catch {
-    // Try the next platform-specific Chrome location.
-  }
-}
-if (!executablePath) throw new Error('Chrome was not found; set CHROME_BIN');
-
 const suffix = Date.now().toString(36);
 const roomName = `Chrome tournament ${suffix}`;
 const users = Array.from({ length: 4 }, (_, index) => ({
@@ -63,7 +46,7 @@ const signJwt = user => {
 };
 
 const browser = await chromium.launch({
-  executablePath,
+  executablePath: await findChrome(),
   headless: true,
   args: ['--ignore-certificate-errors', '--use-angle=swiftshader'],
 });
@@ -129,20 +112,7 @@ try {
       localStorage.setItem('user', JSON.stringify(storedUser));
     }, { token: signJwt(user), storedUser: user });
     const page = await context.newPage();
-    page.on('console', message => {
-      const ignoredGpuWarning = message.type() === 'warning'
-        && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
-      if (!ignoredGpuWarning && (message.type() === 'warning' || message.type() === 'error')) {
-        diagnostics.push(`player ${index + 1} console.${message.type()}: ${message.text()}`);
-      }
-    });
-    page.on('pageerror', error => diagnostics.push(`player ${index + 1} pageerror: ${error.message}`));
-    page.on('request', request => {
-      const protocol = new URL(request.url()).protocol;
-      if (protocol === 'http:' || protocol === 'ws:') {
-        diagnostics.push(`player ${index + 1} mixed-content request: ${request.url()}`);
-      }
-    });
+    attachBrowserDiagnostics(page, diagnostics, `tournament player ${index + 1}`);
     const response = await page.goto(new URL('/play/CUSTOM_ROOMS', baseUrl).toString(), {
       waitUntil: 'networkidle',
     });

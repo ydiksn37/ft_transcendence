@@ -32,7 +32,7 @@ export function DisplayPreview({ minoSkin, showGhost, displayTheme, mapStyle, ba
       <figcaption>LIVE PREVIEW · {displayTheme}</figcaption>
       <div className="config-preview-hud"><span>SCORE 012400</span><span>LEVEL 01</span></div>
       <div className="tetris-board-container config-preview-board" role="img" aria-label={`${minoSkin} skin, ${mapStyle} board, ${backgroundStyle} background, ghost ${showGhost ? 'on' : 'off'}`}>
-        <Stage width={150} height={300} options={{ backgroundAlpha: 0, antialias: true }}>
+        <Stage width={150} height={300} options={{ backgroundAlpha: 0, antialias: true, resolution: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1 }}>
           <Container scale={0.5} y={-300}>
             <GameBoard stage={stage} player={player} ghostY={ghostY} showGhost={showGhost} minoSkin={minoSkin} mapStyle={mapStyle} />
           </Container>

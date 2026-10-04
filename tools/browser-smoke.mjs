@@ -1,28 +1,9 @@
-import { access } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
+import { attachBrowserDiagnostics, createTestJwt, findChrome } from './browser-test-utils.mjs';
 
 const baseUrl = process.env.BROWSER_BASE_URL ?? 'https://localhost:8443';
-const candidates = [
-  process.env.CHROME_BIN,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-].filter(Boolean);
-
-let executablePath;
-for (const candidate of candidates) {
-  try {
-    await access(candidate);
-    executablePath = candidate;
-    break;
-  } catch {
-    // Try the next platform-specific Chrome location.
-  }
-}
-if (!executablePath) throw new Error('Chrome was not found; set CHROME_BIN');
-
 const browser = await chromium.launch({
-  executablePath,
+  executablePath: await findChrome(),
   headless: true,
   args: ['--ignore-certificate-errors', '--use-angle=swiftshader'],
 });
@@ -32,7 +13,8 @@ const scenarios = [
   { path: '/', viewport: { width: 1440, height: 900 }, text: 'Project T' },
   { path: '/', viewport: { width: 1024, height: 768 }, text: 'Project T' },
   { path: '/', viewport: { width: 390, height: 844 }, text: 'PLAY AS GUEST' },
-  { path: '/menu', viewport: { width: 390, height: 844 }, text: 'CONFIG' },
+  // Mobile intentionally hides CONFIG and MULTI PLAY.
+  { path: '/menu', viewport: { width: 390, height: 844 }, text: 'MARATHON' },
   { path: '/login', viewport: { width: 1440, height: 900 }, text: 'SCHOOL 42' },
   { path: '/privacy-policy', viewport: { width: 1440, height: 900 }, text: 'Privacy' },
   { path: '/terms-of-service', viewport: { width: 1440, height: 900 }, text: 'Terms' },
@@ -46,20 +28,7 @@ try {
     });
     const page = await context.newPage();
     const diagnostics = [];
-    page.on('console', (message) => {
-      const isHeadlessGpuDiagnostic = message.type() === 'warning'
-        && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
-      if (!isHeadlessGpuDiagnostic && (message.type() === 'error' || message.type() === 'warning')) {
-        diagnostics.push(`console.${message.type()}: ${message.text()}`);
-      }
-    });
-    page.on('pageerror', (error) => diagnostics.push(`pageerror: ${error.message}`));
-    page.on('request', request => {
-      const protocol = new URL(request.url()).protocol;
-      if (protocol === 'http:' || protocol === 'ws:') {
-        diagnostics.push(`mixed-content request: ${request.url()}`);
-      }
-    });
+    attachBrowserDiagnostics(page, diagnostics, `${scenario.path} ${scenario.viewport.width}x${scenario.viewport.height}`);
 
     const url = new URL(scenario.path, baseUrl).toString();
     const response = await page.goto(url, { waitUntil: 'networkidle' });
@@ -87,8 +56,9 @@ try {
     viewport: { width: 1440, height: 1000 },
     ignoreHTTPSErrors: true,
   });
-  await context.addInitScript(() => {
-    localStorage.setItem('token', 'browser-smoke-token');
+  const profileToken = await createTestJwt('8b1f83c8-44a5-4a34-9d49-3bbfb2d44ef8');
+  await context.addInitScript(token => {
+    localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify({
       id: '8b1f83c8-44a5-4a34-9d49-3bbfb2d44ef8',
       username: 'browser-smoke',
@@ -97,7 +67,7 @@ try {
       avatarUrl: null,
       role: 'USER',
     }));
-  });
+  }, profileToken);
   await context.route('**/api/users/**', async route => {
     const { pathname } = new URL(route.request().url());
     const responses = {
@@ -139,25 +109,16 @@ try {
   });
   const page = await context.newPage();
   const diagnostics = [];
-  page.on('console', message => {
-    const isHeadlessGpuDiagnostic = message.type() === 'warning'
-      && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
-    if (!isHeadlessGpuDiagnostic && (message.type() === 'error' || message.type() === 'warning')) {
-      diagnostics.push(`console.${message.type()}: ${message.text()}`);
-    }
-  });
-  page.on('pageerror', error => diagnostics.push(`pageerror: ${error.message}`));
-  page.on('request', request => {
-    const protocol = new URL(request.url()).protocol;
-    if (protocol === 'http:' || protocol === 'ws:') diagnostics.push(`mixed-content request: ${request.url()}`);
-  });
+  attachBrowserDiagnostics(page, diagnostics, '/profile');
   const response = await page.goto(new URL('/profile', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!response?.ok()) diagnostics.push(`HTTP ${response?.status() ?? 'no response'}`);
-  const bodyText = await page.locator('body').innerText();
-  // Only assert text visible while the achievements disclosure is closed.
-  for (const expected of ['ACHIEVEMENTS', 'LEVEL', '250 RP', '1 / 2 UNLOCKED', '1170 XP TOTAL', '170 / 1000 XP']) {
+  let bodyText = await page.locator('body').innerText();
+  for (const expected of ['ACHIEVEMENTS', 'LEVEL', '250 RP', '1170 XP TOTAL', '170 / 1000 XP']) {
     if (!bodyText.includes(expected)) diagnostics.push(`missing text: ${expected}`);
   }
+  await page.getByRole('tab', { name: 'ACHIEVEMENTS' }).click();
+  bodyText = await page.locator('body').innerText();
+  if (!bodyText.includes('1 / 2 UNLOCKED')) diagnostics.push('missing text: 1 / 2 UNLOCKED');
   const overflow = await page.evaluate(() => ({
     document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     body: document.body.scrollWidth - document.body.clientWidth,
@@ -222,16 +183,7 @@ try {
   });
   const adminPage = await adminContext.newPage();
   const adminDiagnostics = [];
-  adminPage.on('console', message => {
-    if (message.type() === 'error' || message.type() === 'warning') {
-      adminDiagnostics.push(`console.${message.type()}: ${message.text()}`);
-    }
-  });
-  adminPage.on('pageerror', error => adminDiagnostics.push(`pageerror: ${error.message}`));
-  adminPage.on('request', request => {
-    const protocol = new URL(request.url()).protocol;
-    if (protocol === 'http:' || protocol === 'ws:') adminDiagnostics.push(`mixed-content request: ${request.url()}`);
-  });
+  attachBrowserDiagnostics(adminPage, adminDiagnostics, '/admin');
   const adminResponse = await adminPage.goto(new URL('/admin', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!adminResponse?.ok()) adminDiagnostics.push(`HTTP ${adminResponse?.status() ?? 'no response'}`);
   await adminPage.getByLabel('Email').fill('created@example.com');
@@ -281,16 +233,7 @@ try {
   });
   const searchPage = await searchContext.newPage();
   const searchDiagnostics = [];
-  searchPage.on('console', message => {
-    if (message.type() === 'error' || message.type() === 'warning') {
-      searchDiagnostics.push(`console.${message.type()}: ${message.text()}`);
-    }
-  });
-  searchPage.on('pageerror', error => searchDiagnostics.push(`pageerror: ${error.message}`));
-  searchPage.on('request', request => {
-    const protocol = new URL(request.url()).protocol;
-    if (protocol === 'http:' || protocol === 'ws:') searchDiagnostics.push(`mixed-content request: ${request.url()}`);
-  });
+  attachBrowserDiagnostics(searchPage, searchDiagnostics, '/search');
   const searchResponse = await searchPage.goto(new URL('/search', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!searchResponse?.ok()) searchDiagnostics.push(`HTTP ${searchResponse?.status() ?? 'no response'}`);
   const searchText = await searchPage.locator('body').innerText();
@@ -316,22 +259,7 @@ try {
   const multiplayerPages = await Promise.all(
     multiplayerContexts.map(async (multiplayerContext, index) => {
       const multiplayerPage = await multiplayerContext.newPage();
-      multiplayerPage.on('console', message => {
-        const isHeadlessGpuDiagnostic = message.type() === 'warning'
-          && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
-        if (!isHeadlessGpuDiagnostic && (message.type() === 'error' || message.type() === 'warning')) {
-          multiplayerDiagnostics.push(`player ${index + 1} console.${message.type()}: ${message.text()}`);
-        }
-      });
-      multiplayerPage.on('pageerror', error => {
-        multiplayerDiagnostics.push(`player ${index + 1} pageerror: ${error.message}`);
-      });
-      multiplayerPage.on('request', request => {
-        const protocol = new URL(request.url()).protocol;
-        if (protocol === 'http:' || protocol === 'ws:') {
-          multiplayerDiagnostics.push(`player ${index + 1} mixed-content request: ${request.url()}`);
-        }
-      });
+      attachBrowserDiagnostics(multiplayerPage, multiplayerDiagnostics, `custom room player ${index + 1}`);
       const multiplayerResponse = await multiplayerPage.goto(
         new URL('/play/CUSTOM_ROOMS', baseUrl).toString(),
         { waitUntil: 'networkidle' },
@@ -389,22 +317,7 @@ try {
           });
         });
       });
-      duelPage.on('console', message => {
-        const isHeadlessGpuDiagnostic = message.type() === 'warning'
-          && /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
-        if (!isHeadlessGpuDiagnostic && (message.type() === 'error' || message.type() === 'warning')) {
-          duelDiagnostics.push(`duel player ${index + 1} console.${message.type()}: ${message.text()}`);
-        }
-      });
-      duelPage.on('pageerror', error => {
-        duelDiagnostics.push(`duel player ${index + 1} pageerror: ${error.message}`);
-      });
-      duelPage.on('request', request => {
-        const protocol = new URL(request.url()).protocol;
-        if (protocol === 'http:' || protocol === 'ws:') {
-          duelDiagnostics.push(`duel player ${index + 1} mixed-content request: ${request.url()}`);
-        }
-      });
+      attachBrowserDiagnostics(duelPage, duelDiagnostics, `duel player ${index + 1}`);
       const duelResponse = await duelPage.goto(
         new URL('/play/CUSTOM_ROOMS', baseUrl).toString(),
         { waitUntil: 'networkidle' },

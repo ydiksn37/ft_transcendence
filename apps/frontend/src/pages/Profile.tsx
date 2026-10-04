@@ -95,10 +95,20 @@ export default function Profile() {
       }
     };
     const stopRefresh = startVisibleRefresh(fetchCore);
-    const socket = io(import.meta.env.VITE_WS_URL || window.location.origin, { transports: ['websocket'], auth: { token } });
+    // Delay the transport until after React's development StrictMode probe has
+    // completed. Connecting immediately makes the probe close a WebSocket
+    // before its handshake finishes, which produces a browser warning even
+    // though the real mounted connection works normally.
+    const socket = io(import.meta.env.VITE_WS_URL || window.location.origin, {
+      transports: ['websocket'], auth: { token }, autoConnect: false,
+    });
+    const connectTimer = window.setTimeout(() => socket.connect(), 0);
     const handleUpdate = () => { if (document.visibilityState === 'visible') void fetchCore(); };
     socket.on('analytics:updated', handleUpdate);
-    return () => { stopRefresh(); controller.abort(); socket.off('analytics:updated', handleUpdate); socket.disconnect(); };
+    return () => {
+      window.clearTimeout(connectTimer); stopRefresh(); controller.abort();
+      socket.off('analytics:updated', handleUpdate); socket.disconnect();
+    };
   }, [coreAttempt, navigate]);
 
   useEffect(() => {
