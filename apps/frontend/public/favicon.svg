@@ -1,21 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Project T">
-  <defs>
-    <linearGradient id="background" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#111936"/>
-      <stop offset="1" stop-color="#03040d"/>
-    </linearGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="2.2" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-  <rect x="2" y="2" width="60" height="60" rx="12" fill="url(#background)" stroke="#5ffcff" stroke-width="3"/>
-  <g filter="url(#glow)">
-    <path d="M11 14h42v12H38v26H26V26H11z" fill="#ff3fd2"/>
-    <path d="M13 16h38v4H34v28h-4V20H13z" fill="#72f7ff" opacity=".95"/>
-  </g>
-  <path d="M13 16h38M28 28h8" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="2" opacity=".8"/>
+  <rect x="2" y="2" width="60" height="60" rx="8" fill="#17120c" stroke="#e7cf91" stroke-width="3"/>
+  <path d="M11 14h42v12H38v26H26V26H11z" fill="#b84f38"/>
+  <path d="M14 17h36v5H34v27h-5V22H14z" fill="#e0a43d"/>
+  <path d="M14 17h36M29 29h5" fill="none" stroke="#f5e7c0" stroke-linecap="square" stroke-width="2" opacity=".9"/>
+  <path d="M11 26h15v26h12V26h15" fill="none" stroke="#6b291e" stroke-width="3" opacity=".8"/>
 </svg>

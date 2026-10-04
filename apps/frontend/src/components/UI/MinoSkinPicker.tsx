@@ -11,12 +11,11 @@ const labelStyle = new TextStyle({ fill: '#ffffff', fontSize: 12, fontFamily: 'm
 
 export function MinoSkinPicker({ value, onChange }: { value: Skin; onChange: (skin: Skin) => void }) {
   return (
-    <section aria-label="Mino skin" style={{ width: '100%', maxWidth: 600, marginTop: 20, padding: 15, boxSizing: 'border-box', background: '#333', borderRadius: 8 }}>
+    <section className="config-section config-skin-section" aria-label="Mino skin">
       <h2 style={{ fontSize: 14, textAlign: 'center' }}>MINO SKIN</h2>
       <div role="group" aria-label="Select mino skin" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginBottom: 15 }}>
         {(['RETRO', 'NEON', 'MINIMAL'] as const).map(skin => (
-          <button key={skin} type="button" aria-pressed={value === skin} onClick={() => onChange(skin)}
-            style={{ padding: '10px 14px', cursor: 'pointer', color: value === skin ? '#00ffff' : '#fff', background: '#111', border: `2px solid ${value === skin ? '#00ffff' : '#666'}` }}>
+          <button className="config-skin-button" key={skin} type="button" aria-pressed={value === skin} onClick={() => onChange(skin)}>
             {skin}
           </button>
         ))}

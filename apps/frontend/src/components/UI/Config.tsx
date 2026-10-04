@@ -6,6 +6,11 @@ import { DisplayPreview } from './DisplayPreview';
 import './Config.css';
 
 const tabs = ['CONTROLS', 'DISPLAY', 'SOUND'] as const;
+const keyConfigRows = [
+  ['left', 'right', 'softDrop', 'hardDrop'],
+  ['rotateCW', 'rotateCCW', 'rotate180'],
+  ['hold', 'restart', 'quitToMenu'],
+] as const;
 
 type ConfigProps = Pick<ReturnType<typeof useConfig>,
   'showGhost' | 'setShowGhost' | 'displayTheme' | 'setDisplayTheme' |
@@ -39,8 +44,8 @@ export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost
   }, []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
-      <h1 style={{ fontSize: '24px' }}>Configuration</h1>
+    <div className="config-root">
+      <h1 className="config-title">CONFIGURATION</h1>
       <div className="config-tabs" role="tablist" aria-label="Configuration categories">
         {tabs.map((name, index) => <button key={name} type="button" role="tab"
           id={`config-tab-${name}`} aria-controls={`config-panel-${name}`}
@@ -62,12 +67,13 @@ export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost
       <div className="config-tab-panel" role="tabpanel" id={`config-panel-${tab}`} aria-labelledby={`config-tab-${tab}`} tabIndex={0}>
       {tab === 'DISPLAY' && <>
       <MinoSkinPicker value={minoSkin} onChange={setMinoSkin} />
-      <section aria-labelledby="display-settings-heading" style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
+      <section className="config-section" aria-labelledby="display-settings-heading">
         <h2 id="display-settings-heading" style={{ fontSize: '16px', marginTop: 0 }}>GAME DISPLAY</h2>
         <div className="config-display-layout"><div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0', fontSize: '12px' }}>
-          <input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} style={{ accentColor: '#00ffff' }} />
-          SHOW GHOST PIECE
+        <label className="config-checkbox">
+          <input type="checkbox" checked={showGhost} onChange={event => setShowGhost(event.target.checked)} />
+          <span className="config-checkbox-mark" aria-hidden="true" />
+          <span>SHOW GHOST PIECE</span>
         </label>
         <label className="retro-select-label">THEME
           <select className="retro-select" value={displayTheme} onChange={event => setDisplayTheme(event.target.value as typeof displayTheme)}>
@@ -90,82 +96,72 @@ export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost
       </>}
       
       {tab === 'CONTROLS' && <>
-      <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>ARR (ms)</label>
-          <input type="number" min="0" max="5000" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+      <div className="config-section config-number-grid">
+        <div className="config-control">
+          <label htmlFor="config-arr">ARR (ms)</label>
+          <input id="config-arr" className="config-number-input" type="number" min="0" max="5000" value={tuning.arr} onChange={e => setTuning(p => ({...p, arr: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>DAS (ms)</label>
-          <input type="number" min="0" max="5000" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+        <div className="config-control">
+          <label htmlFor="config-das">DAS (ms)</label>
+          <input id="config-das" className="config-number-input" type="number" min="0" max="5000" value={tuning.das} onChange={e => setTuning(p => ({...p, das: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>DCD (ms)</label>
-          <input type="number" min="0" max="5000" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+        <div className="config-control">
+          <label htmlFor="config-dcd">DCD (ms)</label>
+          <input id="config-dcd" className="config-number-input" type="number" min="0" max="5000" value={tuning.dcd} onChange={e => setTuning(p => ({...p, dcd: Math.max(0, Math.min(5000, Number(e.target.value) || 0))}))} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <label style={{ fontSize: '12px', color: 'gray' }}>SDF (0=Inf)</label>
-          <input type="number" min="0" max="1000" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Math.max(0, Math.min(1000, Number(e.target.value) || 0))}))} style={{ width: '60px', padding: '4px', textAlign: 'center' }} />
+        <div className="config-control">
+          <label htmlFor="config-sdf">SDF (0=Inf)</label>
+          <input id="config-sdf" className="config-number-input" type="number" min="0" max="1000" value={tuning.sdf} onChange={e => setTuning(p => ({...p, sdf: Math.max(0, Math.min(1000, Number(e.target.value) || 0))}))} />
         </div>
       </div>
       </>}
 
       {tab === 'SOUND' &&
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 1 200px' }}>
-          <label style={{ fontSize: '12px', color: 'gray', marginBottom: '10px' }}>SE Volume: {Math.round(volume.se * 100)}%</label>
+      <div className="config-section config-sound-grid">
+        <div className="config-slider-control">
+          <label htmlFor="config-se-volume">SE VOLUME: {Math.round(volume.se * 100)}%</label>
           <input 
+            id="config-se-volume" className="config-range"
             type="range" min="0" max="1" step="0.05" value={volume.se} 
             onChange={e => {
               const val = Number(e.target.value);
               setVolume(p => ({...p, se: val}));
               soundManager.setVolumes(val, volume.bgm);
               soundManager.playSe('test');
-            }} 
-            style={{ width: '100%' }} 
+            }}
           />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 1 200px' }}>
-          <label style={{ fontSize: '12px', color: 'gray', marginBottom: '10px' }}>BGM Volume: {Math.round(volume.bgm * 100)}%</label>
+        <div className="config-slider-control">
+          <label htmlFor="config-bgm-volume">BGM VOLUME: {Math.round(volume.bgm * 100)}%</label>
           <input 
+            id="config-bgm-volume" className="config-range"
             type="range" min="0" max="1" step="0.05" value={volume.bgm} 
             onChange={e => {
               const val = Number(e.target.value);
               setVolume(p => ({...p, bgm: val}));
               soundManager.setVolumes(volume.se, val);
-            }} 
-            style={{ width: '100%' }} 
+            }}
           />
         </div>
       </div>
       }
 
       {tab === 'CONTROLS' && !isMobile && (
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%', maxWidth: '600px', boxSizing: 'border-box' }}>
-          <h4 style={{ margin: 0, color: '#ccc' }}>Key Configuration</h4>
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[
-              'left', 'right', 'softDrop', 'hardDrop',
-              'rotateCW', 'rotateCCW', 'rotate180',
-              'hold', 'restart', 'quitToMenu'
-            ].map((action) => {
+        <div className="config-section config-key-panel">
+          <h4>KEY CONFIGURATION</h4>
+          <div className="config-key-grid">
+            {keyConfigRows.map((row, rowIndex) => (
+              <div className={`config-key-row${rowIndex === 0 ? ' is-movement-row' : ''}`} key={rowIndex}>
+              {row.map((action) => {
               const code = keyConfig[action] || '';
               return (
-              <div key={action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <label style={{ fontSize: '12px', color: 'gray', textTransform: 'capitalize' }}>{action.replace(/([A-Z])/g, ' $1').trim()}</label>
+              <div className="config-key-control" key={action}>
+                <span>{action.replace(/([A-Z])/g, ' $1').trim()}</span>
                 <button
+                  className={`config-key-button${listeningAction === action ? ' is-listening' : ''}`}
                   onClick={() => {
                     setListeningAction(action);
                     window.focus();
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: listeningAction === action ? '#ff4444' : '#555',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    minWidth: '60px'
                   }}
                 >
                   {listeningAction === action ? 'Press key...' : code.replace(/^Key/, '').replace(/(Left|Right|Up|Down)$/, (match, p1) => {
@@ -175,7 +171,9 @@ export const Config: React.FC<ConfigProps> = ({ minoSkin, setMinoSkin, showGhost
                 </button>
               </div>
               );
-            })}
+              })}
+              </div>
+            ))}
           </div>
         </div>
       )}

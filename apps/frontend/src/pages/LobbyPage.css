@@ -464,8 +464,8 @@
 }
 
 .retro-select:focus {
-  border-color: #00ffff;
-  box-shadow: 4px 4px 0 rgba(0, 255, 255, 0.3);
+  border-color: #d8a43a;
+  box-shadow: 4px 4px 0 #5c4317;
 }
 
 .retro-select option {
@@ -515,8 +515,8 @@
 }
 
 .retro-input:focus {
-  border-color: #00ffff;
-  box-shadow: 4px 4px 0 rgba(0, 255, 255, 0.3);
+  border-color: #d8a43a;
+  box-shadow: 4px 4px 0 #5c4317;
 }
 
 .custom-room-visibility-label {
