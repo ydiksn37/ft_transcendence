@@ -93,9 +93,6 @@ export const ClientEvent = {
   SOFT_DROP:   'game:soft_drop',
   HARD_DROP:   'game:hard_drop',
   HOLD:        'game:hold',
-  START_AI_PREVIEW: 'ai:preview_start',
-  STOP_AI_PREVIEW: 'ai:preview_stop',
-  SET_AI_PREVIEW_SPEED: 'ai:preview_speed',
   // マッチメイキング
   JOIN_QUEUE:    'match:join_queue',
   LEAVE_QUEUE:   'match:leave_queue',
@@ -121,8 +118,6 @@ export const ServerEvent = {
   GAME_OVER:         'game:over',
   GAME_START:        'game:start',
   GARBAGE_INCOMING:  'game:garbage',    // おじゃまライン予告
-  AI_PREVIEW_STATUS: 'ai:preview_status',
-  AI_PREVIEW_STATE:  'ai:preview_state',
   // マッチ
   MATCH_FOUND:       'match:found',
   ROOM_READY:        'room:ready',
@@ -142,30 +137,6 @@ export const ServerEvent = {
 export type ServerEventType = typeof ServerEvent[keyof typeof ServerEvent];
 
 export type AiAgentModel = 'easy' | 'hard' | 'expert';
-
-export interface AiPreviewStartRequest {
-  model: AiAgentModel;
-  thinkTimeMs?: number;
-  actionDelayMs?: number;
-  seed?: number;
-}
-
-export interface AiPreviewStatus {
-  roomId: string;
-  phase: 'starting' | 'thinking' | 'executing' | 'stopped' | 'error';
-  model: AiAgentModel;
-  actionDelayMs: number;
-  completedDepth?: number;
-  nodesVisited?: number;
-  decisionMs?: number;
-  message?: string;
-}
-
-export interface AiPreviewPlayerState {
-  roomId: string;
-  model: AiAgentModel;
-  state: GameState;
-}
 
 // ───────────────────────────────────────────────
 //  API 共通レスポンス型

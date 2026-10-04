@@ -4,9 +4,6 @@ import {
   GameState,
   TetrominoType,
   AiDifficulty,
-  AiAgentModel,
-  AiPreviewPlayerState,
-  AiPreviewStatus,
   ServerEvent,
   ClientEvent,
   AI_BOT_CONFIGS,
@@ -29,10 +26,8 @@ import {
   BOARD_COLS,
 } from './engine/board';
 import { calcGarbage, calcScore, isPerfectClear } from './engine/garbage';
-import { CppAgentProcess } from './headless/cpp-agent-process';
 import {
   AgentAction,
-  AgentDecisionRequest,
   AgentDecisionResponse,
   AGENT_ACTIONS,
   boardToAgentRows,
@@ -45,16 +40,6 @@ const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
 const AI_MATCH_COUNTDOWN_MS = 1000;
 const DEFAULT_AI_ACTION_INTERVAL_MS = 50;
 const MAX_AI_ACTIONS = 1000;
-const CPP_PREVIEW_EMIT_INTERVAL_MS = 33;
-type CppPreviewStatusKey = 'player' | 'global';
-
-export interface CppAiPreviewOptions {
-  executable: string;
-  model: AiAgentModel;
-  thinkTimeMs: number;
-  responseTimeoutMs: number;
-  actionDelayMs: number;
-}
 
 export interface PlayerState {
   pieceId: number;
@@ -111,22 +96,6 @@ export class GameInstance {
   private isRunning = false;
   private aiDifficulty: AiDifficulty | null = null;
   private aiActionIntervalMs = DEFAULT_AI_ACTION_INTERVAL_MS;
-  private cppAgents: Map<string, CppAgentProcess> = new Map();
-  private cppPreviewModels: Map<string, AiAgentModel> = new Map();
-  private cppPreviewOptions: CppAiPreviewOptions | null = null;
-  private cppDecisionSequence = 0;
-  private cppPreviewStateTimer: NodeJS.Timeout | null = null;
-  private cppPreviewPendingState: AiPreviewPlayerState | null = null;
-  private cppPreviewLastStateEmit = 0;
-  private cppPreviewStatusTimers = new Map<
-    CppPreviewStatusKey,
-    NodeJS.Timeout
-  >();
-  private cppPreviewPendingStatuses = new Map<
-    CppPreviewStatusKey,
-    AiPreviewStatus
-  >();
-  private cppPreviewLastStatusEmit = new Map<CppPreviewStatusKey, number>();
   private aiAgentService?: AiAgentService;
 
   private onGameOver?: (
@@ -200,13 +169,6 @@ export class GameInstance {
       otherSpins: emptyOtherSpins(),
       tetrises: 0,
     });
-  }
-
-  /** The C++ preview player gets its own deterministically seeded seven-bag. */
-  addCppPreviewPlayer(socketId: string, model: AiAgentModel): void {
-    this.playerBags.set(socketId, new BagGenerator(this.seed));
-    this.cppPreviewModels.set(socketId, model);
-    this.addPlayer(socketId, null);
   }
 
   private bagFor(socketId: string): BagGenerator {
@@ -354,76 +316,6 @@ export class GameInstance {
     const begin = this.pendingAiStart;
     this.pendingAiStart = null;
     begin?.();
-  }
-
-  /** C++ は探索だけを行い、返された操作はこのTSエンジンで再生する。 */
-  async startCppPreview(options: CppAiPreviewOptions): Promise<void> {
-    if (this.isRunning) await this.stop();
-    this.isRunning = true;
-    this.aiDifficulty = null;
-    this.cppPreviewOptions = { ...options };
-    this.cppDecisionSequence = 0;
-    this.emitCppPreviewStatus('starting');
-
-    const previewPlayers = [...this.players.entries()].filter(([socketId]) =>
-      this.cppPreviewModels.has(socketId),
-    );
-    if (previewPlayers.length !== 1) {
-      throw new Error(
-        `AI preview expected 1 player, got ${previewPlayers.length}`,
-      );
-    }
-    for (const [socketId] of previewPlayers) {
-      const model = this.cppPreviewModels.get(socketId);
-      if (!model) throw new Error(`AI preview model missing for ${socketId}`);
-      this.cppAgents.set(
-        socketId,
-        new CppAgentProcess({
-          executable: options.executable,
-          model,
-          thinkTimeMs: options.thinkTimeMs,
-          responseTimeoutMs: options.responseTimeoutMs,
-        }),
-      );
-    }
-
-    try {
-      await Promise.all(
-        [...this.cppAgents.values()].map((agent) => agent.ready()),
-      );
-      if (!this.isRunning) return;
-
-      this.server.to(this.roomId).emit(ServerEvent.GAME_START, {
-        roomId: this.roomId,
-        aiPreview: true,
-        model: options.model,
-      });
-      this.players.forEach((player, socketId) => {
-        player.startTime = Date.now();
-        this.broadcastState(socketId, player);
-      });
-      const [socketId, player] = previewPlayers[0];
-      const agent = this.cppAgents.get(socketId);
-      if (!agent) {
-        throw new Error(`AI preview process missing for ${socketId}`);
-      }
-      await this.runCppPreviewLoop(socketId, player, agent);
-    } catch (error) {
-      if (!this.isRunning) return;
-      const message = error instanceof Error ? error.message : String(error);
-      this.emitCppPreviewStatus('error', { message });
-      this.server.to(this.roomId).emit(ServerEvent.ERROR, { message });
-      await this.stop();
-    }
-  }
-
-  setCppPreviewActionDelay(actionDelayMs: number): void {
-    if (!this.cppPreviewOptions) return;
-    this.cppPreviewOptions.actionDelayMs = Math.max(
-      0,
-      Math.min(1000, Math.trunc(actionDelayMs)),
-    );
-    this.emitCppPreviewStatus('executing');
   }
 
   /** 重力ループ */
@@ -751,7 +643,7 @@ export class GameInstance {
     // must use that same origin, rather than spawning O one column left.
     // C++/AI routes retain their existing x=3 Hold/spawn protocol; they are
     // separate from authoritative human multiplayer and are not rebased here.
-    if (this.isAiMatch || this.cppPreviewModels.has(player.socketId)) return 3;
+    if (this.isAiMatch) return 3;
     const width =
       player.activeMino === 'O' ? 2 : player.activeMino === 'I' ? 4 : 3;
     return Math.floor(BOARD_COLS / 2) - Math.ceil(width / 2);
@@ -951,16 +843,6 @@ export class GameInstance {
       pps: Math.round(pps * 100) / 100,
       lastLock: player.lastLock,
     };
-
-    const previewModel = this.cppPreviewModels.get(socketId);
-    if (previewModel) {
-      this.emitCppPreviewState({
-        roomId: this.roomId,
-        model: previewModel,
-        state: gameState,
-      });
-      return;
-    }
 
     // 自分の状態を送信
     this.server.to(socketId).emit(ServerEvent.GAME_STATE, {
@@ -1202,59 +1084,6 @@ export class GameInstance {
     }
   }
 
-  private async runCppPreviewLoop(
-    socketId: string,
-    player: PlayerState,
-    agent: CppAgentProcess,
-  ): Promise<void> {
-    while (
-      this.isRunning &&
-      !player.isGameOver &&
-      this.cppAgents.get(socketId) === agent
-    ) {
-      const request = this.makeCppDecisionRequest(socketId, player);
-      this.emitCppPreviewStatus('thinking', {}, socketId);
-      const startedAt = performance.now();
-      const decision = await agent.decide(request);
-      const decisionMs = performance.now() - startedAt;
-
-      if (!this.isRunning || this.cppAgents.get(socketId) !== agent) return;
-      if (decision.gameOver) {
-        this.handleGameOver(socketId);
-        return;
-      }
-      this.validateCppDecision(player, decision);
-      this.emitCppPreviewStatus(
-        'executing',
-        {
-          completedDepth: decision.completedDepth,
-          nodesVisited: decision.nodesVisited,
-          decisionMs: Math.round(decisionMs * 100) / 100,
-        },
-        socketId,
-      );
-
-      for (let index = 0; index < decision.actions.length; index++) {
-        const action = decision.actions[index];
-        if (
-          !this.isRunning ||
-          this.cppAgents.get(socketId) !== agent ||
-          player.isGameOver
-        )
-          return;
-        this.applyInput(socketId, this.agentActionToClientEvent(action));
-        const delay = this.aiReplayDelayMs(
-          action,
-          decision.actions[index + 1],
-          this.cppPreviewOptions?.actionDelayMs ?? 0,
-        );
-        if (delay > 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, delay));
-        }
-      }
-    }
-  }
-
   private aiReplayDelayMs(
     action: AgentAction,
     nextAction: AgentAction | undefined,
@@ -1265,41 +1094,6 @@ export class GameInstance {
     // position is still visible before a rotation, movement, or lock.
     if (action === 'soft_drop' && nextAction === 'soft_drop') return 0;
     return normalDelayMs;
-  }
-
-  private makeCppDecisionRequest(
-    socketId: string,
-    player: PlayerState,
-  ): AgentDecisionRequest {
-    const opponent = [...this.players.values()].find(
-      (candidate) => candidate.socketId !== socketId,
-    );
-    return {
-      version: 1,
-      type: 'decide',
-      requestId: `${this.roomId}:${socketId}:${this.cppDecisionSequence++}`,
-      matchId: this.roomId,
-      playerId: socketId,
-      board: boardToAgentRows(player.board),
-      piece: player.activeMino,
-      next: this.bagFor(socketId).peek(5),
-      hold: player.holdMino,
-      canHold: player.canHold,
-      b2b: player.b2b,
-      combo: player.combo,
-      garbageQueue: player.garbageQueue,
-      spawn: {
-        x: player.activeX,
-        y: player.activeY - VISIBLE_ROW_OFFSET,
-        rotation: player.activeRotation,
-      },
-      opponent: {
-        board: boardToAgentRows(opponent?.board ?? createEmptyBoard()),
-        garbageQueue: opponent?.garbageQueue ?? 0,
-        attacksSent: opponent?.attacksSent ?? 0,
-        piecesPlaced: opponent?.piecesPlaced ?? 0,
-      },
-    };
   }
 
   private validateCppDecision(
@@ -1436,140 +1230,18 @@ export class GameInstance {
     return events[action];
   }
 
-  private emitCppPreviewState(payload: AiPreviewPlayerState): void {
-    if (payload.state.isGameOver) {
-      if (this.cppPreviewStateTimer) clearTimeout(this.cppPreviewStateTimer);
-      this.cppPreviewStateTimer = null;
-      this.cppPreviewPendingState = null;
-      this.publishCppPreviewState(payload);
-      return;
-    }
-
-    const elapsed = Date.now() - this.cppPreviewLastStateEmit;
-    if (!this.cppPreviewStateTimer && elapsed >= CPP_PREVIEW_EMIT_INTERVAL_MS) {
-      this.publishCppPreviewState(payload);
-      return;
-    }
-
-    this.cppPreviewPendingState = payload;
-    if (this.cppPreviewStateTimer) return;
-    const waitMs = Math.max(0, CPP_PREVIEW_EMIT_INTERVAL_MS - elapsed);
-    this.cppPreviewStateTimer = setTimeout(() => {
-      this.cppPreviewStateTimer = null;
-      const pending = this.cppPreviewPendingState;
-      this.cppPreviewPendingState = null;
-      if (pending && this.isRunning) this.publishCppPreviewState(pending);
-    }, waitMs);
-  }
-
-  private publishCppPreviewState(payload: AiPreviewPlayerState): void {
-    this.cppPreviewLastStateEmit = Date.now();
-    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATE, payload);
-  }
-
-  private scheduleCppPreviewStatus(
-    status: AiPreviewStatus,
-    immediate: boolean,
-    key: CppPreviewStatusKey,
-  ): void {
-    const timer = this.cppPreviewStatusTimers.get(key);
-    if (immediate) {
-      if (timer) clearTimeout(timer);
-      this.cppPreviewStatusTimers.delete(key);
-      this.cppPreviewPendingStatuses.delete(key);
-      this.publishCppPreviewStatus(key, status);
-      return;
-    }
-
-    const elapsed = Date.now() - (this.cppPreviewLastStatusEmit.get(key) ?? 0);
-    if (!timer && elapsed >= CPP_PREVIEW_EMIT_INTERVAL_MS) {
-      this.publishCppPreviewStatus(key, status);
-      return;
-    }
-
-    this.cppPreviewPendingStatuses.set(key, status);
-    if (timer) return;
-    const waitMs = Math.max(0, CPP_PREVIEW_EMIT_INTERVAL_MS - elapsed);
-    this.cppPreviewStatusTimers.set(
-      key,
-      setTimeout(() => {
-        this.cppPreviewStatusTimers.delete(key);
-        const pending = this.cppPreviewPendingStatuses.get(key);
-        this.cppPreviewPendingStatuses.delete(key);
-        if (pending && this.isRunning) {
-          this.publishCppPreviewStatus(key, pending);
-        }
-      }, waitMs),
-    );
-  }
-
-  private publishCppPreviewStatus(
-    key: CppPreviewStatusKey,
-    status: AiPreviewStatus,
-  ): void {
-    this.cppPreviewLastStatusEmit.set(key, Date.now());
-    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATUS, status);
-  }
-
-  private clearCppPreviewEmissions(): void {
-    if (this.cppPreviewStateTimer) clearTimeout(this.cppPreviewStateTimer);
-    this.cppPreviewStatusTimers.forEach((timer) => clearTimeout(timer));
-    this.cppPreviewStateTimer = null;
-    this.cppPreviewPendingState = null;
-    this.cppPreviewLastStateEmit = 0;
-    this.cppPreviewStatusTimers.clear();
-    this.cppPreviewPendingStatuses.clear();
-    this.cppPreviewLastStatusEmit.clear();
-  }
-
-  private emitCppPreviewStatus(
-    phase: AiPreviewStatus['phase'],
-    details: Partial<AiPreviewStatus> = {},
-    socketId?: string,
-  ): void {
-    if (!this.cppPreviewOptions) return;
-    const model = socketId
-      ? this.cppPreviewModels.get(socketId)
-      : this.cppPreviewOptions.model;
-    const status: AiPreviewStatus = {
-      roomId: this.roomId,
-      phase,
-      model: model ?? this.cppPreviewOptions.model,
-      actionDelayMs: this.cppPreviewOptions.actionDelayMs,
-      ...details,
-    };
-    const immediate =
-      socketId === undefined ||
-      phase === 'starting' ||
-      phase === 'stopped' ||
-      phase === 'error';
-    this.scheduleCppPreviewStatus(
-      status,
-      immediate,
-      socketId === undefined ? 'global' : 'player',
-    );
-  }
-
   /** ゲーム停止 */
   async stop(): Promise<void> {
-    const agents = [...this.cppAgents.values()];
-    this.clearCppPreviewEmissions();
-    if (this.cppPreviewOptions && this.isRunning) {
-      this.emitCppPreviewStatus('stopped');
-    }
     this.isRunning = false;
     this.pendingAiStart = null;
     this.humanReady = false;
-    this.cppAgents.clear();
     this.aiAgentService?.releaseMatch(this.roomId);
-    this.cppPreviewOptions = null;
     if (this.simulationStartTimer) clearTimeout(this.simulationStartTimer);
     this.simulationStartTimer = null;
     if (this.gravityTimer) clearInterval(this.gravityTimer);
     this.gravityTimer = null;
     this.lockTimer.forEach((t) => clearTimeout(t));
     this.lockTimer.clear();
-    await Promise.allSettled(agents.map((agent) => agent.close()));
   }
 
   getPlayers(): Map<string, PlayerState> {
@@ -1582,10 +1254,6 @@ export class GameInstance {
 
   get isStarted(): boolean {
     return this.isRunning;
-  }
-
-  get isCppPreview(): boolean {
-    return this.cppPreviewModels.size > 0;
   }
 
   get gameSeed(): number {

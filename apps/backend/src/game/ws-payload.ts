@@ -1,8 +1,4 @@
-import type {
-  AiDifficulty,
-  AiPreviewStartRequest,
-  GameInput,
-} from '@transcendence/shared';
+import type { AiDifficulty, GameInput } from '@transcendence/shared';
 
 export class WsPayloadError extends Error {}
 
@@ -124,28 +120,6 @@ export function parseAiMatch(value: unknown): {
       data.actionDelayMs === undefined
         ? 50
         : boundedInteger(data.actionDelayMs, 'actionDelayMs', 0, 1000),
-  };
-}
-
-export function parseAiPreview(value: unknown): AiPreviewStartRequest {
-  const data = record(value, ['model', 'thinkTimeMs', 'actionDelayMs', 'seed']);
-  const models = ['easy', 'hard', 'expert'];
-  if (typeof data.model !== 'string' || !models.includes(data.model))
-    throw new WsPayloadError('model is invalid');
-  return {
-    model: data.model as AiPreviewStartRequest['model'],
-    thinkTimeMs:
-      data.thinkTimeMs === undefined
-        ? undefined
-        : boundedInteger(data.thinkTimeMs, 'thinkTimeMs', 1, 5000),
-    actionDelayMs:
-      data.actionDelayMs === undefined
-        ? undefined
-        : boundedInteger(data.actionDelayMs, 'actionDelayMs', 0, 1000),
-    seed:
-      data.seed === undefined
-        ? undefined
-        : boundedInteger(data.seed, 'seed', 0, 0xffffffff),
   };
 }
 

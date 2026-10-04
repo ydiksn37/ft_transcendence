@@ -164,18 +164,18 @@ export class CppAgentProcess implements HeadlessAgent {
     }
     if (!(await this.waitForExit(500))) {
       this.logger.warn(
-        `AI preview agent ${this.name} (pid=${String(this.child.pid)}) did not shut down; sending SIGTERM`,
+        `C++ agent ${this.name} (pid=${String(this.child.pid)}) did not shut down; sending SIGTERM`,
       );
       this.child.kill('SIGTERM');
     }
     if (!(await this.waitForExit(500))) {
       this.logger.warn(
-        `AI preview agent ${this.name} (pid=${String(this.child.pid)}) ignored SIGTERM; sending SIGKILL`,
+        `C++ agent ${this.name} (pid=${String(this.child.pid)}) ignored SIGTERM; sending SIGKILL`,
       );
       this.child.kill('SIGKILL');
       if (!(await this.waitForExit(500))) {
         this.logger.error(
-          `AI preview agent ${this.name} (pid=${String(this.child.pid)}) did not exit after SIGKILL`,
+          `C++ agent ${this.name} (pid=${String(this.child.pid)}) did not exit after SIGKILL`,
         );
       }
     }

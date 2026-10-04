@@ -16,7 +16,6 @@ const JoinPage = lazy(() => import('@/pages/JoinPage'))
 const MenuPage = lazy(() => import('@/pages/MenuPage'))
 const LobbyPage = lazy(() => import('@/pages/LobbyPage'))
 const PlayPage = lazy(() => import('@/pages/PlayPage'))
-const AiPreviewPage = lazy(() => import('@/pages/AiPreviewPage'))
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'))
 
@@ -58,8 +57,6 @@ export default function App() {
       <Route path="/menu" element={<MenuPage />} />
       <Route path="/lobby/:mode" element={<LobbyPage />} />
       <Route path="/play/:mode" element={<PlayPage />} />
-      <Route path="/ai-preview" element={<AiPreviewPage />} />
-      
       {/* 法的ページ */}
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />

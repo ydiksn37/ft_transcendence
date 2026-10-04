@@ -31,7 +31,7 @@ type TetrisUIProps = {
   stage: Cell[][];
   player: Player;
   gameOver: boolean;
-  gameMode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1' | 'AI_PREVIEW';
+  gameMode: 'MARATHON' | '40_LINES' | '4_WIDE' | 'ONLINE_1V1';
   score: number;
   level: number;
   lines: number;
@@ -159,7 +159,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
             ? (opponentsTotalWidth + 40) 
             : gameMode === 'ONLINE_1V1' 
                 ? (560 + 40 + opponentsTotalWidth) 
-                : gameMode === 'AI_PREVIEW' ? 850 : 700);
+                : 700);
 
       const scaleX = (vw - 20) / expectedWidth;
       setScale(Math.min(1.5, scaleY, scaleX));
@@ -230,7 +230,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       '40_LINES':   { label: '40 LINES',     color: 'var(--color-neon-cyan)' },
       '4_WIDE':     { label: '4 WIDE',       color: 'var(--color-neon-cyan)' },
       'ONLINE_1V1': { label: 'ONLINE MATCH', color: 'var(--color-neon-magenta)' },
-      'AI_PREVIEW': { label: 'AI PREVIEW',   color: 'var(--color-neon-cyan)' },
     } as const)[gameMode] ?? { label: gameMode, color: 'var(--color-neon-cyan)' };
   })();
 
@@ -316,25 +315,25 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     <div 
       className="hold-button"
       onClick={() => {
-        if (isMobileView && gameMode !== 'AI_PREVIEW') {
+        if (isMobileView) {
           onHold();
           soundManager.playSe('hold');
         }
       }}
       onTouchEnd={(e) => {
-        if (isMobileView && gameMode !== 'AI_PREVIEW') {
+        if (isMobileView) {
           e.preventDefault();
           onHold();
           soundManager.playSe('hold');
         }
       }}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: isMobileView && gameMode !== 'AI_PREVIEW' ? 'pointer' : 'default' }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: isMobileView ? 'pointer' : 'default' }}
     >
       <h3 style={{ margin: isMobileView ? '0 0 5px 0' : '0 0 15px 0', fontFamily: '"Press Start 2P", monospace', fontSize: isMobileView ? '10px' : '14px', textShadow: '2px 2px 0px #000' }}>HOLD</h3>
       {(gameMode === 'ONLINE_1V1' && isWaiting) ? <div style={retroBoxStyle} /> : renderHoldBox(holdInfo.tetromino)}
       {!(gameMode === 'ONLINE_1V1' && isWaiting) &&
         !isMobileView &&
-        (holdInfo.hasHeld || gameMode === 'AI_PREVIEW') && (
+        holdInfo.hasHeld && (
           <span
             style={{
               color: 'gray',

@@ -20,7 +20,6 @@ flowchart TD
     Menu --> LocalLobby["/lobby/MARATHON<br/>/lobby/40_LINES<br/>/lobby/4_WIDE"]
     Menu --> MultiLobby["/lobby/MULTI_PLAY"]
     Menu --> Config["/lobby/CONFIG"]
-    Menu --> Preview["/ai-preview"]
     Menu -->|ログイン済み| Profile["/profile?tab=overview"]
     Menu -->|未ログイン| Login
 
@@ -55,7 +54,6 @@ flowchart TD
     Custom --> MultiLobby
     AI --> MultiLobby
     Config --> Menu
-    Preview --> Menu
     Profile --> Menu
     Settings --> Profile
     Chat --> Profile
@@ -73,10 +71,9 @@ flowchart TD
 | `/` | Join | ゲスト開始、ログイン、登録への入口 |
 | `/login` | Login / Register / 2FA | 認証完了後は `redirectTo`、未指定時は `/menu` へ移動 |
 | `/auth/callback` | 42 OAuth callback | OAuth の結果に応じて遷移 |
-| `/menu` | Game Menu | ゲームモード、設定、AI Preview、プロフィールへの入口 |
+| `/menu` | Game Menu | ゲームモード、設定、プロフィールへの入口 |
 | `/lobby/:mode` | Mode Lobby / Config | 対応する `mode` は下表を参照 |
 | `/play/:mode` | Game | 対応する `mode` は下表を参照 |
-| `/ai-preview` | AI Preview | AI の動作確認画面 |
 | `/profile` | Profile | ログイン必須。`tab` で表示内容を切り替える |
 | `/profile/:id` | Public Profile | ログイン必須。指定ユーザーの公開プロフィール |
 | `/settings` | Account Settings | ログインユーザーのアカウント設定 |

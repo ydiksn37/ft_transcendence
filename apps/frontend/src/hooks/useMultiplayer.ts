@@ -220,7 +220,8 @@ export const useMultiplayer = ({
   }, [scheduleNetworkRender]);
 
   const queueOpponentBoardUpdate = useCallback((data: OpponentBoardUpdate) => {
-    if (data.roomId !== undefined && data.roomId !== activeRoom.current) return;
+    const currentRoom = activeRoom.current ?? aiRoom.current;
+    if (data.roomId !== undefined && data.roomId !== currentRoom) return;
     if (data.playerId) {
       pendingOpponentUpdatesRef.current.set(data.playerId, data);
     } else {

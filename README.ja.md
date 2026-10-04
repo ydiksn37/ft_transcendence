@@ -91,7 +91,7 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 | リアルタイム1v1 | Server-authoritative matchmaking、盤面同期、garbage attack、切断処理、再接続。 | sonakamu |
 | Custom Room・多人数対戦 | Public/private room、Room ID参加、3人以上のgame session。 | sonakamu |
 | トーナメント | 4人以上の登録、single-elimination bracket、match進行、勝者管理。 | sonakamu |
-| AI対戦・Preview | 難易度を選べるC++ AIとの対戦と、独立したAI動作確認画面。 | ssawa |
+| AI対戦 | 難易度を選べるC++ AIとの対戦。 | ssawa |
 | 観戦 | 進行中のTournament matchについて、両Playerの盤面と試合状態をリアルタイム表示。 | sonakamu |
 | アカウント・認証 | ローカル登録/login、bcrypt password hash、42 OAuth、TOTP 2FA、refresh session、アカウント削除。 | yukusano |
 | Profile・Avatar | 表示名とbioの編集、presetまたはupload/cropしたavatar、公開profile、online状態。 | ssawa |

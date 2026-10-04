@@ -108,7 +108,7 @@ The application uses PostgreSQL through Prisma. UUID strings are primary and for
 | Real-time one-on-one matches | Server-authoritative matchmaking, synchronized boards, garbage attacks, disconnect handling, and reconnection. | sonakamu |
 | Custom rooms and multiplayer | Public/private rooms, room-ID joining, and games with three or more participants. | sonakamu |
 | Tournament system | Four-or-more-player registration, single-elimination brackets, match progression, and winner tracking. | sonakamu |
-| AI opponent and preview | C++ AI matches with selectable difficulty and an isolated AI behavior preview. | ssawa |
+| AI opponent | C++ AI matches with selectable difficulty. | ssawa |
 | Spectator mode | Real-time viewing of both boards and the state of an active tournament match. | sonakamu |
 | Accounts and security | Local registration/login, bcrypt password hashing, 42 OAuth, TOTP 2FA, refresh sessions, and account deletion. | yukusano |
 | Profiles and avatars | Editable display name and bio, preset or uploaded/cropped avatar, public profiles, and online status. | ssawa |

@@ -11,7 +11,6 @@ import {
 } from '@nestjs/websockets';
 import { Namespace, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { resolve } from 'node:path';
 import {
   createHash,
   randomBytes,
@@ -20,7 +19,7 @@ import {
 } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ClientEvent, ServerEvent } from '@transcendence/shared';
-import type { AiAgentModel, AiDifficulty } from '@transcendence/shared';
+import type { AiDifficulty } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
@@ -34,7 +33,6 @@ import {
 } from './tournament.utils';
 import {
   parseAiMatch,
-  parseAiPreview,
   parseBoardUpdate,
   parseChatJoin,
   parseChatMessage,
@@ -107,8 +105,6 @@ export class GameGateway
   private matchmakingQueue: Socket[] = [];
   private guestSessions = new Map<string, GuestSession>();
   private socketGuestSession = new Map<string, string>();
-  private aiPreviewGenerations = new Map<string, number>();
-  private aiPreviewCleanup = new Map<string, Promise<void>>();
 
   // Custom Rooms
   private customRooms = new Map<string, CustomRoom>();
@@ -140,42 +136,6 @@ export class GameGateway
       }
       return undefined;
     }
-  }
-
-  private advanceAiPreviewGeneration(socketId: string): number {
-    const generation = (this.aiPreviewGenerations.get(socketId) ?? 0) + 1;
-    this.aiPreviewGenerations.set(socketId, generation);
-    return generation;
-  }
-
-  private stopAiPreviewRoom(client: Socket, roomId?: string): Promise<void> {
-    const pendingCleanup = this.aiPreviewCleanup.get(client.id);
-    const targetRoomId = roomId ?? this.clientRoom.get(client.id);
-    const room = targetRoomId ? this.rooms.get(targetRoomId) : undefined;
-
-    if (targetRoomId) {
-      this.rooms.delete(targetRoomId);
-      if (this.clientRoom.get(client.id) === targetRoomId) {
-        this.clientRoom.delete(client.id);
-      }
-      void client.leave(targetRoomId);
-    }
-
-    const closeCurrent = room?.stop() ?? Promise.resolve();
-    const cleanup = pendingCleanup
-      ? Promise.allSettled([pendingCleanup, closeCurrent]).then(() => undefined)
-      : closeCurrent;
-    this.aiPreviewCleanup.set(client.id, cleanup);
-    void cleanup
-      .finally(() => {
-        if (this.aiPreviewCleanup.get(client.id) === cleanup) {
-          this.aiPreviewCleanup.delete(client.id);
-        }
-      })
-      .catch((error: unknown) =>
-        this.logger.error('AI preview cleanup failed', error),
-      );
-    return cleanup;
   }
 
   afterInit() {
@@ -247,14 +207,6 @@ export class GameGateway
   async handleDisconnect(client: Socket) {
     this.logger.log(`切断: ${client.id}`);
     this.clientChatRoom.delete(client.id);
-    const previewRoomId = this.clientRoom.get(client.id);
-    const isPreviewDisconnect =
-      !!previewRoomId && this.rooms.get(previewRoomId)?.isCppPreview === true;
-    let previewCleanup: Promise<void> | null = null;
-    if (isPreviewDisconnect) {
-      this.advanceAiPreviewGeneration(client.id);
-      previewCleanup = this.stopAiPreviewRoom(client, previewRoomId);
-    }
 
     const userId = client.data.userId;
     if (userId) {
@@ -277,9 +229,7 @@ export class GameGateway
     const guestSession = guestSessionId
       ? this.guestSessions.get(guestSessionId)
       : undefined;
-    const roomId = isPreviewDisconnect
-      ? null
-      : (this.clientRoom.get(client.id) ?? null);
+    const roomId = this.clientRoom.get(client.id) ?? null;
     const gameRoomId = this.clientGameRoom.get(client.id) ?? null;
     if (roomId) this.customRooms.get(roomId)?.spectators?.delete(client.id);
     if (
@@ -291,9 +241,7 @@ export class GameGateway
       return;
     }
 
-    if (previewCleanup) await previewCleanup;
     this.finalizeDisconnectedSocket(client, roomId, gameRoomId);
-    this.aiPreviewGenerations.delete(client.id);
     if (guestSession && guestSession.socketId === client.id) {
       this.deleteGuestSession(guestSession.id);
     }
@@ -1859,109 +1807,6 @@ export class GameGateway
     this.rooms.get(roomId)?.confirmAiReady(client.id);
   }
 
-  // ── C++ AI Webプレビュー ──────────────────────────────────
-  @SubscribeMessage(ClientEvent.START_AI_PREVIEW)
-  async handleStartAiPreview(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: unknown,
-  ) {
-    const data = this.parsePayload(client, parseAiPreview, payload);
-    if (!data) return;
-    const allowedModels: AiAgentModel[] = ['easy', 'hard', 'expert'];
-    const model = allowedModels.includes(data?.model) ? data.model : null;
-    if (!model) {
-      client.emit(ServerEvent.ERROR, {
-        message: 'model must be easy, hard, or expert',
-      });
-      return;
-    }
-    const generation = this.advanceAiPreviewGeneration(client.id);
-    const previousRoomId = this.clientRoom.get(client.id);
-    if (previousRoomId) {
-      const previousRoom = this.rooms.get(previousRoomId);
-      if (previousRoom?.isCppPreview) {
-        await this.stopAiPreviewRoom(client, previousRoomId);
-      } else {
-        this.rooms.delete(previousRoomId);
-        this.clientRoom.delete(client.id);
-        void client.leave(previousRoomId);
-        await previousRoom?.stop();
-      }
-    } else {
-      await this.aiPreviewCleanup.get(client.id);
-    }
-    if (this.aiPreviewGenerations.get(client.id) !== generation) return;
-
-    const thinkTimeMs = this.clampInteger(data.thinkTimeMs, 50, 1, 5000);
-    const actionDelayMs = this.clampInteger(data.actionDelayMs, 100, 0, 1000);
-    const seed = this.clampInteger(
-      data.seed,
-      Math.floor(Math.random() * 0x100000000),
-      0,
-      0xffffffff,
-    );
-    const roomId = `ai_preview_${randomUUID()}`;
-    const executable =
-      process.env.AI_AGENT_PATH ??
-      resolve(process.cwd(), '../../build/ai-agent/ai_agent');
-
-    const instance = new GameInstance(
-      roomId,
-      this.server,
-      seed,
-      (finishedRoomId) => {
-        this.rooms.delete(finishedRoomId);
-        void client.leave(finishedRoomId);
-        if (this.clientRoom.get(client.id) === finishedRoomId) {
-          this.clientRoom.delete(client.id);
-        }
-      },
-    );
-    instance.addCppPreviewPlayer(`ai_preview_${roomId}`, model);
-    client.join(roomId);
-    this.clientRoom.set(client.id, roomId);
-    this.rooms.set(roomId, instance);
-    client.emit(ServerEvent.MATCH_FOUND, {
-      roomId,
-      seed,
-      aiPreview: true,
-      model,
-    });
-
-    void instance.startCppPreview({
-      executable,
-      model,
-      thinkTimeMs,
-      responseTimeoutMs: thinkTimeMs * 4 + 500,
-      actionDelayMs,
-    });
-  }
-
-  @SubscribeMessage(ClientEvent.SET_AI_PREVIEW_SPEED)
-  handleSetAiPreviewSpeed(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: unknown,
-  ) {
-    const parsed = this.parsePayload(
-      client,
-      (value) => parseAiPreview({ model: 'easy', ...(value as object) }),
-      payload,
-    );
-    if (!parsed) return;
-    const roomId = this.clientRoom.get(client.id);
-    if (!roomId) return;
-    this.rooms
-      .get(roomId)
-      ?.setCppPreviewActionDelay(parsed.actionDelayMs ?? 100);
-  }
-
-  @SubscribeMessage(ClientEvent.STOP_AI_PREVIEW)
-  async handleStopAiPreview(@ConnectedSocket() client: Socket) {
-    this.advanceAiPreviewGeneration(client.id);
-    const roomId = this.clientRoom.get(client.id);
-    await this.stopAiPreviewRoom(client, roomId);
-  }
-
   // ── ゲーム入力 ────────────────────────────────────────────
   @SubscribeMessage(ClientEvent.MOVE_LEFT)
   handleMoveLeft(
@@ -2053,16 +1898,6 @@ export class GameGateway
     )
       return;
     room.applyInput(socketId, event, input.pieceId);
-  }
-
-  private clampInteger(
-    value: unknown,
-    fallback: number,
-    minimum: number,
-    maximum: number,
-  ): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-    return Math.max(minimum, Math.min(maximum, Math.trunc(value)));
   }
 
   // ── P2P 通信 (フロントエンド主導の対戦用) ───────────────────

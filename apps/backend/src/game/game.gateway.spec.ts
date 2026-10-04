@@ -644,24 +644,4 @@ describe('GameGateway', () => {
       expect.objectContaining({ message: expect.any(String) }),
     );
   });
-
-  it('stops and removes an AI preview when its socket disconnects', async () => {
-    const stop = jest.fn().mockResolvedValue(undefined);
-    const room = { isCppPreview: true, stop };
-    const client: any = {
-      id: 'preview-viewer',
-      data: {},
-      leave: jest.fn(),
-    };
-    (gateway as any).rooms.set('preview-room', room);
-    (gateway as any).clientRoom.set(client.id, 'preview-room');
-
-    await gateway.handleDisconnect(client);
-
-    expect(stop).toHaveBeenCalledTimes(1);
-    expect(client.leave).toHaveBeenCalledWith('preview-room');
-    expect((gateway as any).rooms.has('preview-room')).toBe(false);
-    expect((gateway as any).clientRoom.has(client.id)).toBe(false);
-    expect((gateway as any).aiPreviewCleanup.has(client.id)).toBe(false);
-  });
 });
