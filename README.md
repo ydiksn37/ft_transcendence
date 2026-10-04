@@ -3,335 +3,151 @@
 # Project T (ft_transcendence)
 
 ## Description
-Project T is a modern, real-time multiplayer Tetris-like game web application built for the `ft_transcendence` project. It aims to provide a highly competitive and responsive gaming experience, featuring real-time 1v1 battles, spectator modes, an AI opponent, and a fully functional tournament system. The application encompasses a full-stack architecture with a robust backend to ensure server-authoritative gameplay, anti-cheat measures, and seamless real-time synchronization.
+
+Project T is a modern, real-time competitive falling-block puzzle game built for the `ft_transcendence` project. It aims to provide a responsive and competitive gameplay experience with real-time one-on-one matches, spectator mode, AI opponents, and a fully functional tournament system.
 
 ## Instructions
 
 ### Prerequisites
+
 - **Docker** and **Docker Compose**
 - **Node.js 20 or later** and **npm 10 or later**
-- Web Browser (Latest stable version of Google Chrome recommended)
-- Ports 8080 and 8443 available on your machine (defaults; configurable with
-  `NGINX_HTTP_PORT` and `NGINX_PORT`). Development binds the optional direct
-  ports 3000, 5173, 54320, and 63790 to `127.0.0.1` only; remote clients must
-  use the Nginx HTTPS entry point.
+- **GNU Make**
+- A web browser (the latest stable version of Google Chrome is recommended)
+- Available ports 8080 and 8443 on the host machine
 
 ### Setup and Execution
+
 1. Clone the repository:
+
    ```bash
-   git clone <repository_url> transcendence
-   cd transcendence
+   git clone <repository_url> ft_transcendence
+   cd ft_transcendence
    ```
-2. Setup environment variables:
-   Copy the example environment file and adjust if necessary.
+
+2. Configure the environment variables by copying the example file and adjusting it as needed:
+
    ```bash
    cp .env.example .env
    ```
-   Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and
-   `SMTP_FROM`; account deletion uses email confirmation and cannot be
-   requested without a working SMTP transport.
-   Register `https://localhost:8443/api/auth/42/callback` as the 42 OAuth
-   redirect URI (replace the host and port consistently for another deployment).
-3. Install dependencies and generate Prisma Client:
+
+   Register `https://localhost:8443/api/auth/42/callback` as the redirect URI for 42 OAuth. If the application is submitted with a different host or port, update both the registered URI and `.env` so that they use the same URL.
+
+3. Build and start the application with Docker Compose. This command also installs dependencies, compiles the C++ AI, initializes Vault, and runs the database migrations:
+
    ```bash
-   make install
-   ```
-   `make install` runs `prisma generate` from
-   `apps/backend/prisma/schema.prisma` automatically.
-4. Start the application using Docker Compose:
-   ```bash
-   make up
-   # Use this instead when every image must be rebuilt:
    make build
    ```
-   These targets also build the browser AI and initialize/unseal Vault before
-   starting the Compose stack.
-5. Access the application:
-   - Open your browser and navigate to `https://localhost:8443` (or the configured domain/IP and `NGINX_PORT`).
-   - *Note: Since we use self-signed certificates for HTTPS, you may need to bypass the browser security warning.*
 
-### Prisma Client generation
+   To start an environment that has already been built, run:
 
-Run the following command whenever `apps/backend/prisma/schema.prisma` changes or
-after switching to a branch with schema changes:
+   ```bash
+   make up
+   ```
 
-```bash
-make generate
-```
+4. Open `https://localhost:8443` in a browser, or use the configured domain/IP and `NGINX_PORT`.
 
-Backend builds and type checks also regenerate Prisma Client automatically. The
-backend Docker image uses the same npm script, and the development container
-regenerates the client before applying the schema and starting NestJS.
-
-### Quality checks
-
-```bash
-npm run type-check
-npm run lint
-npm test --workspace apps/backend -- --runInBand
-node --test apps/frontend/tests/*.test.cjs
-npm run build --workspace apps/frontend
-npm run test:browser # requires Chrome and the HTTPS stack on :8443
-npm run test:websocket # requires the HTTPS/Socket.IO stack on :8443
-```
-
-`BROWSER_BASE_URL` can point the browser smoke test at another deployment.
-
-### Secret checks and rotation
-
-Run `make secret-scan` before committing. `make secret-scan-history` can be used
-to audit every reachable Git revision; historical findings must be treated as
-compromised and their credentials rotated. If development credentials may have
-leaked, run `make rotate-dev-secrets`; this
-rotates JWT/session, PostgreSQL, Redis, Vault KV history, and the backend Vault
-token, then recreates the affected services. It invalidates existing sessions.
-OAuth, SMTP, and SMS credentials must be revoked and reissued by their providers.
+   The application uses a self-signed HTTPS certificate, so the browser will display a security warning that must be acknowledged before continuing.
 
 ## Technical Stack
-- **Frontend Framework:** React (Vite) + TypeScript
-- **Backend Framework:** NestJS + TypeScript
-- **Database:** PostgreSQL with Prisma ORM
-- **Cache and short-lived security state:** Redis
-- **Real-Time Communication:** Socket.IO / WebSockets
-- **Game Rendering Engine:** PixiJS (WebGL)
-- **Security:** Nginx with ModSecurity (WAF), HashiCorp Vault (Secrets Management)
 
-**Justification:** 
-We chose React + Vite for its rapid development cycle and rich ecosystem, which integrates with PixiJS for WebGL game rendering. NestJS manages the REST API and WebSocket gateway. PostgreSQL + Prisma provides type-safe relational storage. Redis stores refresh-token revocation, deletion-confirmation hashes, and Public API rate-limit counters; Socket.IO rooms and reconnect state remain in one backend process and do not use a Redis adapter. WAF and Vault protect HTTP traffic and application secrets.
+- **Frontend framework:** React (Vite) with TypeScript
+- **Backend framework:** NestJS with TypeScript
+- **Database:** PostgreSQL with Prisma ORM
+- **Game rendering engine:** PixiJS (WebGL)
+- **Security:** Nginx with ModSecurity (WAF) and HashiCorp Vault
+
+### Rationale
+
+React and Vite provide a modern frontend development environment, while PixiJS supplies efficient WebGL rendering for the game. NestJS manages the REST API and WebSocket gateways. PostgreSQL and Prisma provide relational persistence with type-safe database access.
 
 ## Database Schema
-The database uses PostgreSQL and is managed via Prisma. The core entities and their relationships include:
-- **User:** Stores credentials, profile data, and game settings.
-- **GameResult:** Stores match outcomes, APM, PPS, and line clears. Relates to Player 1 and Player 2 (Users).
-- **Tournament:** Manages tournament instances, state (registration, in-progress, completed).
-- **TournamentMatch:** Individual matches within a tournament, relating back to GameResult and Tournament.
-- **Friendship / Block:** Self-referential relations on the User model for social features.
-See the [schema-synchronized ER diagram](ER.md) for all 20 Prisma models,
-15 enums, field constraints, and 30 foreign-key relationships. Verify it with
-`node tools/schema-doc.cjs --check`; regenerate its Markdown with
-`node tools/schema-doc.cjs` after changing the schema. This checks documentation,
-not whether migrations have been applied to a running database.
+
+The application uses PostgreSQL, managed through Prisma. Its core entities and relationships are:
+
+- **User:** Stores authentication information, profile data, and game settings.
+- **GameResult:** Stores match results, APM, PPS, and cleared-line counts. It relates to Player 1 and Player 2 (`User`).
+- **Tournament:** Manages tournament instances and their status: registration, in progress, or completed.
+- **TournamentMatch:** Represents an individual tournament match and relates to both `GameResult` and `Tournament`.
+- **Friendship / Block:** Self-referential relations on the `User` model that support social features.
 
 ## Team Information
+
 - **Product Owner:** kaisuzuk
 - **Project Manager:** yukusano
 - **Technical Lead:** sonakamu
 - **Developers:** kaisuzuk, sonakamu, ssawa, yukusano
 
-- **sonakamu - Game Engine & Frontend Logic (Player 1)**: Responsible for PixiJS rendering, game state synchronization, local input handling.
-- **ssawa - AI & Multiplayer Logic (Player 2)**: Focused on the C++ headless AI integration, collision detection, and WebSocket real-time synchronization.
-- **kaisuzuk - UI/UX & React Developer (Player 3)**: Designed the neon-themed SPA, dashboard charts, tournament brackets, and overall responsive design.
-- **yukusano - Backend, DevOps & Security (Player 4)**: Managed Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redis, and overall system architecture.
+- **sonakamu — Game Engine & Frontend Logic (Player 1):** Responsible for PixiJS rendering, game-state synchronization, and local input handling.
+- **ssawa — AI & Multiplayer Logic (Player 2):** Responsible for integrating the headless C++ AI, collision detection, and real-time WebSocket synchronization.
+- **kaisuzuk — UI/UX & React Developer (Player 3):** Responsible for the neon-style SPA, dashboard charts, tournament bracket, and responsive design.
+- **yukusano — Backend, DevOps & Security (Player 4):** Responsible for the overall system architecture, including Docker, Nginx, WAF, Vault, the NestJS API, PostgreSQL, and Redis.
 
 ## Project Management
-- **Organization:** We adopted an agile-like parallel development approach. The team split into specialized roles (Frontend Game, Frontend UI, Backend/Infra) to prevent bottlenecks.
-- **Task Tracking:** We used GitHub to manage our sprint backlogs and track progress.
-- **Communication:** Daily stand-ups and real-time collaboration were conducted via Discord.
+
+- **Organization:** We used an agile-inspired parallel development approach. Work was divided into specialist areas—frontend gameplay, frontend UI, and backend/infrastructure—to reduce bottlenecks.
+- **Task management:** We used GitHub to manage the sprint backlog and track progress.
+- **Communication:** We communicated through Discord and also held in-person meetings every two weeks.
 
 ## Features List
 
-Custom rooms can be public (listed) or private (unlisted). Owners choose visibility
-at creation and can change it later. Use **JOIN BY ID** to enter an unlisted room;
-anyone knowing its ID can join or spectate, so this is not password protection.
-- **Real-time 1v1 Battle:** Server-authoritative Tetris with garbage lines (Responsible: sonakamu).
-- **Tournament System:** Single-elimination brackets with real-time progress (Responsible: sonakamu).
-  A room owner can start a tournament with any participant count of four or more;
-  it is not restricted to 4, 8, or 16 players. Guests, guest hosts, and multiple
-  connections using the same registered account are accepted. A bracket is persisted
-  only when every participant is an authenticated user with a distinct user ID;
-  otherwise it runs in server memory while the existing per-match result saving still
-  applies. Anyone who enters the room after the tournament starts joins as a spectator
-  without changing the active bracket, and becomes eligible to play after a champion
-  is decided.
-- **AI Opponent:** Play against an intelligent bot with adjustable difficulties (Responsible: ssawa).
-- **Spectator Mode:** Watch live matches with real-time board updates (Responsible: sonakamu).
-- **Analytics Dashboard:** Visual graphs for APM, PPS, and win rates (Responsible: yukusano).
-- **Public API:** Rate-limited and secured API endpoints for fetching stats (Responsible: yukusano).
-- **Social Features:** Friend lists, real-time chat, profile customization (Responsible: yukusano).
-- **Advanced Security:** ModSecurity WAF and HashiCorp Vault integration (Responsible: yukusano).
+- **Game board UI:** Shuffled game-board backgrounds (implemented by kaisuzuk).
+- **Real-time one-on-one matches:** Server-authoritative matches with garbage attacks (implemented by sonakamu).
+- **Tournament system:** A single-elimination bracket that progresses in real time (implemented by sonakamu).
+- **AI opponent:** Matches against a configurable AI opponent with multiple difficulty levels (implemented by ssawa).
+- **Spectator mode:** Real-time viewing of active matches and player boards (implemented by sonakamu).
+- **Analytics dashboard:** Visual charts for APM, PPS, and win rate (implemented by yukusano).
+- **Public API:** Statistics endpoints protected by API keys and rate limiting (implemented by yukusano).
+- **Social features:** Friends list, real-time chat, and profile customization (implemented by yukusano).
+- **Advanced security:** Integration with ModSecurity WAF and HashiCorp Vault (implemented by yukusano).
 
-## Modules Selected for Evaluation — Core 14 points
+## Chosen Modules
 
-The following conservative set is the primary evaluation claim. Each module has a
-corresponding implementation and demonstration path; additional candidates are listed
-separately and are counted only after a successful live demonstration.
+Major modules are worth 2 points, and Minor modules are worth 1 point.
 
-| Module | Points | Why selected / implementation | Primary owner | Demonstration |
-| --- | ---: | --- | --- | --- |
-| Frontend and backend frameworks | 2 | React/Vite SPA and NestJS REST/WebSocket backend provide the application structure. | kaisuzuk / yukusano | Start the stack and navigate between SPA routes; inspect Nest modules. |
-| Database ORM | 1 | Prisma defines PostgreSQL relations, migrations, constraints, and typed queries. | yukusano | Show `schema.prisma`, migrations, and persisted users/results. |
-| WebSockets | 2 | Socket.IO carries authoritative game state, chat, rooms, reconnects, and spectator updates. | sonakamu / ssawa | Run a live match and spectator in independent Chrome contexts. |
-| Standard user management | 2 | Registration, profiles, avatars, friends, presence, and account settings are implemented. | yukusano / kaisuzuk | Register, edit a profile, upload/select an avatar, and add a friend. |
-| Game statistics and history | 1 | Wins, losses, APM, PPS, ranking, progression, and match history are stored and displayed. | yukusano | Complete a match and open Dashboard/Profile. |
-| OAuth 2.0 | 1 | 42 OAuth uses an HTTPS callback and creates or resumes an OAuth identity safely. | yukusano | Sign in through 42 and load the authenticated profile. |
-| Two-factor authentication | 1 | TOTP enrollment, QR setup, login challenge, verification, and disabling are implemented. | yukusano | Enable 2FA, sign out, and complete a challenged login. |
-| Web-based game | 2 | The Tetris-like engine implements 7-bag generation, rotations, lock delay, scoring, and line clears. | sonakamu / ssawa | Play a solo game and demonstrate core mechanics. |
-| Remote players | 2 | Server-authoritative network matches synchronize two remote players and garbage attacks. | sonakamu / ssawa | Play a 1v1 match in two independent Chrome contexts. |
-| **Total** | **14** | Minimum passing module claim. |  |  |
-
-## Additional Implemented Module Candidates
-
-*The entries below are not part of the core 14-point claim. They are proposed for
-additional credit only when their complete requirement and live demonstration pass;
-see `REMAINING_TASKS.md`.*
-
-### Web
-1. **Use a Framework as backend and frontend (Major - 2pts)**: React (Vite) and NestJS.
-2. **Use a database ORM (Minor - 1pt)**: Prisma.
-3. **Use WebSockets (Major - 2pts)**: Socket.IO for game state, chat, and live spectator modes.
-4. **User Interaction (Major - 2pts)**: Real-time chat, friend system, profile views.
-5. **Advanced Search (Minor - 1pt)**: Filter and search through users and game history.
-6. **Public API (Major - 2pts)**: 5+ endpoints protected by API keys with Swagger documentation.
-7. **Custom Design System (Minor - 1pt)**: Reusable neon/cyberpunk UI components.
-
-### User Management
-8. **Standard User Management (Major - 2pts)**: Avatars, display names, friend status.
-9. **Game Statistics (Minor - 1pt)**: APM, PPS, and win-rate tracking.
-10. **OAuth 2.0 (Minor - 1pt)**: 42 Intranet authentication.
-11. **Two-Factor Authentication (Minor - 1pt)**: TOTP based 2FA via authenticator apps.
-12. **Advanced Permission System (Major - 2pts)**: Admin/Moderator roles with BAN functionality.
-
-### Game and User Experience
-13. **Web-based Game (Major - 2pts)**: Tetris-like game with T-spins, 7-bag randomizer, and lock delay.
-14. **Remote Players (Major - 2pts)**: Networked 1v1 multiplayer over WebSockets.
-15. **Multiplayer (3+ players) (Major - 2pts)**: Support for custom rooms and spectator broadcasting.
-16. **Game Customization (Minor - 1pt)**: Modifiable keybinds, ghost piece toggle.
-17. **Tournament System (Minor - 1pt)**: Automated matchmaking and bracket progression.
-18. **Spectator Mode (Minor - 1pt)**: Live viewing of ongoing matches.
-
-### Artificial Intelligence
-19. **AI Opponent (Major - 2pts)**: Headless C++ bot evaluating height, holes, and bumpiness.
-
-### Data and Analytics
-20. **Data Export/Import (Minor - 1pt)**: Export and import user settings and stats via JSON.
-21. **Advanced Analytics Dashboard (Major - 2pts)**: Interactive charts and graphs for user performance.
-22. **GDPR Compliance (Minor - 1pt)**: Password/2FA reauthentication, an emailed confirmation code, permanent personal-data deletion, anonymized match retention, and a completion email.
-
-### Cybersecurity
-23. **WAF and HashiCorp Vault (Major - 2pts)**: Nginx with ModSecurity and Vault for secret management.
-
-### Administrative permission policy
-
-| Operation | ADMIN | MODERATOR | USER / GUEST |
-| --- | --- | --- | --- |
-| List users in the admin API | Yes | Yes | No |
-| Change another user's role | Yes | No | No |
-| Ban / unban USER or GUEST | Yes | Yes | No |
-| Ban / unban ADMIN or MODERATOR | Yes | No | No |
-| Change own role or own ban state | No | No | No |
-| Create a USER account | Yes | No | No |
-| Edit another user's display name / bio | Yes | No | No |
-| Permanently delete another user (explicit confirmation) | Yes | No | No |
-
-Mutations recheck the actor's current database role and ban/deletion state.
-Authorization and writes run in a serializable transaction; serialization
-conflicts retry up to three attempts, then return HTTP 409. The last usable
-(not deleted or currently banned) administrator cannot be demoted, banned,
-or deleted through the account-deletion flow. Promote another administrator
-before deleting that account. Creation uses `POST /api/admin/users`, profile editing
-uses `PATCH /api/admin/users/:id`, and permanent deletion uses
-`DELETE /api/admin/users/:id` with `{"confirmation":"DELETE USER"}`.
-Deletion removes personal data and anonymizes retained match history; it cannot
-be undone. CRUD is covered at the service and HTTP boundaries and through a Chrome
-interaction smoke test. Persistent administrative audit storage is intentionally
-out of scope: it is not part of the module rubric and would require a separate
-GDPR retention/minimization policy for administrator and deleted-user identifiers.
-
-### Public API usage
-
-Create an API key through authenticated `POST /api/keys` (JWT bearer token).
-The returned 64-character key is shown only once. Send it in the `X-API-Key`
-header for every `/api/public` request. `DELETE /api/keys/:id` revokes your own
-key; expired/revoked keys and keys owned by deleted or currently banned users
-are rejected. Each key has a fixed one-hour quota shared across these routes.
-
-| Method | Path (after `/api/public`) | Purpose |
-| --- | --- | --- |
-| GET | `/leaderboard` | Paginated rankings |
-| GET | `/users/:username` | Public profile |
-| GET | `/users/:username/stats` | Player statistics |
-| GET | `/users/:username/history` | Paginated match history |
-| GET | `/tournaments` | Tournament list |
-| GET | `/me/settings` | Read the key owner's saved preferences |
-| POST | `/me/settings` | Create preferences (201; existing resource returns 409) |
-| PUT | `/me/settings` | Replace existing preferences (200; absent resource returns 404) |
-| DELETE | `/me/settings` | Remove preferences only (204, including already absent) |
-
-Example POST/PUT JSON: `{"showGhost":true,"arr":33,"das":170,"sdf":6,"volume":50}`.
-PUT is replacement, not PATCH: omitted/null fields reset to schema defaults,
-and omitted key bindings reset to null. These are personal preferences, not
-match rules or score submission. Ownership is derived exclusively from the
-authenticated key; `userId`, `role`, `score` and unknown fields are rejected.
-After deleting preferences, use POST to recreate them (normal settings save
-also recreates them). Newly registered accounts generally already have settings,
-so use PUT for their first API update.
-
-Malformed requests return 400; invalid/missing keys return 401; quota excess
-returns 429 with `retryAfter` in seconds in the response JSON. Swagger exposes
-the API-key scheme, validated input schemas, preference examples and status
-descriptions. HTTP contract tests exercise the actual Nest routing, guards,
-validation and services with isolated database/Redis fakes; they do not prove
-real PostgreSQL/Redis integration. Tests bind only to `127.0.0.1` on a temporary
-port and require permission to open a local listener.
-
-### Progression rules
-
-For newly saved results, a competitive win grants 50 XP; other results grant
-20 XP. Level is `floor(XP / 1000) + 1`. Solo runs and draws count toward games
-played, but not wins/losses, and do not reset a winning streak. Win rate is
-`wins / (wins + losses)` (0 when no decisive games exist).
-
-Only matches between two distinct registered human users change rank points:
-win +25, loss -15, draw 0, with a floor of 0. AI, guest and solo matches do not
-change rank points. Ranks are BRONZE (0–499), SILVER (500–999), GOLD (1000–1499),
-PLATINUM (1500–1999), DIAMOND (2000–2499), MASTER (2500+).
-Results and statistics are saved in one transaction. Existing historical
-statistics are not automatically recalculated; old records cannot reliably
-distinguish a guest/AI victory from a draw using winner user ID alone.
-
-Game achievements have 75 milestones across 11 categories. Wins, games played,
-Tetrises, and each of T/I/J/L/S/Z spins use 1, 10, 20, 50, 100, 200, 1000;
-line clears use 100, 500, 1000, 5000, 10000, 50000, 100000; best win streak uses
-3, 5, 10, 20, 50. Profile shows the next milestone per category with expandable
-tier details. Each milestone pays XP once; old achievement keys and rewards are
-preserved. Multiple milestones can unlock in one game, before level calculation.
-Definitions are created on demand, so reseeding or deleting data is not required.
-Solo/AI games contribute to play and technique totals; solo runs do not count as
-victories. Historical threshold eligibility is checked at the next saved game.
-T-spins retain the existing full/mini rule. I/J/L/S/Z spin achievements require
-the last successful movement to be a rotation, all four translations (up, down,
-left, right) to be blocked on the pre-lock board, and at least one cleared line.
-They do not change score, attack, or B2B rules; O-spins are not counted.
-Multiplayer counts come from the authoritative TS engine; solo counts use the
-same shared detector in the frontend and the existing authenticated result API
-(client-reported, not authoritative replay verification). Non-T counts start at
-zero: historical results lack the necessary rotation/board data to reconstruct them.
-The spin-counter columns are included in the initial migration for fresh development
-databases. Databases created with the previous initial migration need recreation
-or a separate schema update; restarting alone does not add these columns.
-
-Daily analytics group newly saved games by completion date in UTC. APM and PPS
-are arithmetic means across that day's games (not time-weighted); cleared lines
-and playtime are summed. Existing incomplete daily aggregates are not backfilled.
+| Category | Module | Level | Points | Rationale and Implementation | Lead | Demonstration |
+| --- | --- | --- | ---: | --- | --- | --- |
+| Web | Frontend and backend frameworks | Major | 2 | React/Vite and NestJS provide a consistent structure for REST and real-time communication. | kaisuzuk | Show page navigation and the NestJS module structure. |
+| Web | Database ORM | Minor | 1 | Prisma provides type-safe management of PostgreSQL relations, migrations, and constraints. | yukusano | Show the Prisma schema. |
+| Web | WebSockets | Major | 2 | Socket.IO delivers low-latency synchronization for games, chat, rooms, reconnection, and spectating. | sonakamu | Demonstrate a match and spectator view in separate Chrome contexts. |
+| Web | User interaction | Major | 2 | Real-time chat, profile viewing, and friend management support interaction between opponents. | yukusano | Use two accounts to demonstrate chat, profiles, and friend operations. |
+| Web | Advanced search | Minor | 1 | User search includes online-status filtering, sorting, and pagination to help players find opponents. | ssawa | Change the search criteria, sorting, and page. |
+| Web | Public API | Major | 2 | External clients can securely access statistics and settings through API keys, rate limiting, Swagger documentation, and GET/POST/PUT/DELETE endpoints. | yukusano | Execute the endpoints through Swagger UI. |
+| Web | Custom design system | Minor | 1 | A shared color palette, typography, icons, and more than ten reusable components provide consistent UI and accessibility. | kaisuzuk | Show the design-system components and the screens that use them. |
+| User Management | Standard user management | Major | 2 | Registration, login, profiles, avatars, friends, online status, and settings let users maintain an identity across matches and social interactions. | ssawa | Demonstrate registration, profile editing, avatar selection, and adding a friend. |
+| User Management | Game statistics and match history | Minor | 1 | The application stores and displays wins, losses, APM, PPS, rank, level, achievements, and match history. | ssawa | Complete a match and show statistics, history, and progression on the profile page. |
+| User Management | OAuth 2.0 | Minor | 1 | 42 accounts can sign in through an HTTPS callback that securely creates or reuses an OAuth identity. | yukusano | Sign in with 42 OAuth and open the resulting profile. |
+| User Management | Two-factor authentication (2FA) | Minor | 1 | TOTP-based QR enrollment, login challenges, verification, and deactivation improve account security. | yukusano | Enable 2FA, sign in again, and enter a TOTP code. |
+| Gaming and UX | Web-based game | Major | 2 | The browser game implements a 7-bag randomizer, rotation, lock delay, scoring, line clearing, and clear win/loss conditions. | sonakamu | Demonstrate the core rules and win/loss behavior in Solo and one-on-one modes. |
+| Gaming and UX | Remote players | Major | 2 | Server-authoritative state, garbage attacks, disconnect handling, and reconnection support real-time play on separate computers. | sonakamu | Demonstrate a one-on-one match and reconnection in two Chrome contexts. |
+| Gaming and UX | Multiplayer game (three or more players) | Major | 2 | Custom rooms, synchronized state, and spectator broadcasts support game sessions with three or more participants. | sonakamu | Join a room with at least three participants and show synchronized progress. |
+| Gaming and UX | Game customization | Minor | 1 | Key bindings, mino skins, backgrounds, control speed, and default settings let players customize their experience. | sonakamu | Change settings and show the resulting game appearance and persisted values. |
+| Gaming and UX | Tournament system | Minor | 1 | Registration, matchmaking, brackets, and match-result progression manage the order and winners of multi-player tournaments. | sonakamu | Register four players and progress the bracket through the final. |
+| Gaming and UX | Spectator mode | Minor | 1 | Both player boards and match state are broadcast in real time to users watching an active game. | sonakamu | Watch an active match as a third user. |
+| Artificial Intelligence | AI opponent | Major | 2 | A C++ AI with selectable difficulty and human-like thinking delays is integrated with the TypeScript game engine for solo practice. | ssawa | Change the difficulty and demonstrate the AI making decisions during a match. |
+| Data and Analytics | Data export and import | Minor | 1 | JSON/CSV export, validated previews, and bulk import let users back up and restore settings and history. | ssawa | Export data, preview it, and import it again. |
+| Data and Analytics | Advanced analytics dashboard | Major | 2 | Interactive charts, date-range filters, and PDF/CSV export help users analyze gameplay trends. | ssawa | Change the date range, inspect the charts, and export PDF/CSV files. |
+| **Total** |  |  | **30** |  |  |  |
 
 ## Individual Contributions
-- **sonakamu**: 
-  - *Contributions:* Built PixiJS board rendering, local controls, and multiplayer state presentation.
-  - *Challenges:* Kept READY, active-piece, Next/Hold, and spectator transitions consistent while applying authoritative server snapshots.
-- **ssawa**: 
-  - *Contributions:* Developed the C++ headless AI and integrated it into the Node.js backend. Managed the core collision detection logic.
-  - *Challenges:* Integrated per-match C++ processes with bounded decision time and replayed the returned actions in the TypeScript game engine.
-- **kaisuzuk**: 
-  - *Contributions:* Designed and developed the React SPA, custom UI components, and the analytics dashboard using chart libraries.
-  - *Challenges:* Kept chat, friend, tournament, and dashboard views maintainable through reusable components, Zustand stores, and custom hooks.
-- **yukusano**: 
-  - *Contributions:* Architected the Docker infrastructure, NestJS backend, and implemented WAF/Vault security.
-  - *Challenges:* Preserved strict OWASP CRS checks for REST while narrowly excluding Socket.IO and Vite development assets, and implemented persistent Vault initialization/unseal workflows.
+
+- **sonakamu**
+  - **Contribution:** Implemented PixiJS board rendering, local controls, and multiplayer state display.
+  - **Challenge:** Maintained consistency between READY state, active pieces, Next/Hold displays, and spectator transitions while applying server snapshots.
+- **ssawa**
+  - **Contribution:** Developed the headless C++ AI, integrated it with the Node.js backend, and managed the core collision-detection logic.
+  - **Challenge:** Managed one C++ process per match with time limits and replayed the returned action sequences through the TypeScript game engine.
+- **kaisuzuk**
+  - **Contribution:** Designed and developed the React SPA, custom UI components, and analytics dashboard using a charting library.
+  - **Challenge:** Separated chat, friends, tournaments, and the dashboard into reusable components, Zustand stores, and custom hooks.
+- **yukusano**
+  - **Contribution:** Implemented the Docker infrastructure, NestJS backend architecture, WAF, and Vault security integration.
+  - **Challenge:** Kept OWASP CRS inspection enabled for REST traffic while narrowly excluding Socket.IO and Vite development assets, and established persistent Vault initialization and unsealing procedures.
 
 ## Resources and AI Usage
-- **NestJS Documentation**: https://docs.nestjs.com/
-- **PixiJS Documentation**: https://pixijs.com/
-- **Socket.IO Documentation**: https://socket.io/
-- **AI Usage**: 
-  - *Algorithm Assistance:* AI was used to research and review evaluation features such as height, holes, and bumpiness; final behavior is implemented in the checked-in C++ source and covered by CTest.
-  - *Engineering Assistance:* AI helped investigate Docker/Vault/WAF issues, generate candidate fixes, and draft tests and documentation. Changes were reviewed against source, builds, and automated tests before acceptance.
+
+- [NestJS documentation](https://docs.nestjs.com/)
+- [PixiJS documentation](https://pixijs.com/)
+- [Socket.IO documentation](https://socket.io/)
+- [An overview of the Cold Clear search algorithm](https://komorinfo.com/blog/cold-clear-search-algorithm/)
+- **AI usage:** Debugging and proofreading the README.
