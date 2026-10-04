@@ -11,8 +11,9 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 - **Docker** および **Docker Compose**
 - **Node.js 20以上** および **npm 10以上**
 - **GNU Make**
+- **OpenSSL**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
-- マシン上でポート8080と8443が利用可能であること
+- マシン上でdefault portの3000、5173、8080、8443、54320、63790が利用可能であること（または`.env`で変更）
 
 ### セットアップと実行
 1. リポジトリをクローンします:
@@ -25,12 +26,12 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    ```bash
    cp .env.example .env
    ```
-   42 OAuthのRedirect URIには `https://localhost:8443/api/auth/42/callback` を登録します。
-   別のhost/portで提出する場合は、登録値と`.env`を同じURLへ変更してください。
+   ローカルアカウントは42 OAuthを設定しなくても利用できます。OAuthを実演する場合は、`FT_CLIENT_ID`と`FT_CLIENT_SECRET`を設定し、Redirect URIに`https://localhost:8443/api/auth/42/callback`を登録します。別のhost/portを使用する場合は、登録値、`FT_CALLBACK_URL`、`VITE_WS_URL`、`ALLOWED_ORIGINS`を同じ接続先に合わせてください。
 3. Docker Composeを使用してアプリケーションをビルドし、起動します。依存関係のインストール、C++ AIのコンパイル、Vaultの初期化、データベースマイグレーションも自動的に実行されます:
    ```bash
    make build
    ```
+   `make build`は、`npm install`、Prisma Client生成、共有packageとC++ AIのbuild、Git管理外の`secrets/dev/`以下の開発用secret生成、Vault初期化、Docker imageのbuild、container起動、database migrationまで実行します。`secrets/`以下を手動で作成する必要はありません。
    ビルド済みの環境を再起動する場合は、次のコマンドを使用します:
    ```bash
    make up
@@ -49,13 +50,22 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 **技術選定の理由:** 
 モダンなReact + Viteと、WebGL描画用のPixiJSを採用しました。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。
 
+## 設計ドキュメント (Architecture Documentation)
+
+- [サイトマップとフロントエンドルート](docs/sitemap.md)
+- [全フィールド、型、制約、relationを含むデータベースER図](docs/ER.md)
+- Swagger UI: アプリケーション起動中の`https://localhost:8443/api/docs`
+
 ## データベーススキーマ (Database Schema)
-データベースにはPostgreSQLを使用し、Prisma経由で管理しています。コアとなるエンティティとその関係は以下の通りです：
-- **User:** 認証情報、プロフィールデータ、ゲーム設定を保存。
-- **GameResult:** 試合結果、APM、PPS、ライン消去数を保存。Player 1 と Player 2 (User) にリレーション。
-- **Tournament:** トーナメントインスタンスと状態 (登録、進行中、完了) を管理。
-- **TournamentMatch:** トーナメント内の個々の試合。GameResult と Tournament にリレーション。
-- **Friendship / Block:** ソーシャル機能のためのUserモデル上の自己参照リレーション。
+データベースにはPostgreSQLを使用し、Prisma経由で管理しています。特記がない限り、主キーと外部キーにはUUID形式の`String`を使用します。[docs/ER.md](docs/ER.md)には、19テーブルすべてのフィールドとPrisma型、制約、削除時の動作、Mermaid ER図を掲載しています。
+
+| 領域 | テーブルと主要フィールド・型 | 主なrelation |
+| --- | --- | --- |
+| 認証・ユーザー | `User`（`email: String`、`passwordHash: String?`、`role: Role`、`twoFactorSecret: String?`）、`UserStats`（`wins: Int`、`winRate: Decimal`、`rank: Rank`）、`UserGameSettings`（`keyBindings: Json?`、`arr/das/dcd/sdf: Int`） | `User`は統計と設定をそれぞれ0または1件持つ。 |
+| ゲーム・分析 | `GameResult`（`gameMode: GameMode`、APM/PPSは`Decimal`、line数は`Int`）、`GameAnalytic`（`date: DateTime`と集計値）、`SprintRecord`、`ImportedGameArchive` | 対戦結果はPlayer 1、Player 2、勝者を参照し、分析・Solo記録は1ユーザーに属する。削除されたUserと保持対象の対戦記録との参照は解除する。 |
+| ソーシャル | `Friendship`（`status: FriendshipStatus`）、`Block`、`ChatRoom`（`type: ChatRoomType`）、`ChatRoomMembership`、`ChatMessage`（`content: String`） | FriendshipとBlockは2人のUserを結び、MembershipはUserとRoom、MessageはRoomと任意の送信者に属する。 |
+| トーナメント | `Tournament`（`status: TournamentStatus`、`minPlayers/maxPlayers: Int`）、`TournamentEntry`、`TournamentMatch`（`round/matchNumber: Int`、`status: MatchStatus`） | EntryはUserとTournamentを結び、MatchはTournament、各Player、勝者、任意のGameResultを参照する。 |
+| プラットフォーム機能 | `Achievement`、`UserAchievement`、`ApiKey`（`keyHash: String`、`rateLimit: Int`）、`FileUpload`（`mimeType: String`、`sizeBytes: BigInt`） | 中間テーブルがUserにAchievementを付与し、API keyとuploadは所有Userに属する。 |
 
 ## チーム情報 (Team Information)
 - **Product Owner:** kaisuzuk
@@ -65,7 +75,7 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 
 - **sonakamu - Game Engine & Frontend Logic (Player 1)**: PixiJS描画、ゲーム状態同期、ローカル入力処理を担当。
 - **ssawa - AI & Multiplayer Logic (Player 2)**: C++ヘッドレスAIの統合、衝突判定、WebSocketリアルタイム同期を担当。
-- **kaisuzuk - UI/UX & React Developer (Player 3)**: ネオン調SPA、ダッシュボードチャート、トーナメント表、レスポンシブデザインの設計・開発。
+- **kaisuzuk - UI/UX & React Developer (Player 3)**: レトロアーケード調SPA、ダッシュボードチャート、トーナメント表、レスポンシブデザインの設計・開発。
 - **yukusano - Backend, DevOps & Security (Player 4)**: Docker, Nginx, WAF, Vault, NestJS API, PostgreSQL, Redisなど、システムアーキテクチャ全般を管理。
 
 ## プロジェクト管理 (Project Management)
@@ -75,15 +85,24 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 
 ## 機能リスト (Features List)
 
-- **ゲームボードUI:** ゲームボードの背景シャッフル (担当: kaisuzuk)。
-- **リアルタイム1v1対戦:** おじゃまブロック付きのサーバー主導テトリス (担当: sonakamu)。
-- **トーナメントシステム:** リアルタイム進行のシングルトーナメント表 (担当: sonakamu)。
-- **AI対戦相手:** 難易度調整可能な賢いボットとの対戦 (担当: ssawa)。
-- **観戦モード:** 進行中の試合と盤面をリアルタイム観戦 (担当: sonakamu)。
-- **分析ダッシュボード:** APM, PPS, 勝率の視覚的グラフ (担当: yukusano)。
-- **公開API:** レート制限とAPIキー保護を備えた統計情報取得エンドポイント (担当: yukusano)。
-- **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
-- **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
+| 機能 | 説明 | 主担当 |
+| --- | --- | --- |
+| ローカルゲーム | Marathon、40 Lines、4-Wide、score、Hold/Next、ghost、操作設定。 | sonakamu |
+| リアルタイム1v1 | Server-authoritative matchmaking、盤面同期、garbage attack、切断処理、再接続。 | sonakamu |
+| Custom Room・多人数対戦 | Public/private room、Room ID参加、3人以上のgame session。 | sonakamu |
+| トーナメント | 4人以上の登録、single-elimination bracket、match進行、勝者管理。 | sonakamu |
+| AI対戦・Preview | 難易度を選べるC++ AIとの対戦と、独立したAI動作確認画面。 | ssawa |
+| 観戦 | 進行中のTournament matchについて、両Playerの盤面と試合状態をリアルタイム表示。 | sonakamu |
+| アカウント・認証 | ローカル登録/login、bcrypt password hash、42 OAuth、TOTP 2FA、refresh session、アカウント削除。 | yukusano |
+| Profile・Avatar | 表示名とbioの編集、presetまたはupload/cropしたavatar、公開profile、online状態。 | ssawa |
+| ソーシャル | Friend request、block、global chat、DM、chat・検索からprofileへの遷移。 | yukusano |
+| ユーザー検索 | 文字列検索、online filter、rank・勝率・対戦数sort、pagination。 | ssawa |
+| 統計・Progression | 対戦履歴、APM/PPS/勝率chart、期間filter、rank、XP、level、連勝、achievement。 | ssawa |
+| データ可搬性 | JSON/CSV account export、PDF/CSV分析export、validation付きpreview、設定・履歴import。 | ssawa |
+| Customization・Responsive UI | Key binding、操作速度、skin、背景、audio設定、再利用可能なdesign-system component、desktop/mobile layout。 | kaisuzuk |
+| 公開API | API keyで保護した設定、leaderboard、profile、統計、履歴、tournament endpoint、rate limit、Swagger文書。 | yukusano |
+| 管理機能 | Roleに基づくUserの閲覧、作成、編集、ban、role変更、削除。 | yukusano |
+| インフラセキュリティ | Nginx HTTPS、ModSecurity/OWASP CRS、Vaultによるsecret管理、input validation、service境界の保護。 | yukusano |
 
 ## 選択モジュール (Modules)
 
@@ -116,20 +135,23 @@ Majorは2点、Minorは1点として計算しています。
 ## 個人の貢献 (Individual Contributions)
 - **sonakamu**: 
   - *貢献:* PixiJS盤面描画、ローカル操作、マルチプレイヤー状態表示を実装。
-  - *課題:* サーバーsnapshotを適用しながらREADY、操作中ミノ、Next/Hold、観戦遷移の整合性を維持。
+  - *課題と解決:* Server snapshotでREADY、操作中ミノ、Next/Hold、観戦遷移がずれる問題に対し、snapshot適用処理と状態遷移を集約して表示を一致させた。
 - **ssawa**: 
   - *貢献:* C++ヘッドレスAIを開発し、Node.jsバックエンドに統合。コアとなる衝突判定ロジックを管理。
-  - *課題:* 試合単位のC++ processを制限時間付きで管理し、返された操作列をTypeScript game engineで再生。
+  - *課題と解決:* AI processが試合終了後も残ることや遅い操作列に対し、試合単位のprocess所有、timeout、cleanup、検証済み操作列の再生を実装した。
 - **kaisuzuk**: 
   - *貢献:* React SPA、カスタムUIコンポーネント、およびチャートライブラリを使用した分析ダッシュボードの設計と開発。
-  - *課題:* チャット、フレンド、トーナメント、ダッシュボードを再利用component、Zustand store、custom hookで分離。
+  - *課題と解決:* 共有状態とUI重複による保守性低下に対し、チャット、フレンド、トーナメント、分析を再利用component、Zustand store、custom hookへ分離した。
 - **yukusano**: 
   - *貢献:* Dockerインフラストラクチャ、NestJSバックエンドの設計、WAF/Vaultセキュリティの実装。
-  - *課題:* RESTへのOWASP CRS検査を維持したままSocket.IOとVite開発assetだけを限定除外し、永続Vaultの初期化/unseal運用を整備。
+  - *課題と解決:* OWASP CRSがSocket.IOの長時間通信とVite assetに干渉する問題に対し、REST検査を維持した限定的な除外を設定し、Vaultの初期化とunsealをscript化した。
 
 ## リソースとAIの使用 (Resources and AI Usage)
 - **NestJS ドキュメント**: https://docs.nestjs.com/
 - **PixiJS ドキュメント**: https://pixijs.com/
 - **Socket.IO ドキュメント**: https://socket.io/
+- **Prisma ドキュメント**: https://www.prisma.io/docs
+- **OWASP Core Rule Set ドキュメント**: https://coreruleset.org/docs/
+- **HashiCorp Vault ドキュメント**: https://developer.hashicorp.com/vault/docs
 - **テトリスAI『Cold Clear』の思考部を眺める**: https://komorinfo.com/blog/cold-clear-search-algorithm/ 
-- **AIの使用状況**: デバッグ、 README.md の校正
+- **AIの使用状況**: 実行時・描画問題の原因調査、設定とsecurity-sensitiveなcodeのreview、cleanupとvalidation caseの提案、READMEと設計文書の校正に使用しました。提案は各担当者がsubjectと実装に照らしてreviewし、採用した変更は内容に応じてtype-check、lint、test、またはbrowserで確認しました。

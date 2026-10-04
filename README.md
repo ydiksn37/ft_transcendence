@@ -13,8 +13,9 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
 - **Docker** and **Docker Compose**
 - **Node.js 20 or later** and **npm 10 or later**
 - **GNU Make**
+- **OpenSSL**
 - A web browser (the latest stable version of Google Chrome is recommended)
-- Available ports 8080 and 8443 on the host machine
+- Available default host ports: 3000, 5173, 8080, 8443, 54320, and 63790 (or change them in `.env`)
 
 ### Setup and Execution
 
@@ -31,13 +32,15 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
    cp .env.example .env
    ```
 
-   Register `https://localhost:8443/api/auth/42/callback` as the redirect URI for 42 OAuth. If the application is submitted with a different host or port, update both the registered URI and `.env` so that they use the same URL.
+   Local accounts work without 42 OAuth. To demonstrate OAuth, set `FT_CLIENT_ID` and `FT_CLIENT_SECRET`, then register `https://localhost:8443/api/auth/42/callback` as the redirect URI. If the application uses a different host or port, update the registered URI, `FT_CALLBACK_URL`, `VITE_WS_URL`, and `ALLOWED_ORIGINS` consistently.
 
 3. Build and start the application with Docker Compose. This command also installs dependencies, compiles the C++ AI, initializes Vault, and runs the database migrations:
 
    ```bash
    make build
    ```
+
+   `make build` runs `npm install`, generates the Prisma client, builds the shared package and C++ AI, generates the ignored development secret files under `secrets/dev/`, initializes Vault, builds the images, starts the containers, and applies database migrations. No manual creation of files under `secrets/` is required.
 
    To start an environment that has already been built, run:
 
@@ -61,15 +64,23 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
 
 React and Vite provide a modern frontend development environment, while PixiJS supplies efficient WebGL rendering for the game. NestJS manages the REST API and WebSocket gateways. PostgreSQL and Prisma provide relational persistence with type-safe database access.
 
+## Architecture Documentation
+
+- [Site map and frontend routes](docs/sitemap.md)
+- [Complete database ER diagram, fields, types, constraints, and relations](docs/ER.md)
+- Swagger UI: `https://localhost:8443/api/docs` while the application is running
+
 ## Database Schema
 
-The application uses PostgreSQL, managed through Prisma. Its core entities and relationships are:
+The application uses PostgreSQL through Prisma. UUID strings are primary and foreign keys unless stated otherwise. The complete generated schema reference is [docs/ER.md](docs/ER.md); it contains all 19 tables, every field and Prisma type, constraints, deletion behavior, and a Mermaid ER diagram.
 
-- **User:** Stores authentication information, profile data, and game settings.
-- **GameResult:** Stores match results, APM, PPS, and cleared-line counts. It relates to Player 1 and Player 2 (`User`).
-- **Tournament:** Manages tournament instances and their status: registration, in progress, or completed.
-- **TournamentMatch:** Represents an individual tournament match and relates to both `GameResult` and `Tournament`.
-- **Friendship / Block:** Self-referential relations on the `User` model that support social features.
+| Area | Tables and principal typed fields | Main relationships |
+| --- | --- | --- |
+| Identity | `User` (`email: String`, `passwordHash: String?`, `role: Role`, `twoFactorSecret: String?`), `UserStats` (`wins: Int`, `winRate: Decimal`, `rank: Rank`), `UserGameSettings` (`keyBindings: Json?`, `arr/das/dcd/sdf: Int`) | `User` has optional one-to-one stats and settings records. |
+| Games and analytics | `GameResult` (`gameMode: GameMode`, APM/PPS as `Decimal`, line counts as `Int`), `GameAnalytic` (`date: DateTime`, aggregate values), `SprintRecord`, `ImportedGameArchive` | Results reference player 1, player 2, and winner; analytics and solo records belong to one user. Deleted users are detached from retained match records. |
+| Social | `Friendship` (`status: FriendshipStatus`), `Block`, `ChatRoom` (`type: ChatRoomType`), `ChatRoomMembership`, `ChatMessage` (`content: String`) | Friendship and block rows join two users; memberships join users to rooms; messages belong to a room and optionally a sender. |
+| Tournaments | `Tournament` (`status: TournamentStatus`, `minPlayers/maxPlayers: Int`), `TournamentEntry`, `TournamentMatch` (`round/matchNumber: Int`, `status: MatchStatus`) | Entries join users to tournaments; matches reference a tournament, players, winner, and optional game result. |
+| Platform features | `Achievement`, `UserAchievement`, `ApiKey` (`keyHash: String`, `rateLimit: Int`), `FileUpload` (`mimeType: String`, `sizeBytes: BigInt`) | Join rows award achievements to users; API keys and uploads belong to their owners. |
 
 ## Team Information
 
@@ -80,7 +91,7 @@ The application uses PostgreSQL, managed through Prisma. Its core entities and r
 
 - **sonakamu — Game Engine & Frontend Logic (Player 1):** Responsible for PixiJS rendering, game-state synchronization, and local input handling.
 - **ssawa — AI & Multiplayer Logic (Player 2):** Responsible for integrating the headless C++ AI, collision detection, and real-time WebSocket synchronization.
-- **kaisuzuk — UI/UX & React Developer (Player 3):** Responsible for the neon-style SPA, dashboard charts, tournament bracket, and responsive design.
+- **kaisuzuk — UI/UX & React Developer (Player 3):** Responsible for the retro arcade-style SPA, dashboard charts, tournament bracket, and responsive design.
 - **yukusano — Backend, DevOps & Security (Player 4):** Responsible for the overall system architecture, including Docker, Nginx, WAF, Vault, the NestJS API, PostgreSQL, and Redis.
 
 ## Project Management
@@ -91,15 +102,24 @@ The application uses PostgreSQL, managed through Prisma. Its core entities and r
 
 ## Features List
 
-- **Game board UI:** Shuffled game-board backgrounds (implemented by kaisuzuk).
-- **Real-time one-on-one matches:** Server-authoritative matches with garbage attacks (implemented by sonakamu).
-- **Tournament system:** A single-elimination bracket that progresses in real time (implemented by sonakamu).
-- **AI opponent:** Matches against a configurable AI opponent with multiple difficulty levels (implemented by ssawa).
-- **Spectator mode:** Real-time viewing of active matches and player boards (implemented by sonakamu).
-- **Analytics dashboard:** Visual charts for APM, PPS, and win rate (implemented by yukusano).
-- **Public API:** Statistics endpoints protected by API keys and rate limiting (implemented by yukusano).
-- **Social features:** Friends list, real-time chat, and profile customization (implemented by yukusano).
-- **Advanced security:** Integration with ModSecurity WAF and HashiCorp Vault (implemented by yukusano).
+| Feature | Description | Lead |
+| --- | --- | --- |
+| Local game modes | Marathon, 40 Lines, and 4-Wide with scoring, Hold/Next, ghost pieces, and configurable controls. | sonakamu |
+| Real-time one-on-one matches | Server-authoritative matchmaking, synchronized boards, garbage attacks, disconnect handling, and reconnection. | sonakamu |
+| Custom rooms and multiplayer | Public/private rooms, room-ID joining, and games with three or more participants. | sonakamu |
+| Tournament system | Four-or-more-player registration, single-elimination brackets, match progression, and winner tracking. | sonakamu |
+| AI opponent and preview | C++ AI matches with selectable difficulty and an isolated AI behavior preview. | ssawa |
+| Spectator mode | Real-time viewing of both boards and the state of an active tournament match. | sonakamu |
+| Accounts and security | Local registration/login, bcrypt password hashing, 42 OAuth, TOTP 2FA, refresh sessions, and account deletion. | yukusano |
+| Profiles and avatars | Editable display name and bio, preset or uploaded/cropped avatar, public profiles, and online status. | ssawa |
+| Social features | Friend requests, blocking, global chat, direct messages, and links from chat or search to profiles. | yukusano |
+| User search | Text search with online-status filters, ranking/win-rate/game-count sorting, and pagination. | ssawa |
+| Statistics and progression | Match history, APM/PPS/win-rate charts, date filters, ranks, XP, levels, streaks, and achievements. | ssawa |
+| Data portability | JSON/CSV account export, PDF/CSV analytics export, validated import previews, and settings/history import. | ssawa |
+| Customization and responsive UI | Key bindings, timing controls, skins, backgrounds, audio settings, reusable design-system components, and desktop/mobile layouts. | kaisuzuk |
+| Public API | API-key-protected settings, leaderboard, profile, statistics, history, and tournament endpoints with rate limits and Swagger documentation. | yukusano |
+| Administration | Role-based user viewing, creation, editing, banning, role management, and deletion for administrators/moderators. | yukusano |
+| Infrastructure security | HTTPS through Nginx, ModSecurity/OWASP CRS, Vault-managed application secrets, validation, and protected service boundaries. | yukusano |
 
 ## Chosen Modules
 
@@ -133,21 +153,24 @@ Major modules are worth 2 points, and Minor modules are worth 1 point.
 
 - **sonakamu**
   - **Contribution:** Implemented PixiJS board rendering, local controls, and multiplayer state display.
-  - **Challenge:** Maintained consistency between READY state, active pieces, Next/Hold displays, and spectator transitions while applying server snapshots.
+  - **Challenge and solution:** Server snapshots could desynchronize READY state, active pieces, Next/Hold displays, and spectator transitions. Centralized snapshot application and explicit state transitions kept the views consistent.
 - **ssawa**
   - **Contribution:** Developed the headless C++ AI, integrated it with the Node.js backend, and managed the core collision-detection logic.
-  - **Challenge:** Managed one C++ process per match with time limits and replayed the returned action sequences through the TypeScript game engine.
+  - **Challenge and solution:** AI processes could outlive a match or return late actions. Per-match process ownership, time limits, cleanup, and validated action replay kept the TypeScript engine synchronized.
 - **kaisuzuk**
   - **Contribution:** Designed and developed the React SPA, custom UI components, and analytics dashboard using a charting library.
-  - **Challenge:** Separated chat, friends, tournaments, and the dashboard into reusable components, Zustand stores, and custom hooks.
+  - **Challenge and solution:** Shared state and repeated UI made the SPA difficult to maintain. Reusable components, Zustand stores, and custom hooks separated chat, friends, tournaments, and analytics concerns.
 - **yukusano**
   - **Contribution:** Implemented the Docker infrastructure, NestJS backend architecture, WAF, and Vault security integration.
-  - **Challenge:** Kept OWASP CRS inspection enabled for REST traffic while narrowly excluding Socket.IO and Vite development assets, and established persistent Vault initialization and unsealing procedures.
+  - **Challenge and solution:** OWASP CRS rules interfered with long-lived Socket.IO traffic and Vite assets. Narrow exclusions preserved REST inspection, while scripted initialization and unsealing made Vault startup repeatable.
 
 ## Resources and AI Usage
 
 - [NestJS documentation](https://docs.nestjs.com/)
 - [PixiJS documentation](https://pixijs.com/)
 - [Socket.IO documentation](https://socket.io/)
+- [Prisma documentation](https://www.prisma.io/docs)
+- [OWASP Core Rule Set documentation](https://coreruleset.org/docs/)
+- [HashiCorp Vault documentation](https://developer.hashicorp.com/vault/docs)
 - [An overview of the Cold Clear search algorithm](https://komorinfo.com/blog/cold-clear-search-algorithm/)
-- **AI usage:** Debugging and proofreading the README.
+- **AI usage:** AI assisted with diagnosing runtime and rendering problems, reviewing configuration and security-sensitive code, suggesting cleanup and validation cases, and proofreading the README and architecture documents. Team members reviewed every proposed change, compared it with the subject and implementation, and validated accepted changes with type checks, linting, tests, or manual browser checks as appropriate.
