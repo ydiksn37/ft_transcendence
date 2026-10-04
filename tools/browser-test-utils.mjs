@@ -1,5 +1,12 @@
 import { createHmac } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+let jwtSecretPromise;
 
 const chromeCandidates = [
   process.env.CHROME_BIN,
@@ -21,16 +28,36 @@ export async function findChrome() {
 }
 
 export async function createTestJwt(subject, role = 'USER') {
-  const envText = await readFile(new URL('../.env', import.meta.url), 'utf8');
-  const secretLine = envText.split(/\r?\n/).find(line => line.startsWith('JWT_SECRET='));
-  const secret = secretLine?.slice('JWT_SECRET='.length).replace(/^"|"$/g, '');
-  if (!secret) throw new Error('JWT_SECRET is required in .env for authenticated browser smoke tests');
+  const secret = await (jwtSecretPromise ??= readDevelopmentVaultSecret('JWT_SECRET'));
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const header = encode({ alg: 'HS256', typ: 'JWT' });
   const payload = encode({ sub: subject, role, iat: now, exp: now + 900 });
   const signature = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
   return `${header}.${payload}.${signature}`;
+}
+
+export async function readDevelopmentVaultSecret(field) {
+  if (!/^[A-Z][A-Z0-9_]*$/.test(field)) throw new Error(`Invalid Vault field: ${field}`);
+  const token = (await readFile(new URL('../secrets/dev/vault_token.txt', import.meta.url), 'utf8')).trim();
+  if (!token) throw new Error('Run make vault-init before authenticated browser smoke tests');
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'compose', 'exec', '-T',
+      '-e', 'VAULT_ADDR=http://127.0.0.1:8200',
+      '-e', 'VAULT_TOKEN',
+      'vault', 'vault', 'kv', 'get', `-field=${field}`, 'secret/transcendence',
+    ],
+    {
+      cwd: projectRoot,
+      env: { ...process.env, VAULT_TOKEN: token },
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  const value = stdout.trim();
+  if (!value) throw new Error(`Vault field ${field} is empty`);
+  return value;
 }
 
 const ignoredConsoleMessages = [

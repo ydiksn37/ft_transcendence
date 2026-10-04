@@ -184,7 +184,7 @@ try {
   });
 
   await runScenario('/config tabs and previews', '/lobby/CONFIG', async page => {
-    await page.getByRole('heading', { name: 'Configuration', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'CONFIGURATION', exact: true }).waitFor();
     for (const tab of ['CONTROLS', 'DISPLAY', 'SOUND']) {
       await page.getByRole('tab', { name: tab }).click();
     }

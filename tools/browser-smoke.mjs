@@ -118,7 +118,9 @@ try {
   }
   await page.getByRole('tab', { name: 'ACHIEVEMENTS' }).click();
   bodyText = await page.locator('body').innerText();
-  if (!bodyText.includes('1 / 2 UNLOCKED')) diagnostics.push('missing text: 1 / 2 UNLOCKED');
+  if (!bodyText.includes('1 / 2 UNLOCKED')) {
+    diagnostics.push(`missing text: 1 / 2 UNLOCKED (achievement view: ${bodyText.replace(/\s+/g, ' ').slice(-500)})`);
+  }
   const overflow = await page.evaluate(() => ({
     document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     body: document.body.scrollWidth - document.body.clientWidth,

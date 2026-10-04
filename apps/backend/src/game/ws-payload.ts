@@ -128,12 +128,7 @@ export function parseAiMatch(value: unknown): {
 }
 
 export function parseAiPreview(value: unknown): AiPreviewStartRequest {
-  const data = record(value, [
-    'model',
-    'thinkTimeMs',
-    'actionDelayMs',
-    'seed',
-  ]);
+  const data = record(value, ['model', 'thinkTimeMs', 'actionDelayMs', 'seed']);
   const models = ['easy', 'hard', 'expert'];
   if (typeof data.model !== 'string' || !models.includes(data.model))
     throw new WsPayloadError('model is invalid');

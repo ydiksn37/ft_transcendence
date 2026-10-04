@@ -1,8 +1,13 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
-import { attachBrowserDiagnostics, findChrome } from './browser-test-utils.mjs';
+import {
+  attachBrowserDiagnostics,
+  createTestJwt,
+  findChrome,
+  readDevelopmentVaultSecret,
+} from './browser-test-utils.mjs';
 
 const baseUrl = process.env.BROWSER_BASE_URL ?? 'https://localhost:8443';
 const envText = await readFile(new URL('../.env', import.meta.url), 'utf8');
@@ -15,11 +20,7 @@ const env = Object.fromEntries(
       return [line.slice(0, separator), line.slice(separator + 1).replace(/^"|"$/g, '')];
     }),
 );
-if (!env.JWT_SECRET || !env.DATABASE_URL) {
-  throw new Error('JWT_SECRET and DATABASE_URL are required in .env');
-}
-
-const databaseUrl = new URL(env.DATABASE_URL);
+const databaseUrl = new URL(await readDevelopmentVaultSecret('DATABASE_URL'));
 databaseUrl.hostname = '127.0.0.1';
 databaseUrl.port = env.POSTGRES_PORT || '54320';
 const requireFromBackend = createRequire(new URL('../apps/backend/package.json', import.meta.url));
@@ -36,14 +37,7 @@ const users = Array.from({ length: 4 }, (_, index) => ({
   role: 'USER',
 }));
 
-const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
-const signJwt = user => {
-  const now = Math.floor(Date.now() / 1000);
-  const header = encode({ alg: 'HS256', typ: 'JWT' });
-  const payload = encode({ sub: user.id, email: user.email, role: user.role, iat: now, exp: now + 900 });
-  const signature = createHmac('sha256', env.JWT_SECRET).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${signature}`;
-};
+const tokens = await Promise.all(users.map(user => createTestJwt(user.id, user.role)));
 
 const browser = await chromium.launch({
   executablePath: await findChrome(),
@@ -110,7 +104,7 @@ try {
     await context.addInitScript(({ token, storedUser }) => {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(storedUser));
-    }, { token: signJwt(user), storedUser: user });
+    }, { token: tokens[index], storedUser: user });
     const page = await context.newPage();
     attachBrowserDiagnostics(page, diagnostics, `tournament player ${index + 1}`);
     const response = await page.goto(new URL('/play/CUSTOM_ROOMS', baseUrl).toString(), {
