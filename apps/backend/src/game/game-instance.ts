@@ -670,7 +670,7 @@ export class GameInstance {
         (row < 0 || player.board[row][col] === null),
     );
     let maxLockY = -1;
-    for (const [r, c] of cells) {
+    for (const [r] of cells) {
       maxLockY = Math.max(maxLockY, r);
     }
 
@@ -1129,7 +1129,7 @@ export class GameInstance {
         void Promise.resolve(
           this.onGameOver(this.roomId, winner?.socketId ?? null, stats),
         ).catch((error: unknown) =>
-          console.error('[GameInstance] onGameOver callback failed', error),
+          this.logger.error('onGameOver callback failed', error),
         );
       }
       this.stop();

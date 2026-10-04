@@ -1,6 +1,7 @@
 import {
   Injectable,
   ExecutionContext,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -35,6 +36,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 /** 42 OAuth ガード */
 @Injectable()
 export class FtOauthGuard extends AuthGuard('42') {
+  private readonly logger = new Logger(FtOauthGuard.name);
+
   getAuthenticateOptions(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
     return {
@@ -42,21 +45,15 @@ export class FtOauthGuard extends AuthGuard('42') {
     };
   }
 
-  handleRequest(
-    err: any,
-    user: any,
-    info: any,
-    context: ExecutionContext,
-    status?: any,
-  ) {
+  handleRequest(err: any, user: any, info: any) {
     if (err) {
-      console.error('FtOauthGuard error:', err);
+      this.logger.error('FtOauthGuard error', err);
     }
     if (info) {
-      console.error('FtOauthGuard info:', info);
+      this.logger.warn('FtOauthGuard authentication info', info);
     }
     if (err || !user) {
-      console.error('FtOauthGuard user missing or err present');
+      this.logger.warn('FtOauthGuard rejected authentication');
       throw err || new UnauthorizedException('42 Authentication Failed');
     }
     return user;

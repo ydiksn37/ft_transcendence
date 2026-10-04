@@ -16,7 +16,6 @@ export interface AvatarDisplay {
   photo?: string;
 }
 
-/* dbできたら切り替える */
 export function getAvatarPreset(avatarId: number) {
   return AVATAR_PRESETS[avatarId % AVATAR_PRESETS.length]
 }

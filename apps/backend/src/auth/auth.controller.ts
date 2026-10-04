@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -44,6 +45,8 @@ interface OAuthUserProfile {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   // ── 通常登録 ──────────────────────────────────────────────
@@ -90,7 +93,7 @@ export class AuthController {
       ) {
         return res.redirect(`/auth/callback?error=${OAUTH_EMAIL_CONFLICT}`);
       }
-      console.error('Error in loginOrRegisterOauth:', e);
+      this.logger.error('Error in loginOrRegisterOauth', e);
       throw e;
     }
 

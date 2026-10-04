@@ -59,10 +59,6 @@ const Cell: React.FC<CellProps> = ({ type, status, x, y, size, skin = 'RETRO' })
           g.lineStyle(2, hexColor, 1);
           g.drawRect(2, 2, size - 4, size - 4);
         } else {
-          // Normal / merged piece: solid
-          // g.beginFill(hexColor);
-          // g.drawRect(0, 0, size, size);
-          // g.endFill();
           const bevel = Math.max(2, size * 0.14);
           const light = shade(hexColor, 55);
           const lightSide = shade(hexColor, 28);

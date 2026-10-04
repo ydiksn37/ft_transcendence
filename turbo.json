@@ -18,6 +18,18 @@
     "type-check": {
       "dependsOn": ["^type-check"]
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:cov": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "db:migrate": {
       "cache": false
     },

@@ -62,19 +62,32 @@ struct Offset {
   int dy;
 };
 
-using KickList = std::array<Offset, 5>;
+using KickList = std::array<Offset, 6>;
 
-constexpr KickList kDefaultKick{{{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}};
+constexpr KickList kDefaultKick{
+    {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}};
 
 const KickList& jlstzKicks(int from, int to) {
-  static constexpr KickList k01{{{0, 0}, {-1, 0}, {-1, -1}, {0, 2}, {-1, 2}}};
-  static constexpr KickList k10{{{0, 0}, {1, 0}, {1, 1}, {0, -2}, {1, -2}}};
+  static constexpr KickList k01{
+      {{0, 0}, {-1, 0}, {-1, -1}, {0, 2}, {-1, 2}, {0, 0}}};
+  static constexpr KickList k10{
+      {{0, 0}, {1, 0}, {1, 1}, {0, -2}, {1, -2}, {0, 0}}};
   static constexpr KickList k12 = k10;
   static constexpr KickList k21 = k01;
-  static constexpr KickList k23{{{0, 0}, {1, 0}, {1, -1}, {0, 2}, {1, 2}}};
-  static constexpr KickList k32{{{0, 0}, {-1, 0}, {-1, 1}, {0, -2}, {-1, -2}}};
+  static constexpr KickList k23{
+      {{0, 0}, {1, 0}, {1, -1}, {0, 2}, {1, 2}, {0, 0}}};
+  static constexpr KickList k32{
+      {{0, 0}, {-1, 0}, {-1, 1}, {0, -2}, {-1, -2}, {0, 0}}};
   static constexpr KickList k30 = k32;
   static constexpr KickList k03 = k23;
+  static constexpr KickList k02{
+      {{0, 0}, {0, -1}, {1, -1}, {-1, -1}, {1, 0}, {-1, 0}}};
+  static constexpr KickList k13{
+      {{0, 0}, {1, 0}, {1, -2}, {1, -1}, {0, -2}, {0, -1}}};
+  static constexpr KickList k20{
+      {{0, 0}, {0, 1}, {-1, 1}, {1, 1}, {-1, 0}, {1, 0}}};
+  static constexpr KickList k31{
+      {{0, 0}, {-1, 0}, {-1, -2}, {-1, -1}, {0, -2}, {0, -1}}};
 
   if (from == 0 && to == 1) return k01;
   if (from == 1 && to == 0) return k10;
@@ -84,18 +97,34 @@ const KickList& jlstzKicks(int from, int to) {
   if (from == 3 && to == 2) return k32;
   if (from == 3 && to == 0) return k30;
   if (from == 0 && to == 3) return k03;
+  if (from == 0 && to == 2) return k02;
+  if (from == 1 && to == 3) return k13;
+  if (from == 2 && to == 0) return k20;
+  if (from == 3 && to == 1) return k31;
   return kDefaultKick;
 }
 
 const KickList& iKicks(int from, int to) {
-  static constexpr KickList k01{{{0, 0}, {-2, 0}, {1, 0}, {-2, 1}, {1, -2}}};
-  static constexpr KickList k10{{{0, 0}, {2, 0}, {-1, 0}, {2, -1}, {-1, 2}}};
-  static constexpr KickList k12{{{0, 0}, {-1, 0}, {2, 0}, {-1, -2}, {2, 1}}};
-  static constexpr KickList k21{{{0, 0}, {1, 0}, {-2, 0}, {1, 2}, {-2, -1}}};
+  static constexpr KickList k01{
+      {{0, 0}, {-2, 0}, {1, 0}, {-2, 1}, {1, -2}, {0, 0}}};
+  static constexpr KickList k10{
+      {{0, 0}, {2, 0}, {-1, 0}, {2, -1}, {-1, 2}, {0, 0}}};
+  static constexpr KickList k12{
+      {{0, 0}, {-1, 0}, {2, 0}, {-1, -2}, {2, 1}, {0, 0}}};
+  static constexpr KickList k21{
+      {{0, 0}, {1, 0}, {-2, 0}, {1, 2}, {-2, -1}, {0, 0}}};
   static constexpr KickList k23 = k10;
   static constexpr KickList k32 = k01;
   static constexpr KickList k30 = k21;
   static constexpr KickList k03 = k12;
+  static constexpr KickList k02{
+      {{0, 0}, {0, -1}, {1, -1}, {-1, -1}, {1, 0}, {-1, 0}}};
+  static constexpr KickList k13{
+      {{0, 0}, {1, 0}, {1, -2}, {1, -1}, {0, -2}, {0, -1}}};
+  static constexpr KickList k20{
+      {{0, 0}, {0, 1}, {-1, 1}, {1, 1}, {-1, 0}, {1, 0}}};
+  static constexpr KickList k31{
+      {{0, 0}, {-1, 0}, {-1, -2}, {-1, -1}, {0, -2}, {0, -1}}};
 
   if (from == 0 && to == 1) return k01;
   if (from == 1 && to == 0) return k10;
@@ -105,6 +134,10 @@ const KickList& iKicks(int from, int to) {
   if (from == 3 && to == 2) return k32;
   if (from == 3 && to == 0) return k30;
   if (from == 0 && to == 3) return k03;
+  if (from == 0 && to == 2) return k02;
+  if (from == 1 && to == 3) return k13;
+  if (from == 2 && to == 0) return k20;
+  if (from == 3 && to == 1) return k31;
   return kDefaultKick;
 }
 
@@ -290,7 +323,7 @@ std::optional<ActivePiece> tryRotate(const Board& board,
 
   const KickList& kicks = piece.type == PieceType::I ? iKicks(from, to)
                                                       : jlstzKicks(from, to);
-  const int attempts = direction == RotationDirection::Rotate180 ? 1 : 5;
+  const int attempts = direction == RotationDirection::Rotate180 ? 6 : 5;
   for (int index = 0; index < attempts; ++index) {
     const Offset kick = kicks[index];
     ActivePiece rotated{piece.type, piece.x + kick.dx, piece.y + kick.dy, to};

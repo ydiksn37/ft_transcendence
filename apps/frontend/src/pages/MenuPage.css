@@ -78,10 +78,6 @@
   text-shadow: 2px 2px 0px #000;
 }
 
-@media (max-width: 1250px) {
-  /* Let scaling handle it mostly, but if we need to we can adjust here */
-}
-
 @media (max-width: 768px) {
   .menu-page-scaling-container {
     transform: none !important; /* Disable scale */

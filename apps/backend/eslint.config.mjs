@@ -35,7 +35,14 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/require-await': 'off',
+      'no-console': 'error',
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
+    },
+  },
+  {
+    files: ['src/migrate.ts', 'src/game/headless/headless-cli.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
   {

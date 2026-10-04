@@ -22,9 +22,6 @@ export const checkCollision = (
         const nextY = y + player.pos.y + moveY;
         const nextX = x + player.pos.x + moveX;
 
-        // Allow pieces to exist in skyline (y < 0) for advanced rotation setups
-        // if (nextY < 0) return true;
-
         // Floor collision
         if (nextY >= STAGE_HEIGHT) return true;
 

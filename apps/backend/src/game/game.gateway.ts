@@ -10,7 +10,7 @@ import {
   OnGatewayInit,
 } from '@nestjs/websockets';
 import { Namespace, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { resolve } from 'node:path';
 import {
   createHash,
@@ -20,11 +20,7 @@ import {
 } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ClientEvent, ServerEvent } from '@transcendence/shared';
-import type {
-  AiAgentModel,
-  AiDifficulty,
-  AiPreviewStartRequest,
-} from '@transcendence/shared';
+import type { AiAgentModel, AiDifficulty } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { GameService } from './game.service';
 import { ChatService } from '../chat/chat.service';
@@ -1092,7 +1088,6 @@ export class GameGateway
       return;
     }
 
-    let isReconnecting = false;
     if (room.isTournamentActive) {
       const userId = (client.data?.userId as string) ?? null;
       const guestSessionId =
@@ -1138,7 +1133,6 @@ export class GameGateway
         return;
       }
 
-      isReconnecting = true;
       const oldSocketId = room.players[existingPlayerIndex].socket.id;
       room.players[existingPlayerIndex].socket = client;
 
@@ -1526,7 +1520,7 @@ export class GameGateway
           } else if (currentMatch.id === tournament.root.id) {
             room.isTournamentActive = false;
             this.admitTournamentSpectators(room);
-            console.log(
+            this.logger.log(
               `[Tournament End] Tournament finished for room ${roomId}. isTournamentActive set to false.`,
             );
             this.server

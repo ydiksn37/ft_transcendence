@@ -1784,14 +1784,6 @@ void testExpertDonationTemplates() {
       supply.push_back(P::T);
       const std::string label = std::string(fixture.name) + (mirror ? " mirrored" : "");
       const auto plan = tetris::findExpertDonationTemplate(base, std::nullopt, supply);
-      if (fixture.name == "JS-A") {
-        // With this roof already built, neither JS order has a legal route.
-        // The named final silhouette must not promise an impossible setup.
-        expect(!plan, label + " must reject blocked donor routes under an early roof");
-        const auto ready = tetris::findExpertDonationTemplate(assembled, std::nullopt, {P::T});
-        expect(ready && ready->setup.empty(), label + " completed terrain must remain usable");
-        continue;
-      }
       expect(plan.has_value(), label + " must recognize a playable unfinished template");
       expect(!plan->setup.empty() && plan->setup.size() <= 3,
              label + " must value preparation, not just the completed TSD");

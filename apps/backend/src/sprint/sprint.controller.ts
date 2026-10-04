@@ -5,7 +5,6 @@ import {
   Body,
   Request,
   UseGuards,
-  Query,
 } from '@nestjs/common';
 import { SprintService } from './sprint.service';
 import { SaveSprintDto } from './dto/save-sprint.dto';
@@ -15,8 +14,6 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-// TODO: Ensure JwtAuthGuard is imported correctly based on your auth module
-// Assuming standard Passport JWT Guard setup in this project
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from '../auth/decorators/public.decorator';
 import type { AuthenticatedRequest } from '../auth/decorators/current-user.decorator';
@@ -35,8 +32,6 @@ export class SprintController {
     @Body() dto: SaveSprintDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    // req.user へのアクセスは、プロジェクトの AuthStrategy の payload 設計に依存します。
-    // 一般的に req.user.id に userId が入ります。
     return this.sprintService.saveRecord(req.user.id, dto);
   }
 

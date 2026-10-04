@@ -4,6 +4,8 @@
     "module": "Node16",
     "moduleResolution": "node16",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,
