@@ -1,48 +1,48 @@
-# ─── 環境変数（絶対にコミットしない） ──────
+# 環境変数
 .env
 .env.local
 .env.*.local
 
-# ─── Node.js ─────────────────────────────────
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# ─── ビルド出力 ───────────────────────────────
+# ビルド出力
 dist/
 build/
 .next/
 out/
 
-# ─── Turbo ───────────────────────────────────
+# Turbo
 .turbo/
 
-# ─── Prisma ───────────────────────────────────
+# Prisma
 apps/backend/node_modules/.prisma/
 
-# ─── アップロードファイル ─────────────────────
+# アップロードファイル
 apps/backend/uploads/
 
-# ─── OS ──────────────────────────────────────
+# OS
 .DS_Store
 Thumbs.db
 
-# ─── エディタ ─────────────────────────────────
+# エディタ
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ─── テストカバレッジ ─────────────────────────
+# テストカバレッジ
 coverage/
 
-# ─── SSL 証明書（生成ファイル） ───────────────
+# SSL 証明書
 nginx/ssl/
 
-# ─── Docker/Vault secrets ───────────────────────────
+# Docker/Vault secrets
 secrets/
 
-# ─── ログ ─────────────────────────────────────
+# ログ
 *.log
 logs/
