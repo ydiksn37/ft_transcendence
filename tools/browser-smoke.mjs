@@ -37,6 +37,16 @@ try {
     if (!bodyText.toLowerCase().includes(scenario.text.toLowerCase())) {
       diagnostics.push(`missing text: ${scenario.text}`);
     }
+    if (scenario.path === '/login') {
+      const password = page.locator('input[type="password"]');
+      if (await password.getAttribute('autocomplete') !== 'current-password') {
+        diagnostics.push('sign-in password autocomplete is not current-password');
+      }
+      await page.getByRole('button', { name: 'REGISTER' }).click();
+      if (await password.getAttribute('autocomplete') !== 'new-password') {
+        diagnostics.push('registration password autocomplete is not new-password');
+      }
+    }
     if (/something went wrong|error occurred in `stage`/i.test(bodyText)) {
       diagnostics.push('application error boundary rendered');
     }

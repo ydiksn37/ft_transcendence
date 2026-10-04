@@ -228,7 +228,8 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="login-form">
                     <DsField label="EMAIL" className="form-group">
                       <DsInput
-                        type="email" 
+                        type="email"
+                        autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="retro-input"
@@ -242,7 +243,8 @@ export default function Login() {
                       <>
                         <DsField label="USERNAME" className="form-group">
                           <DsInput
-                            type="text" 
+                            type="text"
+                            autoComplete="username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="retro-input"
@@ -254,7 +256,8 @@ export default function Login() {
                         </DsField>
                         <DsField label="DISPLAY NAME (OPTIONAL)" className="form-group">
                           <DsInput
-                            type="text" 
+                            type="text"
+                            autoComplete="nickname"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             className="retro-input"
@@ -267,7 +270,8 @@ export default function Login() {
           
                     <DsField label="PASSWORD" className="form-group">
                       <DsInput
-                        type="password" 
+                        type="password"
+                        autoComplete={isLogin ? 'current-password' : 'new-password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="retro-input"
