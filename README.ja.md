@@ -11,77 +11,34 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 - **Docker** および **Docker Compose**
 - **Node.js 20以上** および **npm 10以上**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
-- マシン上でポート8080と8443が利用可能であること（既定値。`NGINX_HTTP_PORT` と
-  `NGINX_PORT` で変更可能）。開発構成の直接接続用ポート3000、5173、54320、63790は
-  `127.0.0.1` のみにbindし、リモートアクセスはNginxのHTTPS入口に限定します。
+- マシン上でポート8080と8443が利用可能であること
 
 ### セットアップと実行
 1. リポジトリをクローンします:
    ```bash
-   git clone <repository_url> transcendence
-   cd transcendence
+   git clone <repository_url> ft_transcendence
+   cd ft_transcendence
    ```
 2. 環境変数を設定します:
    exampleファイルをコピーし、必要に応じて調整してください。
    ```bash
    cp .env.example .env
    ```
-   `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM` を設定して
-   ください。アカウント削除はメール確認を必須とするため、SMTP未設定では
-   削除を申請できません。
    42 OAuthのRedirect URIには `https://localhost:8443/api/auth/42/callback` を登録します。
    別のhost/portで提出する場合は、登録値と`.env`を同じURLへ変更してください。
-3. 依存関係をインストールし、Prisma Clientを生成します:
+3. 依存関係をインストールします:
    ```bash
    make install
    ```
-   `make install` は `apps/backend/prisma/schema.prisma` から
-   `prisma generate` を自動実行します。
 4. Docker Composeを使用してアプリケーションを起動します:
    ```bash
    make up
    # 全イメージを再buildする場合はこちら:
    make build
    ```
-   どちらもブラウザ用AIのbuildとVaultの初期化・unsealを行ってからCompose stackを起動します。
 5. アプリケーションにアクセスします:
    - ブラウザを開き、`https://localhost:8443`（または設定したドメイン/IPと`NGINX_PORT`）にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
-
-### Prisma Clientの生成
-
-`apps/backend/prisma/schema.prisma` を変更したとき、またはschema変更を含む
-ブランチへ切り替えたときは、次を実行してください。
-
-```bash
-make generate
-```
-
-バックエンドのbuildとtype-checkでもPrisma Clientを自動生成します。Docker
-imageも同じnpm scriptを使用し、開発コンテナはschema適用とNestJS起動の前に
-Clientを再生成します。
-
-### 品質確認
-
-```bash
-npm run type-check
-npm run lint
-npm test --workspace apps/backend -- --runInBand
-node --test apps/frontend/tests/*.test.cjs
-npm run build --workspace apps/frontend
-npm run test:browser # Chromeと:8443のHTTPS stackが必要
-npm run test:websocket # :8443のHTTPS/Socket.IO stackが必要
-```
-
-別環境を検証するときは`BROWSER_BASE_URL`を指定します。
-
-### 秘密情報の検査とローテーション
-
-commit前に`make secret-scan`を実行してください。`make secret-scan-history`では到達可能な
-全Git履歴を監査できます。履歴で検出された資格情報は漏えい済みとして扱い、失効・再発行します。
-開発用資格情報が漏えいした可能性がある場合は`make rotate-dev-secrets`を実行します。JWT/Session、PostgreSQL、
-Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再作成するため、既存sessionは
-無効になります。OAuth、SMTP、SMSの資格情報は各provider側で失効・再発行してください。
 
 ## 技術スタック (Technical Stack)
 - **フロントエンドフレームワーク:** React (Vite) + TypeScript
@@ -175,10 +132,6 @@ Redis、Vault KV履歴、backend用Vault tokenを更新して関連serviceを再
 ### データと分析 (Data and Analytics)
 19. **データエクスポート/インポート (Minor - 1pt)**: ユーザー設定と統計のJSON入出力。
 20. **高度な分析ダッシュボード (Major - 2pts)**: ユーザーパフォーマンスのインタラクティブなチャートとグラフ。
-21. **GDPRコンプライアンス (Minor - 1pt)**: パスワード/2FAでの再認証、メール確認コード、個人データの完全削除、対戦履歴の匿名保持、削除完了メール。
-
-### サイバーセキュリティ (Cybersecurity)
-22. **WAF と HashiCorp Vault (Major - 2pts)**: ModSecurityを搭載したNginxとシークレット管理用Vault。
 
 ## 個人の貢献 (Individual Contributions)
 - **sonakamu**: 
