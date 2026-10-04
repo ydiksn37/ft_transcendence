@@ -6,7 +6,7 @@ import { TETROMINOS } from '../../utils/tetrominos';
 import { gameBackgroundImage } from '../../utils/gameAppearance';
 import type { Player } from '../../hooks/usePlayer';
 import type { useConfig } from '../../hooks/useConfig';
-import background from '../../assets/images/tetrisbg_tokyo.png';
+import background from '../../assets/images/tetrisbg_tokyo.webp';
 import './TetrisUI.css';
 import './Config.css';
 

@@ -15,7 +15,7 @@ import { gameBackgroundImage } from '../../utils/gameAppearance';
 import './TetrisUI.css';
 
 const backgroundModules = import.meta.glob<string>(
-  '../../assets/images/tetrisbg_*.png',
+  '../../assets/images/tetrisbg_*.webp',
   { import: 'default' },
 );
 
@@ -254,7 +254,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{
         width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`,
+        backgroundImage: gameBackgroundImage('MATRIX', bg?.image),
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>
@@ -284,7 +284,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
       <div style={{
         width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        backgroundImage: `linear-gradient(rgba(6,0,15,0.72), rgba(6,0,15,0.72)), url(${bg?.image})`,
+        backgroundImage: gameBackgroundImage('MATRIX', bg?.image),
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
         fontFamily: '"Press Start 2P", monospace', color: 'white'
       }}>

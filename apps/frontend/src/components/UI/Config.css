@@ -173,6 +173,10 @@
   text-transform: uppercase;
 }
 
+.config-control label {
+  white-space: nowrap;
+}
+
 .config-number-input {
   width: 82px;
   min-height: 44px;

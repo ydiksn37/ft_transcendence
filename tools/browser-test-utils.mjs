@@ -60,10 +60,6 @@ export async function readDevelopmentVaultSecret(field) {
   return value;
 }
 
-const ignoredConsoleMessages = [
-  /GL Driver Message.*GPU stall due to ReadPixels/,
-];
-
 const formatLocation = message => {
   const location = message.location();
   if (!location.url) return '';
@@ -78,14 +74,17 @@ const formatLocation = message => {
 export function attachBrowserDiagnostics(page, diagnostics, label) {
   page.on('console', message => {
     if (message.type() !== 'warning' && message.type() !== 'error') return;
-    if (ignoredConsoleMessages.some(pattern => pattern.test(message.text()))) return;
     diagnostics.push(`${label} console.${message.type()}: ${message.text()}${formatLocation(message)}`);
   });
   page.on('pageerror', error => diagnostics.push(`${label} pageerror: ${error.message}`));
   page.on('request', request => {
-    const protocol = new URL(request.url()).protocol;
+    const url = new URL(request.url());
+    const protocol = url.protocol;
     if (protocol === 'http:' || protocol === 'ws:') {
       diagnostics.push(`${label} mixed-content request: ${request.url()}`);
+    }
+    if (url.pathname.split('/').includes('undefined')) {
+      diagnostics.push(`${label} invalid undefined request: ${request.url()}`);
     }
   });
   page.on('requestfailed', request => {
