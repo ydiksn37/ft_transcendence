@@ -13,6 +13,7 @@ const browser = await chromium.launch({
   headless: true,
   args: ['--ignore-certificate-errors', '--use-angle=swiftshader'],
 });
+console.log(`Chrome ${browser.version()}`);
 const failures = [];
 
 const me = {
@@ -115,7 +116,7 @@ await context.route('**/api/**', async route => {
 const runScenario = async (label, path, exercise) => {
   const page = await context.newPage();
   const diagnostics = [];
-  attachBrowserDiagnostics(page, diagnostics, label);
+  await attachBrowserDiagnostics(page, diagnostics, label);
   try {
     const response = await page.goto(new URL(path, baseUrl).toString(), { waitUntil: 'networkidle' });
     if (!response?.ok()) diagnostics.push(`${label} navigation HTTP ${response?.status() ?? 'no response'}`);

@@ -28,8 +28,14 @@ export default function Login() {
   const setAuth = useAuth((state) => state.setAuth);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get('redirectTo') || '/menu';
-  const cancelTo = searchParams.get('cancelTo') || '/';
+  const requestedRedirect = searchParams.get('redirectTo');
+  const redirectTo = requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+    ? requestedRedirect
+    : '/menu';
+  const requestedCancel = searchParams.get('cancelTo');
+  const cancelTo = requestedCancel?.startsWith('/') && !requestedCancel.startsWith('//')
+    ? requestedCancel
+    : '/';
   const { keyConfig } = useConfig();
 
   useEffect(() => {
@@ -229,6 +235,7 @@ export default function Login() {
                     <DsField label="EMAIL" className="form-group">
                       <DsInput
                         type="email" 
+                        autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="retro-input"
@@ -243,6 +250,7 @@ export default function Login() {
                         <DsField label="USERNAME" className="form-group">
                           <DsInput
                             type="text" 
+                            autoComplete="username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="retro-input"
@@ -268,6 +276,7 @@ export default function Login() {
                     <DsField label="PASSWORD" className="form-group">
                       <DsInput
                         type="password" 
+                        autoComplete={isLogin ? 'current-password' : 'new-password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="retro-input"

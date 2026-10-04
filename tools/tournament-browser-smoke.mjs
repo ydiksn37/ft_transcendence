@@ -44,6 +44,7 @@ const browser = await chromium.launch({
   headless: true,
   args: ['--ignore-certificate-errors', '--use-angle=swiftshader'],
 });
+console.log(`Chrome ${browser.version()}`);
 const contexts = [];
 const diagnostics = [];
 
@@ -106,7 +107,7 @@ try {
       localStorage.setItem('user', JSON.stringify(storedUser));
     }, { token: tokens[index], storedUser: user });
     const page = await context.newPage();
-    attachBrowserDiagnostics(page, diagnostics, `tournament player ${index + 1}`);
+    await attachBrowserDiagnostics(page, diagnostics, `tournament player ${index + 1}`);
     const response = await page.goto(new URL('/play/CUSTOM_ROOMS', baseUrl).toString(), {
       waitUntil: 'networkidle',
     });

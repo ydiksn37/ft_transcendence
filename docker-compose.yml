@@ -160,24 +160,17 @@ services:
     network_mode: none
 
   # ─────────────────────────────────────────
-  #  React フロントエンド (Vite dev server)
+  #  React フロントエンド (production build)
   # ─────────────────────────────────────────
   frontend:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
-      target: development
+      target: production
     container_name: transcendence_frontend
     restart: unless-stopped
-    environment:
-      VITE_WS_URL: ${VITE_WS_URL}
-      VITE_DEV_PROXY_TARGET: "http://backend:3000"
-    volumes:
-      - ./apps/frontend/src:/app/apps/frontend/src:ro  # ホットリロード用
-      - ./packages/shared/src:/app/packages/shared/src:ro   # Vite alias用の共有Socket source
-      - ./packages/shared/dist:/app/packages/shared/dist:ro # 型定義・production import用
     ports:
-      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:5173"
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80"
     depends_on:
       - backend
     networks:
@@ -194,7 +187,7 @@ services:
     restart: unless-stopped
     environment:
       NGINX_HTTPS_PORT: ${NGINX_PORT:-8443}
-      FRONTEND_UPSTREAM_PORT: 5173
+      FRONTEND_UPSTREAM_PORT: 80
       BLOCKING_PARANOIA: "2"
       DETECTION_PARANOIA: "2"
       ANOMALY_INBOUND: "5"

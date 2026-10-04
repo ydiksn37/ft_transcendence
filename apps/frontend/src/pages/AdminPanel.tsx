@@ -186,9 +186,9 @@ export default function AdminPanel() {
         <h2>CREATE USER</h2>
         <form onSubmit={event => { event.preventDefault(); void saveManagedUser(true); }}>
           <fieldset disabled={saving} style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <label>Email <input required type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} /></label>
-            <label>Username <input required minLength={3} maxLength={20} value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} /></label>
-            <label>Display name <input required maxLength={50} value={newUser.displayName} onChange={e => setNewUser({ ...newUser, displayName: e.target.value })} /></label>
+            <label>Email <input required type="email" autoComplete="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} /></label>
+            <label>Username <input required autoComplete="username" minLength={3} maxLength={20} value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} /></label>
+            <label>Display name <input required autoComplete="name" maxLength={50} value={newUser.displayName} onChange={e => setNewUser({ ...newUser, displayName: e.target.value })} /></label>
             <label>Password <input required type="password" autoComplete="new-password" minLength={8} maxLength={100} value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} /></label>
             <button type="submit">{saving ? 'SAVING…' : 'CREATE USER'}</button>
           </fieldset>

@@ -7,6 +7,7 @@ const browser = await chromium.launch({
   headless: true,
   args: ['--ignore-certificate-errors', '--use-angle=swiftshader'],
 });
+console.log(`Chrome ${browser.version()}`);
 const failures = [];
 
 const scenarios = [
@@ -16,6 +17,13 @@ const scenarios = [
   // Mobile intentionally hides CONFIG and MULTI PLAY.
   { path: '/menu', viewport: { width: 390, height: 844 }, text: 'MARATHON' },
   { path: '/login', viewport: { width: 1440, height: 900 }, text: 'SCHOOL 42' },
+  { path: '/profile', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/profile/user-id', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/settings', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/friends', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/search', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/chat', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
+  { path: '/admin', viewport: { width: 1440, height: 900 }, text: 'SIGN IN', redirectPath: '/login' },
   { path: '/privacy-policy', viewport: { width: 1440, height: 900 }, text: 'Privacy' },
   { path: '/terms-of-service', viewport: { width: 1440, height: 900 }, text: 'Terms' },
 ];
@@ -28,12 +36,15 @@ try {
     });
     const page = await context.newPage();
     const diagnostics = [];
-    attachBrowserDiagnostics(page, diagnostics, `${scenario.path} ${scenario.viewport.width}x${scenario.viewport.height}`);
+    await attachBrowserDiagnostics(page, diagnostics, `${scenario.path} ${scenario.viewport.width}x${scenario.viewport.height}`);
 
     const url = new URL(scenario.path, baseUrl).toString();
     const response = await page.goto(url, { waitUntil: 'networkidle' });
     if (!response?.ok()) diagnostics.push(`HTTP ${response?.status() ?? 'no response'}`);
     const bodyText = await page.locator('body').innerText();
+    if (scenario.redirectPath && new URL(page.url()).pathname !== scenario.redirectPath) {
+      diagnostics.push(`expected redirect to ${scenario.redirectPath}, received ${page.url()}`);
+    }
     if (!bodyText.toLowerCase().includes(scenario.text.toLowerCase())) {
       diagnostics.push(`missing text: ${scenario.text}`);
     }
@@ -109,7 +120,7 @@ try {
   });
   const page = await context.newPage();
   const diagnostics = [];
-  attachBrowserDiagnostics(page, diagnostics, '/profile');
+  await attachBrowserDiagnostics(page, diagnostics, '/profile');
   const response = await page.goto(new URL('/profile', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!response?.ok()) diagnostics.push(`HTTP ${response?.status() ?? 'no response'}`);
   let bodyText = await page.locator('body').innerText();
@@ -186,7 +197,7 @@ try {
   });
   const adminPage = await adminContext.newPage();
   const adminDiagnostics = [];
-  attachBrowserDiagnostics(adminPage, adminDiagnostics, '/admin');
+  await attachBrowserDiagnostics(adminPage, adminDiagnostics, '/admin');
   const adminResponse = await adminPage.goto(new URL('/admin', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!adminResponse?.ok()) adminDiagnostics.push(`HTTP ${adminResponse?.status() ?? 'no response'}`);
   await adminPage.getByLabel('Email').fill('created@example.com');
@@ -236,7 +247,7 @@ try {
   });
   const searchPage = await searchContext.newPage();
   const searchDiagnostics = [];
-  attachBrowserDiagnostics(searchPage, searchDiagnostics, '/search');
+  await attachBrowserDiagnostics(searchPage, searchDiagnostics, '/search');
   const searchResponse = await searchPage.goto(new URL('/search', baseUrl).toString(), { waitUntil: 'networkidle' });
   if (!searchResponse?.ok()) searchDiagnostics.push(`HTTP ${searchResponse?.status() ?? 'no response'}`);
   const searchText = await searchPage.locator('body').innerText();
@@ -262,7 +273,7 @@ try {
   const multiplayerPages = await Promise.all(
     multiplayerContexts.map(async (multiplayerContext, index) => {
       const multiplayerPage = await multiplayerContext.newPage();
-      attachBrowserDiagnostics(multiplayerPage, multiplayerDiagnostics, `custom room player ${index + 1}`);
+      await attachBrowserDiagnostics(multiplayerPage, multiplayerDiagnostics, `custom room player ${index + 1}`);
       const multiplayerResponse = await multiplayerPage.goto(
         new URL('/play/CUSTOM_ROOMS', baseUrl).toString(),
         { waitUntil: 'networkidle' },
@@ -320,7 +331,7 @@ try {
           });
         });
       });
-      attachBrowserDiagnostics(duelPage, duelDiagnostics, `duel player ${index + 1}`);
+      await attachBrowserDiagnostics(duelPage, duelDiagnostics, `duel player ${index + 1}`);
       const duelResponse = await duelPage.goto(
         new URL('/play/CUSTOM_ROOMS', baseUrl).toString(),
         { waitUntil: 'networkidle' },

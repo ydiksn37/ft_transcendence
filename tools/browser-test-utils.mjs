@@ -71,12 +71,20 @@ const formatLocation = message => {
  * The label is deliberately included in every entry so failures from several
  * open pages remain actionable.
  */
-export function attachBrowserDiagnostics(page, diagnostics, label) {
+export async function attachBrowserDiagnostics(page, diagnostics, label) {
   page.on('console', message => {
-    if (message.type() !== 'warning' && message.type() !== 'error') return;
+    if (!['info', 'warning', 'error'].includes(message.type())) return;
     diagnostics.push(`${label} console.${message.type()}: ${message.text()}${formatLocation(message)}`);
   });
   page.on('pageerror', error => diagnostics.push(`${label} pageerror: ${error.message}`));
+
+  const devtools = await page.context().newCDPSession(page);
+  await devtools.send('Log.enable');
+  devtools.on('Log.entryAdded', ({ entry }) => {
+    if (!['verbose', 'info', 'warning', 'error'].includes(entry.level)) return;
+    const location = entry.url ? ` (${entry.url}:${entry.lineNumber ?? 0})` : '';
+    diagnostics.push(`${label} devtools.${entry.level}/${entry.source}: ${entry.text}${location}`);
+  });
   page.on('request', request => {
     const url = new URL(request.url());
     const protocol = url.protocol;

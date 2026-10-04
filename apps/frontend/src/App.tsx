@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { legacyDashboardDestination } from '@/lib/profileHub'
+import { useAuth } from '@/hooks/useAuth'
 
 
 const Login = lazy(() => import('@/pages/Login'))
@@ -26,21 +27,31 @@ function LegacyDashboardRedirect() {
   return <Navigate to={legacyDashboardDestination(location.search)} replace />;
 }
 
+function RequireAuth({ children }: { children: ReactNode }) {
+  const token = useAuth((state) => state.token);
+  const location = useLocation();
+
+  if (token) return children;
+
+  const returnTo = `${location.pathname}${location.search}`;
+  return <Navigate to={`/login?redirectTo=${encodeURIComponent(returnTo)}`} replace />;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<div role="status" aria-live="polite" style={{ padding: 32 }}>LOADING…</div>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
-      <Route path="/chat" element={<Chat />} />
-      <Route path="/friends" element={<Friends />} />
-      <Route path="/search" element={<AdvancedSearch />} />
+      <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
+      <Route path="/friends" element={<RequireAuth><Friends /></RequireAuth>} />
+      <Route path="/search" element={<RequireAuth><AdvancedSearch /></RequireAuth>} />
 
       <Route path="/dashboard" element={<LegacyDashboardRedirect />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/profile/:id" element={<PublicProfile />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/admin" element={<AdminPanel />} />
+      <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+      <Route path="/profile/:id" element={<RequireAuth><PublicProfile /></RequireAuth>} />
+      <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+      <Route path="/admin" element={<RequireAuth><AdminPanel /></RequireAuth>} />
 
       {/* TOPページ（JOIN -> ゲーム） */}
       <Route path="/" element={<JoinPage />} />
