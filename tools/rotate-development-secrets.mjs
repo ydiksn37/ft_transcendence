@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const envPath = resolve(root, '.env');
 const original = readFileSync(envPath, 'utf8');
+const postgresPasswordPath = resolve(root, 'secrets/dev/postgres_password.txt');
+const redisPasswordPath = resolve(root, 'secrets/dev/redis_password.txt');
 
 const values = Object.fromEntries(
   original
@@ -25,32 +27,12 @@ if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(postgresUser ?? '')) {
   throw new Error('POSTGRES_USER must be a simple PostgreSQL identifier');
 }
 
-const rotated = {
-  JWT_SECRET: randomBytes(64).toString('base64'),
-  JWT_REFRESH_SECRET: randomBytes(64).toString('base64'),
-  SESSION_SECRET: randomBytes(48).toString('hex'),
-  POSTGRES_PASSWORD: randomBytes(48).toString('hex'),
-  REDIS_PASSWORD: randomBytes(48).toString('hex'),
-};
+const oldPostgresPassword = readFileSync(postgresPasswordPath, 'utf8').trim();
+const oldRedisPassword = readFileSync(redisPasswordPath, 'utf8').trim();
+const newPostgresPassword = randomBytes(48).toString('hex');
+const newRedisPassword = randomBytes(48).toString('hex');
 
-const replaceValue = (content, key, value) => {
-  const pattern = new RegExp(`^${key}=.*$`, 'm');
-  if (!pattern.test(content)) throw new Error(`Missing ${key} in .env`);
-  return content.replace(pattern, `${key}=${value}`);
-};
-
-let updated = original;
-for (const [key, value] of Object.entries(rotated)) updated = replaceValue(updated, key, value);
-updated = updated.replace(
-  /^DATABASE_URL=.*$/m,
-  `DATABASE_URL="postgresql://${postgresUser}:${rotated.POSTGRES_PASSWORD}@postgres:5432/${values.POSTGRES_DB}?schema=public"`,
-);
-updated = updated.replace(
-  /^REDIS_URL=.*$/m,
-  `REDIS_URL="redis://:${rotated.REDIS_PASSWORD}@redis:6379/0"`,
-);
-
-const sqlPassword = rotated.POSTGRES_PASSWORD.replaceAll("'", "''");
+const sqlPassword = newPostgresPassword.replaceAll("'", "''");
 execFileSync(
   'docker',
   ['compose', 'exec', '-T', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-U', postgresUser, '-d', 'postgres'],
@@ -61,13 +43,21 @@ execFileSync(
   },
 );
 
-const temporaryPath = `${envPath}.rotation.tmp`;
+const writeSecret = (path, value) => {
+  const temporaryPath = `${path}.rotation.tmp`;
+  writeFileSync(temporaryPath, `${value}\n`, { mode: 0o600 });
+  renameSync(temporaryPath, path);
+  chmodSync(path, 0o600);
+};
+
 try {
-  writeFileSync(temporaryPath, updated, { mode: 0o600 });
-  renameSync(temporaryPath, envPath);
+  writeSecret(postgresPasswordPath, newPostgresPassword);
+  writeSecret(redisPasswordPath, newRedisPassword);
   chmodSync(envPath, 0o600);
 } catch (error) {
-  const oldPassword = values.POSTGRES_PASSWORD.replaceAll("'", "''");
+  writeSecret(postgresPasswordPath, oldPostgresPassword);
+  writeSecret(redisPasswordPath, oldRedisPassword);
+  const oldPassword = oldPostgresPassword.replaceAll("'", "''");
   execFileSync(
     'docker',
     ['compose', 'exec', '-T', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-U', postgresUser, '-d', 'postgres'],
@@ -87,6 +77,7 @@ execFileSync('./tools/vault-init.sh', [], {
     VAULT_ENV: 'development',
     VAULT_PURGE_SECRET_HISTORY: 'true',
     VAULT_ROTATE_BACKEND_TOKEN: 'true',
+    VAULT_ROTATE_APPLICATION_SECRETS: 'true',
   },
   stdio: 'inherit',
 });
@@ -97,5 +88,5 @@ execFileSync(
   { cwd: root, stdio: 'inherit' },
 );
 
-console.log('Development JWT, session, PostgreSQL, Redis, Vault data versions, and backend Vault token rotated.');
+console.log('Development JWT, PostgreSQL, Redis, Vault data versions, and backend Vault token rotated.');
 console.log('Existing access/refresh tokens are now invalid. External provider credentials were not changed.');

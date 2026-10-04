@@ -37,7 +37,6 @@ export class ExportService {
           oauthProvider: true,
           oauthId: true,
           twoFactorEnabled: true,
-          deletedAt: true,
           createdAt: true,
           updatedAt: true,
         },

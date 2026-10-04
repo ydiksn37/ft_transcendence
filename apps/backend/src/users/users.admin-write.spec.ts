@@ -8,8 +8,6 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 import { AdminCreateUserDto, AdminEditUserDto } from './dto/user.dto';
 
 describe('admin user creation and profile edits', () => {
@@ -20,11 +18,9 @@ describe('admin user creation and profile edits', () => {
   const transaction = jest.fn(async (fn: (client: typeof tx) => unknown) =>
     fn(tx),
   );
-  const service = new UsersService(
-    { $transaction: transaction } as unknown as PrismaService,
-    {} as RedisService,
-    {} as MailService,
-  );
+  const service = new UsersService({
+    $transaction: transaction,
+  } as unknown as PrismaService);
   const dto = {
     email: 'new@example.com',
     username: 'new_user',
@@ -55,7 +51,7 @@ describe('admin user creation and profile edits', () => {
     expect(args.select).not.toHaveProperty('passwordHash');
     expect(args.select).not.toHaveProperty('twoFactorSecret');
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'admin', deletedAt: null } }),
+      expect.objectContaining({ where: { id: 'admin' } }),
     );
   });
 

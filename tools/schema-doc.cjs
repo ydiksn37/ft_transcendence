@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
+const documentPath = path.join(root, 'docs/ER.md');
 const schema = fs.readFileSync(path.join(root, 'apps/backend/prisma/schema.prisma'), 'utf8');
 const blocks = [...schema.matchAll(/^(model|enum) (\w+) \{\n([\s\S]*?)^\}/gm)].map(m => ({
   kind: m[1], name: m[2], lines: m[3].split('\n').map(l => l.split('//')[0].trim()).filter(Boolean),
@@ -18,9 +19,9 @@ for (const model of models) {
 }
 const out = [
   '# DB設計書（Prisma schema同期）', '',
-  'このファイルは `node tools/schema-doc.cjs` の出力です。手編集せず、schema変更後に再生成してください。',
+  'このファイルは `node tools/schema-doc.cjs --write` の出力です。手編集せず、schema変更後に再生成してください。',
   '`node tools/schema-doc.cjs --check` で同期を検証できます。DB接続・migrationは行いません。', '',
-  '正本: [schema.prisma](apps/backend/prisma/schema.prisma)。テーブルはPrismaモデル名で表記しています。',
+  '正本: [schema.prisma](../apps/backend/prisma/schema.prisma)。テーブルはPrismaモデル名で表記しています。',
   `総テーブル数: **${models.length}** / enum数: **${enums.length}**。実DBへのmigration適用状況を証明する図ではありません。`, '',
   '## ER図', '',
   '属性の型はPrisma型です。nullable・listは注記、PK/FK/UKは単一フィールドの制約です。',
@@ -63,18 +64,18 @@ for (const model of models) {
   out.push(...model.lines.filter(l => l.startsWith('@@')), '```', '');
 }
 out.push('## 解釈上の注意', '',
-  '- Organization、OrgMembership、DataExportRequestモデルは存在しません。NotificationTypeのORG_INVITEはschemaに残るenum値であり、組織機能の実装を意味しません。',
+  '- Organization、OrgMembership、DataExportRequest、Notificationモデルは存在しません。',
   '- GameResult.tournamentMatchIdは通常のnullable文字列とindexです。実際のFKはTournamentMatch.gameResultId → GameResult.idです。',
   '- nullのplayer/winner参照だけでAI・引き分け・ユーザー削除を区別できません。isAiGame、gameMode等と合わせて扱います。',
   '- schemaのonDeleteとサービスの削除処理は別です。アカウント削除サービスはChatMessage等を明示的に削除するため、SetNullだけが行われるとは限りません。',
   '- UserStats.winRateは現在の保存処理でwins / (wins + losses) × 100（分母0なら0）。GameAnalyticはUTC日次集計です。これらはschemaの制約ではなくアプリケーションの更新規則です。', '');
 const document = out.join('\n');
 if (process.argv.includes('--write')) {
-  fs.writeFileSync(path.join(root, 'ER.md'), document);
-  console.log(`ER.md updated: ${models.length} tables, ${enums.length} enums, ${relationCount} relations.`);
+  fs.writeFileSync(documentPath, document);
+  console.log(`docs/ER.md updated: ${models.length} tables, ${enums.length} enums, ${relationCount} relations.`);
 } else if (process.argv.includes('--check')) {
-  if (fs.readFileSync(path.join(root, 'ER.md'), 'utf8') !== document) {
-    console.error('ER.md is out of date; regenerate with node tools/schema-doc.cjs');
+  if (fs.readFileSync(documentPath, 'utf8') !== document) {
+    console.error('docs/ER.md is out of date; regenerate with node tools/schema-doc.cjs --write');
     process.exitCode = 1;
-  } else console.log(`ER.md matches schema: ${models.length} tables, ${enums.length} enums, ${relationCount} relations.`);
+  } else console.log(`docs/ER.md matches schema: ${models.length} tables, ${enums.length} enums, ${relationCount} relations.`);
 } else process.stdout.write(document);

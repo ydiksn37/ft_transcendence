@@ -8,8 +8,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB}
+    secrets:
+      - postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -29,13 +31,18 @@ services:
     image: redis:7-alpine
     container_name: transcendence_redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    secrets:
+      - redis_password
+    command:
+      - sh
+      - -ec
+      - exec redis-server --requirepass "$$(cat /run/secrets/redis_password)"
     volumes:
       - redis_data:/data
     ports:
       - "${DEV_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-63790}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
       interval: 2s
       timeout: 5s
       retries: 5
@@ -97,30 +104,14 @@ services:
     # schema変更は `make migrate-dev name=...` でmigrationを作成する（db pushは使わない）
     command: sh -c "npm run db:generate && npx ts-node --transpile-only src/migrate.ts && npm run dev"
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
-      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      NODE_ENV: development
+      PORT: 3000
       VAULT_ADDR: "http://vault:8200"
       VAULT_TOKEN_FILE: /run/secrets/vault_token
       VAULT_SECRET_PATH: secret/data/transcendence
-      VAULT_REQUIRED: ${VAULT_REQUIRED:-true}
+      VAULT_REQUIRED: "true"
       MIGRATE_BASELINE_EXISTING: "true"
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
-      FT_CLIENT_ID: ${FT_CLIENT_ID}
-      FT_CLIENT_SECRET: ${FT_CLIENT_SECRET}
       FT_CALLBACK_URL: ${FT_CALLBACK_URL}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      SMTP_FROM: ${SMTP_FROM}
-      OTP_EXPIRES_MINUTES: ${OTP_EXPIRES_MINUTES:-10}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
       UPLOAD_DIR: /app/uploads
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       AI_AGENT_PATH: /opt/ai-agent-dev/ai_agent
@@ -179,7 +170,6 @@ services:
     container_name: transcendence_frontend
     restart: unless-stopped
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
       VITE_WS_URL: ${VITE_WS_URL}
       VITE_DEV_PROXY_TARGET: "http://backend:3000"
     volumes:
@@ -227,6 +217,10 @@ volumes:
 
 # tools/vault-init.sh（VAULT_ENV=development）が生成する。secrets/ はGit管理外
 secrets:
+  postgres_password:
+    file: ./secrets/dev/postgres_password.txt
+  redis_password:
+    file: ./secrets/dev/redis_password.txt
   vault_token:
     file: ./secrets/dev/vault_token.txt
   vault_unseal_key:

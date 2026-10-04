@@ -32,6 +32,11 @@ export default function Settings() {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(user?.twoFactorEnabled || false);
   const [operationError, setOperationError] = useState('');
+  const [showDeleteAccountForm, setShowDeleteAccountForm] = useState(false);
+  const [deletionPassword, setDeletionPassword] = useState('');
+  const [deletionTwoFactorCode, setDeletionTwoFactorCode] = useState('');
+  const [deletionConfirmation, setDeletionConfirmation] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const handleGenerate2FA = async () => {
     setOperationError('');
@@ -284,69 +289,34 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = async () => {
-    const password = window.prompt(
-      'Enter your current password. Leave it blank for an OAuth-only account.'
-    );
-    if (password === null) return;
-    if (password.length > 100) {
+    if (deletionPassword.length > 100) {
       setOperationError('Password must not exceed 100 characters.');
       return;
     }
-
-    let twoFactorCode: string | undefined;
-    if (is2FAEnabled) {
-      const enteredCode = window.prompt('Enter your current 6-digit 2FA code.');
-      if (enteredCode === null) return;
-      if (!isSixDigitCode(enteredCode)) {
-        setOperationError('Enter the 6-digit authentication code.');
-        return;
-      }
-      twoFactorCode = enteredCode;
+    if (is2FAEnabled && !isSixDigitCode(deletionTwoFactorCode)) {
+      setOperationError('Enter the 6-digit authentication code.');
+      return;
+    }
+    if (deletionConfirmation !== 'DELETE MY ACCOUNT') {
+      setOperationError('Type DELETE MY ACCOUNT to confirm deletion.');
+      return;
     }
 
+    setOperationError('');
+    setIsDeletingAccount(true);
     try {
       const token = localStorage.getItem('token');
-      const requestRes = await fetch('/api/users/me/deletion-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          ...(password ? { password } : {}),
-          ...(twoFactorCode ? { twoFactorCode } : {})
-        })
-      });
-      if (!requestRes.ok) {
-        const error = await requestRes.json().catch(() => null);
-        alert(error?.message || 'Failed to request account deletion.');
-        return;
-      }
-
-      const code = window.prompt(
-        'A 6-digit deletion code was sent to your email. Enter it here.'
-      );
-      if (code === null) return;
-      if (!isSixDigitCode(code)) {
-        setOperationError('Enter the 6-digit deletion code.');
-        return;
-      }
-      const confirmation = window.prompt(
-        'This permanently deletes your account and personal data. Type DELETE MY ACCOUNT to continue.'
-      );
-      if (confirmation === null) return;
-      if (confirmation !== 'DELETE MY ACCOUNT') {
-        setOperationError('Account deletion confirmation did not match.');
-        return;
-      }
-
       const deleteRes = await fetch('/api/users/me', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ code, confirmation })
+        body: JSON.stringify({
+          ...(deletionPassword ? { password: deletionPassword } : {}),
+          ...(is2FAEnabled ? { twoFactorCode: deletionTwoFactorCode } : {}),
+          confirmation: deletionConfirmation
+        })
       });
       if (deleteRes.ok) {
         alert('Account successfully deleted.');
@@ -357,7 +327,9 @@ export default function Settings() {
         alert(error?.message || 'Failed to delete account.');
       }
     } catch {
-      alert('Failed to delete account.');
+      setOperationError('Failed to delete account.');
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -585,11 +557,73 @@ export default function Settings() {
                 Permanently delete your account. This action cannot be undone.
               </div>
               <button 
-                onClick={handleDeleteAccount}
+                onClick={() => setShowDeleteAccountForm(true)}
                 style={{ ...buttonStyle, backgroundColor: '#e74c3c' }}
               >
                 DELETE ACCOUNT
               </button>
+              {showDeleteAccountForm && (
+                <div style={{ width: '100%', maxWidth: '520px', padding: '16px', border: '2px solid #e74c3c', backgroundColor: '#1a1a1a', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <label style={{ color: '#fff', fontSize: '9px', lineHeight: '1.5' }}>
+                    CURRENT PASSWORD (leave blank for an OAuth-only account)
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={deletionPassword}
+                    onChange={(event) => setDeletionPassword(event.target.value)}
+                    maxLength={100}
+                    style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '10px', fontFamily: "'Press Start 2P', monospace", fontSize: '11px' }}
+                  />
+                  {is2FAEnabled && (
+                    <>
+                      <label style={{ color: '#fff', fontSize: '9px' }}>CURRENT 2FA CODE</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        value={deletionTwoFactorCode}
+                        onChange={(event) => setDeletionTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                        maxLength={6}
+                        pattern="[0-9]{6}"
+                        style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '10px', fontFamily: "'Press Start 2P', monospace", fontSize: '11px' }}
+                      />
+                    </>
+                  )}
+                  <label style={{ color: '#fff', fontSize: '9px', lineHeight: '1.5' }}>
+                    TYPE "DELETE MY ACCOUNT"
+                  </label>
+                  <input
+                    type="text"
+                    value={deletionConfirmation}
+                    onChange={(event) => setDeletionConfirmation(event.target.value)}
+                    autoComplete="off"
+                    style={{ backgroundColor: '#000', color: '#fff', border: '2px solid #555', padding: '10px', fontFamily: "'Press Start 2P', monospace", fontSize: '11px' }}
+                  />
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => void handleDeleteAccount()}
+                      disabled={isDeletingAccount}
+                      style={{ ...buttonStyle, backgroundColor: '#e74c3c', opacity: isDeletingAccount ? 0.6 : 1 }}
+                    >
+                      {isDeletingAccount ? 'DELETING...' : 'DELETE PERMANENTLY'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowDeleteAccountForm(false);
+                        setDeletionPassword('');
+                        setDeletionTwoFactorCode('');
+                        setDeletionConfirmation('');
+                        setOperationError('');
+                      }}
+                      disabled={isDeletingAccount}
+                      style={{ ...buttonStyle, backgroundColor: '#555' }}
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>

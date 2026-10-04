@@ -45,7 +45,7 @@ describe('API key authentication and rate limit', () => {
       expect(apiKey.findFirst).not.toHaveBeenCalled();
     },
   );
-  it('rejects unknown/revoked keys and filters deleted or banned owners', async () => {
+  it('rejects unknown/revoked keys and filters banned owners', async () => {
     apiKey.findFirst.mockResolvedValue(null);
     await expect(
       guard.canActivate(request(raw).context),
@@ -54,7 +54,6 @@ describe('API key authentication and rate limit', () => {
       expect.objectContaining({
         isActive: true,
         user: expect.objectContaining({
-          deletedAt: null,
           OR: expect.any(Array),
         }),
       }),

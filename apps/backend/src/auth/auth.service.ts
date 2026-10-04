@@ -20,7 +20,6 @@ export const OAUTH_EMAIL_CONFLICT = 'oauth_email_conflict';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly SALT_ROUNDS = 12;
-  private readonly OTP_TTL = Number(process.env.OTP_EXPIRES_MINUTES ?? 10) * 60;
   private readonly TEMP_TOKEN_TTL = 300; // 5分
 
   constructor(
@@ -66,10 +65,6 @@ export class AuthService {
       throw new UnauthorizedException(
         'メールアドレスまたはパスワードが正しくありません',
       );
-    }
-
-    if (user.deletedAt) {
-      throw new UnauthorizedException('このアカウントは削除されています');
     }
 
     if (user.bannedUntil && user.bannedUntil > new Date()) {
@@ -139,10 +134,6 @@ export class AuthService {
         },
       });
       this.logger.log(`42 OAuthで新規ユーザー登録: ${user.username}`);
-    }
-
-    if (user.deletedAt) {
-      throw new UnauthorizedException('このアカウントは削除されています');
     }
 
     if (user.bannedUntil && user.bannedUntil > new Date()) {
@@ -232,7 +223,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorEnabled: false,
         twoFactorSecret: user.twoFactorSecret,
       },
@@ -264,7 +254,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorSecret: user.twoFactorSecret,
       },
       data: { twoFactorEnabled: true },
@@ -288,7 +277,6 @@ export class AuthService {
     const changed = await this.prisma.user.updateMany({
       where: {
         id: userId,
-        deletedAt: null,
         twoFactorSecret: user.twoFactorSecret,
       },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
@@ -315,7 +303,6 @@ export class AuthService {
       !user ||
       !user.twoFactorEnabled ||
       !user.twoFactorSecret ||
-      user.deletedAt ||
       (user.bannedUntil && user.bannedUntil > new Date())
     )
       throw new UnauthorizedException();

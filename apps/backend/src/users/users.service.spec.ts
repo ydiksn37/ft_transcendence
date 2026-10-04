@@ -6,8 +6,6 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 import { UsersService } from './users.service';
 
 describe('UsersService admin operations', () => {
@@ -24,22 +22,7 @@ describe('UsersService admin operations', () => {
     $transaction: jest.fn(),
   };
 
-  const redis = {
-    setEx: jest.fn(),
-    get: jest.fn(),
-    del: jest.fn(),
-  };
-
-  const mail = {
-    sendAccountDeletionCode: jest.fn(),
-    sendAccountDeleted: jest.fn(),
-  };
-
-  const service = new UsersService(
-    prisma as unknown as PrismaService,
-    redis as unknown as RedisService,
-    mail as unknown as MailService,
-  );
+  const service = new UsersService(prisma as unknown as PrismaService);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -48,9 +31,6 @@ describe('UsersService admin operations', () => {
     prisma.chatMessage.deleteMany.mockResolvedValue({ count: 0 });
     prisma.fileUpload.deleteMany.mockResolvedValue({ count: 0 });
     prisma.$transaction.mockResolvedValue([]);
-    redis.del.mockResolvedValue(undefined);
-    mail.sendAccountDeletionCode.mockResolvedValue(undefined);
-    mail.sendAccountDeleted.mockResolvedValue(undefined);
   });
 
   it('never returns authentication secrets from the current-user profile', async () => {
@@ -134,7 +114,7 @@ describe('UsersService admin operations', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('requires the current password before emailing a deletion code', async () => {
+  it('requires the current password before deleting an account', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
       email: 'player@example.com',
@@ -143,70 +123,54 @@ describe('UsersService admin operations', () => {
       twoFactorEnabled: false,
       twoFactorSecret: null,
     });
-
-    await expect(
-      service.requestAccountDeletion('user-1', {
-        password: 'wrong-password',
-      }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(redis.setEx).not.toHaveBeenCalled();
-    expect(mail.sendAccountDeletionCode).not.toHaveBeenCalled();
-  });
-
-  it('emails a short-lived deletion code after identity verification', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      id: 'user-1',
-      email: 'player@example.com',
-      displayName: 'Player',
-      passwordHash: await bcrypt.hash('correct-password', 4),
-      twoFactorEnabled: false,
-      twoFactorSecret: null,
-    });
-
-    const result = await service.requestAccountDeletion('user-1', {
-      password: 'correct-password',
-    });
-
-    expect(redis.setEx).toHaveBeenCalledWith(
-      'account-deletion:user-1',
-      600,
-      expect.any(String),
-    );
-    expect(mail.sendAccountDeletionCode).toHaveBeenCalledWith(
-      'player@example.com',
-      'Player',
-      expect.stringMatching(/^\d{6}$/),
-      10,
-    );
-    expect(result.expiresInSeconds).toBe(600);
-  });
-
-  it('rejects deletion without a valid emailed code', async () => {
-    redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
 
     await expect(
       service.deleteMe('user-1', {
+        password: 'wrong-password',
         confirmation: 'DELETE MY ACCOUNT',
-        code: '999999',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('permanently deletes personal data and sends completion email', async () => {
+  it('requires a valid TOTP code when two-factor authentication is enabled', async () => {
+    const secret = 'JBSWY3DPEHPK3PXP';
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'player@example.com',
+      displayName: 'Player',
+      passwordHash: null,
+      twoFactorEnabled: true,
+      twoFactorSecret: secret,
+      fileUploads: [],
+    });
+
+    await expect(
+      service.deleteMe('user-1', {
+        confirmation: 'DELETE MY ACCOUNT',
+        twoFactorCode: '000000',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('permanently deletes personal data after direct reauthentication', async () => {
     prisma.$transaction.mockImplementationOnce(
       (callback: (tx: typeof prisma) => unknown) => callback(prisma),
     );
-    redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
     prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
       email: 'player@example.com',
       displayName: 'Player',
+      passwordHash: await bcrypt.hash('correct-password', 4),
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
       fileUploads: [],
     });
 
     const result = await service.deleteMe('user-1', {
       confirmation: 'DELETE MY ACCOUNT',
-      code: '123456',
+      password: 'correct-password',
     });
 
     expect(prisma.chatMessage.deleteMany).toHaveBeenCalledWith({
@@ -219,20 +183,18 @@ describe('UsersService admin operations', () => {
       where: { id: 'user-1' },
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(redis.del).toHaveBeenCalledWith('account-deletion:user-1');
-    expect(mail.sendAccountDeleted).toHaveBeenCalledWith(
-      'player@example.com',
-      'Player',
-    );
     expect(result.message).toContain('完全に削除');
   });
 
   it('refuses GDPR deletion of the last usable administrator without deleting personal data', async () => {
-    redis.get.mockResolvedValue(await bcrypt.hash('123456', 4));
     prisma.user.findUnique.mockResolvedValue({
+      id: 'admin-user',
       role: 'ADMIN',
       email: 'admin@example.com',
       displayName: 'Admin',
+      passwordHash: await bcrypt.hash('correct-password', 4),
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
       fileUploads: [],
     });
     prisma.user.count.mockResolvedValue(0);
@@ -242,25 +204,17 @@ describe('UsersService admin operations', () => {
     await expect(
       service.deleteMe('last-admin', {
         confirmation: 'DELETE MY ACCOUNT',
-        code: '123456',
+        password: 'correct-password',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.chatMessage.deleteMany).not.toHaveBeenCalled();
     expect(prisma.fileUpload.deleteMany).not.toHaveBeenCalled();
     expect(prisma.user.delete).not.toHaveBeenCalled();
-    expect(mail.sendAccountDeleted).not.toHaveBeenCalled();
   });
 
-  it('does not expose a deleted user through search or profile lookup', async () => {
+  it('does not expose a missing user through profile lookup', async () => {
     prisma.user.findMany.mockResolvedValue([]);
     prisma.user.count.mockResolvedValue(0);
-
-    await service.searchUsers({ q: 'deleted-player' });
-    expect(prisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ deletedAt: null }),
-      }),
-    );
 
     prisma.user.findUnique.mockResolvedValue(null);
     await expect(service.getUserById('deleted-user')).rejects.toBeInstanceOf(

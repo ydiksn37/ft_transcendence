@@ -8,15 +8,14 @@
 # 生成物（Git管理外）:
 #   <dir>/vault_unseal_key.txt  vault-unsealer が自動unsealに使う
 #   <dir>/vault_token.txt       backend用の transcendence policy トークン
-#   secrets/postgres_password.txt, secrets/redis_password.txt（productionのみ）
+#   <dir>/postgres_password.txt, <dir>/redis_password.txt
 # root tokenはどこにも保存しない。設定時だけunseal keyから一時発行し、終了時にrevokeする。
 #
 # 任意の環境変数:
 #   VAULT_STORE_UNSEAL_KEY=false  初期化時にunseal keyをファイルへ保存せず一度だけ表示する
 #                                 （オフライン保管・手動unseal運用。以後は VAULT_UNSEAL_KEY で渡す）
 #   VAULT_UNSEAL_KEY              keyファイルを置かない運用でのunseal key
-#   FT_CLIENT_ID, FT_CLIENT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
-#                                 productionの初回投入値
+#   FT_CLIENT_ID, FT_CLIENT_SECRET  42 OAuthの投入値
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -28,12 +27,16 @@ case "$env_name" in
     secrets_dir=secrets
     unseal_key_file="${VAULT_UNSEAL_KEY_FILE_HOST:-$secrets_dir/vault_unseal_key.txt}"
     token_file="${VAULT_TOKEN_FILE_HOST:-$secrets_dir/vault_token.txt}"
+    postgres_password_file="${POSTGRES_PASSWORD_FILE:-$secrets_dir/postgres_password.txt}"
+    redis_password_file="${REDIS_PASSWORD_FILE:-$secrets_dir/redis_password.txt}"
     ;;
   development)
     compose_file=docker-compose.yml
     secrets_dir=secrets/dev
     unseal_key_file="$secrets_dir/vault_unseal_key.txt"
     token_file="$secrets_dir/vault_token.txt"
+    postgres_password_file="$secrets_dir/postgres_password.txt"
+    redis_password_file="$secrets_dir/redis_password.txt"
     ;;
   *)
     echo "VAULT_ENV must be production or development" >&2
@@ -97,16 +100,38 @@ mkdir -p "$secrets_dir"
 chmod 700 secrets "$secrets_dir"
 umask 077
 
-if [ "$env_name" = production ]; then
-  for name in postgres_password redis_password; do
-    [ -s "$secrets_dir/$name.txt" ] || openssl rand -hex 32 > "$secrets_dir/$name.txt"
-  done
-fi
+[ -e .env ] && chmod 600 .env
+[ -s "$postgres_password_file" ] || openssl rand -hex 32 > "$postgres_password_file"
+[ -s "$redis_password_file" ] || openssl rand -hex 32 > "$redis_password_file"
 # compose の secrets 定義はファイルの存在を要求するため、未発行でも空ファイルを置く
 [ -e "$unseal_key_file" ] || : > "$unseal_key_file"
 [ -e "$token_file" ] || : > "$token_file"
-chmod 600 "$unseal_key_file" "$token_file"
-[ "$env_name" = production ] && chmod 600 "$secrets_dir/postgres_password.txt" "$secrets_dir/redis_password.txt"
+chmod 600 "$postgres_password_file" "$redis_password_file" "$unseal_key_file" "$token_file"
+
+postgres_user="$(compose config --format json |
+  node -e '
+    const config = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    const user = String(config.services.postgres.environment.POSTGRES_USER ?? "");
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(user)) process.exit(1);
+    process.stdout.write(user);
+  ')"
+compose up -d postgres
+attempt=0
+until compose exec -T postgres pg_isready -U "$postgres_user" -d postgres > /dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 30 ]; then
+    echo "PostgreSQL did not become ready" >&2
+    exit 1
+  fi
+  sleep 1
+done
+# POSTGRES_PASSWORD_FILE is only applied when the data directory is first created.
+# Keep an existing development volume in sync when migrating from the old .env password.
+POSTGRES_USER="$postgres_user" POSTGRES_PASSWORD="$(cat "$postgres_password_file")" node -e '
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD.replaceAll("'"'"'", "'"'"''"'"'");
+  process.stdout.write(`ALTER ROLE "${user}" WITH PASSWORD '"'"'${password}'"'"';\n`);
+' | compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$postgres_user" -d postgres > /dev/null
 
 compose up -d vault vault-unsealer
 
@@ -164,53 +189,56 @@ if ! vault_cmd secrets list -format=json | json_field "secret/.type" > /dev/null
   vault_cmd secrets enable -path=secret kv-v2 > /dev/null
 fi
 
-# vault.ts の ALLOWED_SECRET_KEYS と対応させる
-secret_keys="DATABASE_URL REDIS_URL JWT_SECRET JWT_REFRESH_SECRET FT_CLIENT_ID FT_CLIENT_SECRET SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM SESSION_SECRET TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER"
-
 if [ "${VAULT_PURGE_SECRET_HISTORY:-false}" = true ]; then
   # KV v2 keeps older secret versions unless metadata is removed explicitly.
   vault_cmd kv metadata delete secret/transcendence > /dev/null 2>&1 || true
 fi
 
-if [ "$env_name" = development ]; then
-  # 開発では .env から解決したbackendの環境変数を正とし、毎回同期する
-  echo "Syncing secret/transcendence from docker-compose.yml environment..."
-  compose config --format json |
-    SECRET_KEYS="$secret_keys" node -e '
-      const env = JSON.parse(require("fs").readFileSync(0, "utf8")).services.backend.environment ?? {};
-      const data = {};
-      for (const key of process.env.SECRET_KEYS.split(" ")) {
-        if (env[key]) data[key] = String(env[key]);
-      }
-      process.stdout.write(JSON.stringify(data));
-    ' | vault_cmd kv put secret/transcendence - > /dev/null
-elif vault_cmd kv get secret/transcendence > /dev/null 2>&1; then
-  echo "secret/transcendence already exists; keeping current values"
-else
-  echo "Writing secret/transcendence..."
-  POSTGRES_PASSWORD="$(cat "$secrets_dir/postgres_password.txt")" \
-    REDIS_PASSWORD="$(cat "$secrets_dir/redis_password.txt")" \
-    node -e '
-      const { randomBytes } = require("crypto");
-      const e = process.env;
-      const user = e.POSTGRES_USER || "transcendence";
-      const db = e.POSTGRES_DB || "transcendence_db";
-      process.stdout.write(JSON.stringify({
-        DATABASE_URL: `postgresql://${user}:${e.POSTGRES_PASSWORD}@postgres:5432/${db}?schema=public`,
-        REDIS_URL: `redis://:${e.REDIS_PASSWORD}@redis:6379/0`,
-        JWT_SECRET: randomBytes(48).toString("base64"),
-        JWT_REFRESH_SECRET: randomBytes(48).toString("base64"),
-        SESSION_SECRET: randomBytes(32).toString("hex"),
-        FT_CLIENT_ID: e.FT_CLIENT_ID || "CHANGE_ME_42_CLIENT_ID",
-        FT_CLIENT_SECRET: e.FT_CLIENT_SECRET || "CHANGE_ME_42_CLIENT_SECRET",
-        SMTP_HOST: e.SMTP_HOST || "",
-        SMTP_PORT: e.SMTP_PORT || "587",
-        SMTP_USER: e.SMTP_USER || "",
-        SMTP_PASS: e.SMTP_PASS || "",
-        SMTP_FROM: e.SMTP_FROM || "ft_transcendence <noreply@transcendence.local>",
-      }));
-    ' | vault_cmd kv put secret/transcendence - > /dev/null
-fi
+echo "Synchronizing secret/transcendence..."
+existing_secret="$(vault_cmd kv get -format=json secret/transcendence 2>/dev/null || printf '{}')"
+printf '%s' "$existing_secret" |
+  POSTGRES_PASSWORD="$(cat "$postgres_password_file")" \
+  REDIS_PASSWORD="$(cat "$redis_password_file")" \
+  ROTATE_APPLICATION_SECRETS="${VAULT_ROTATE_APPLICATION_SECRETS:-false}" \
+  node -e '
+    const { randomBytes } = require("crypto");
+    const { existsSync, readFileSync } = require("fs");
+    const { parse } = require("dotenv");
+
+    const raw = readFileSync(0, "utf8").trim();
+    const response = raw ? JSON.parse(raw) : {};
+    const existing = response.data?.data ?? {};
+    const local = existsSync(".env") ? parse(readFileSync(".env")) : {};
+    const placeholder = (value) =>
+      /CHANGE_ME|PLACEHOLDER|EXAMPLE|DUMMY|YOUR[_-]/i.test(value ?? "");
+    const configured = (value) => Boolean(value?.trim()) && !placeholder(value);
+    const validJwt = (value) => configured(value) && value.length >= 32;
+    const rotate = process.env.ROTATE_APPLICATION_SECRETS === "true";
+    const user = local.POSTGRES_USER || "transcendence";
+    const database = local.POSTGRES_DB || "transcendence_db";
+    const allowed = [
+      "DATABASE_URL", "REDIS_URL", "JWT_SECRET", "JWT_REFRESH_SECRET",
+      "FT_CLIENT_ID", "FT_CLIENT_SECRET",
+    ];
+    const data = Object.fromEntries(
+      allowed.filter((key) => existing[key] !== undefined).map((key) => [key, String(existing[key])]),
+    );
+
+    data.DATABASE_URL = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(process.env.POSTGRES_PASSWORD)}@postgres:5432/${encodeURIComponent(database)}?schema=public`;
+    data.REDIS_URL = `redis://:${encodeURIComponent(process.env.REDIS_PASSWORD)}@redis:6379/0`;
+    if (rotate || !validJwt(data.JWT_SECRET)) {
+      data.JWT_SECRET = randomBytes(48).toString("base64");
+    }
+    if (rotate || !validJwt(data.JWT_REFRESH_SECRET) || data.JWT_REFRESH_SECRET === data.JWT_SECRET) {
+      data.JWT_REFRESH_SECRET = randomBytes(48).toString("base64");
+    }
+
+    for (const key of ["FT_CLIENT_ID", "FT_CLIENT_SECRET"]) {
+      if (configured(local[key])) data[key] = local[key];
+      else if (placeholder(data[key])) delete data[key];
+    }
+    process.stdout.write(JSON.stringify(data));
+  ' | vault_cmd kv put secret/transcendence - > /dev/null
 
 vault_cmd policy write transcendence - < vault/transcendence-policy.hcl > /dev/null
 

@@ -398,7 +398,7 @@ export class RespondFriendRequestDto {
   accept!: boolean;
 }
 
-export class RequestAccountDeletionDto {
+export class DeleteOwnAccountDto {
   @ApiPropertyOptional({
     description: 'Password accounts must provide their current password',
   })
@@ -413,14 +413,8 @@ export class RequestAccountDeletionDto {
   @IsOptional()
   @Matches(/^\d{6}$/)
   twoFactorCode?: string;
-}
 
-export class ConfirmAccountDeletionDto {
   @ApiProperty({ example: 'DELETE MY ACCOUNT' })
   @IsIn(['DELETE MY ACCOUNT'])
   confirmation!: 'DELETE MY ACCOUNT';
-
-  @ApiProperty({ example: '123456' })
-  @Matches(/^\d{6}$/)
-  code!: string;
 }

@@ -12,8 +12,6 @@ import {
   UploadedFile,
   ParseUUIDPipe,
   ParseFilePipeBuilder,
-  HttpCode,
-  HttpStatus,
   Logger,
   BadRequestException,
 } from '@nestjs/common';
@@ -42,8 +40,7 @@ import {
   AdminUsersQueryDto,
   FriendRequestDto,
   RespondFriendRequestDto,
-  RequestAccountDeletionDto,
-  ConfirmAccountDeletionDto,
+  DeleteOwnAccountDto,
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -119,21 +116,11 @@ export class UsersController {
     return this.usersService.updateGameSettings(user.id, dto);
   }
 
-  @Post('me/deletion-request')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '本人確認後、アカウント削除確認コードをメール送信' })
-  requestAccountDeletion(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: RequestAccountDeletionDto,
-  ) {
-    return this.usersService.requestAccountDeletion(user.id, dto);
-  }
-
   @Delete('me')
-  @ApiOperation({ summary: '確認コードを検証してアカウントを完全削除' })
+  @ApiOperation({ summary: '本人確認後、アカウントを完全削除' })
   deleteMe(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: ConfirmAccountDeletionDto,
+    @Body() dto: DeleteOwnAccountDto,
   ) {
     return this.usersService.deleteMe(user.id, dto);
   }

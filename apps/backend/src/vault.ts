@@ -9,16 +9,54 @@ const ALLOWED_SECRET_KEYS = new Set([
   'JWT_REFRESH_SECRET',
   'FT_CLIENT_ID',
   'FT_CLIENT_SECRET',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_USER',
-  'SMTP_PASS',
-  'SMTP_FROM',
-  'SESSION_SECRET',
-  'TWILIO_ACCOUNT_SID',
-  'TWILIO_AUTH_TOKEN',
-  'TWILIO_PHONE_NUMBER',
 ]);
+
+const REQUIRED_SECRETS = [
+  'DATABASE_URL',
+  'REDIS_URL',
+  'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
+] as const;
+
+function isPlaceholder(value: string): boolean {
+  return /CHANGE_ME|PLACEHOLDER|EXAMPLE|DUMMY|YOUR[_-]/i.test(value);
+}
+
+function validateRequiredSecrets(): void {
+  for (const key of REQUIRED_SECRETS) {
+    const value = process.env[key]?.trim();
+    if (!value) throw new Error(`${key} is missing from Vault`);
+    if (isPlaceholder(value)) {
+      throw new Error(`${key} contains a placeholder value`);
+    }
+  }
+
+  const jwtSecret = process.env.JWT_SECRET as string;
+  const refreshSecret = process.env.JWT_REFRESH_SECRET as string;
+  if (jwtSecret.length < 32 || refreshSecret.length < 32) {
+    throw new Error('JWT secrets must each be at least 32 characters');
+  }
+  if (jwtSecret === refreshSecret) {
+    throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be different');
+  }
+
+  try {
+    if (
+      new URL(process.env.DATABASE_URL as string).protocol !== 'postgresql:'
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error('DATABASE_URL must be a valid postgresql URL');
+  }
+  try {
+    if (new URL(process.env.REDIS_URL as string).protocol !== 'redis:') {
+      throw new Error();
+    }
+  } catch {
+    throw new Error('REDIS_URL must be a valid redis URL');
+  }
+}
 
 function vaultIsRequired(): boolean {
   return process.env.VAULT_REQUIRED === 'true';
@@ -75,6 +113,7 @@ export async function initializeVault() {
       for (const [key, value] of Object.entries(data.data)) {
         if (ALLOWED_SECRET_KEYS.has(key)) process.env[key] = String(value);
       }
+      validateRequiredSecrets();
       logger.log('Successfully loaded secrets from Vault into process.env');
       return true;
     }

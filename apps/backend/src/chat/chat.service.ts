@@ -30,7 +30,7 @@ export class ChatService implements OnModuleInit {
       throw new BadRequestException('自分自身とのチャットは作成できません');
 
     const targetUser = await this.prisma.user.findUnique({
-      where: { id: userId2, deletedAt: null },
+      where: { id: userId2 },
       select: { id: true },
     });
     if (!targetUser) {

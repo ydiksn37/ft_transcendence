@@ -11,12 +11,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GAME_ACHIEVEMENTS } from '../game/achievements';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
 import { unlink } from 'fs/promises';
 import { basename, join, resolve, sep } from 'path';
 import { authenticator } from 'otplib';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 import {
   UpdateUserDto,
   AdminCreateUserDto,
@@ -25,11 +22,9 @@ import {
   BanUserDto,
   SearchHistoryDto,
   UpdateGameSettingsDto,
-  RequestAccountDeletionDto,
-  ConfirmAccountDeletionDto,
+  DeleteOwnAccountDto,
 } from './dto/user.dto';
 
-const ACCOUNT_DELETION_TTL_SECONDS = 10 * 60;
 const ACCOUNT_DELETION_CONFIRMATION = 'DELETE MY ACCOUNT';
 
 const ADMIN_USER_SELECT = {
@@ -52,16 +47,12 @@ const ADMIN_USER_SELECT = {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly redis: RedisService,
-    private readonly mail: MailService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── 自分のプロフィール取得 ────────────────────────────────
   async getProgression(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       select: {
         stats: {
           select: {
@@ -123,7 +114,7 @@ export class UsersService {
 
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       include: { stats: true, gameSettings: true },
     });
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
@@ -163,16 +154,19 @@ export class UsersService {
   }
 
   // ── GDPRアカウント完全削除 ────────────────────────────────
-  async requestAccountDeletion(userId: string, dto: RequestAccountDeletionDto) {
+  async deleteMe(userId: string, dto: DeleteOwnAccountDto) {
+    if (dto.confirmation !== ACCOUNT_DELETION_CONFIRMATION) {
+      throw new BadRequestException('確認文言が一致しません');
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
+      where: { id: userId },
       select: {
         id: true,
-        email: true,
-        displayName: true,
         passwordHash: true,
         twoFactorEnabled: true,
         twoFactorSecret: true,
+        fileUploads: { select: { storageUrl: true } },
       },
     });
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
@@ -197,57 +191,13 @@ export class UsersService {
       if (!valid) throw new UnauthorizedException('2FAコードが無効です');
     }
 
-    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
-    const codeHash = await bcrypt.hash(code, 10);
-    const redisKey = this.accountDeletionKey(userId);
-    await this.redis.setEx(redisKey, ACCOUNT_DELETION_TTL_SECONDS, codeHash);
-
-    try {
-      await this.mail.sendAccountDeletionCode(
-        user.email,
-        user.displayName,
-        code,
-        ACCOUNT_DELETION_TTL_SECONDS / 60,
-      );
-    } catch (error) {
-      await this.redis.del(redisKey);
-      throw error;
-    }
-
-    return {
-      message: '削除確認コードをメールで送信しました',
-      expiresInSeconds: ACCOUNT_DELETION_TTL_SECONDS,
-    };
-  }
-
-  async deleteMe(userId: string, dto: ConfirmAccountDeletionDto) {
-    if (dto.confirmation !== ACCOUNT_DELETION_CONFIRMATION) {
-      throw new BadRequestException('確認文言が一致しません');
-    }
-
-    const redisKey = this.accountDeletionKey(userId);
-    const codeHash = await this.redis.get(redisKey);
-    if (!codeHash || !(await bcrypt.compare(dto.code, codeHash))) {
-      throw new UnauthorizedException('削除確認コードが無効か期限切れです');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, deletedAt: null },
-      select: {
-        email: true,
-        displayName: true,
-        fileUploads: { select: { storageUrl: true } },
-      },
-    });
-    if (!user) throw new NotFoundException('ユーザーが見つかりません');
-
     // Match/tournament history is retained with user references set to NULL.
     // Messages and all account-owned records are removed because their content
     // can contain personal data. Remaining user relations cascade or SetNull
     // according to schema.prisma.
     await this.withSerializableUserWrite(async (tx) => {
       const current = await tx.user.findUnique({
-        where: { id: userId, deletedAt: null },
+        where: { id: userId },
         select: { role: true },
       });
       if (!current) throw new NotFoundException('ユーザーが見つかりません');
@@ -256,19 +206,12 @@ export class UsersService {
       await tx.fileUpload.deleteMany({ where: { uploaderId: userId } });
       await tx.user.delete({ where: { id: userId } });
     });
-    return this.finishAccountDeletion(userId, user);
+    return this.finishAccountDeletion(user);
   }
 
-  private async finishAccountDeletion(
-    userId: string,
-    user: {
-      email: string;
-      displayName: string;
-      fileUploads: { storageUrl: string | null }[];
-    },
-  ) {
-    await this.redis.del(this.accountDeletionKey(userId));
-
+  private async finishAccountDeletion(user: {
+    fileUploads: { storageUrl: string | null }[];
+  }) {
     const localFiles = user.fileUploads
       .map((upload) => upload.storageUrl)
       .map((url) => this.localUploadPath(url))
@@ -282,20 +225,7 @@ export class UsersService {
       );
     }
 
-    try {
-      await this.mail.sendAccountDeleted(user.email, user.displayName);
-    } catch (error) {
-      this.logger.error(
-        'アカウント削除完了メールを送信できませんでした',
-        error instanceof Error ? error.stack : undefined,
-      );
-    }
-
     return { message: 'アカウントと個人データを完全に削除しました' };
-  }
-
-  private accountDeletionKey(userId: string): string {
-    return `account-deletion:${userId}`;
   }
 
   private localUploadPath(storageUrl: string | null): string | null {
@@ -344,7 +274,7 @@ export class UsersService {
   // ── 他ユーザープロフィール取得 ────────────────────────────
   async getUserById(id: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id, deletedAt: null },
+      where: { id },
       include: { stats: true },
     });
     if (!user) throw new NotFoundException('ユーザーが見つかりません');
@@ -357,9 +287,7 @@ export class UsersService {
     const limit = Math.min(Number(dto.limit ?? 20), 50);
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      deletedAt: null,
-    };
+    const where: any = {};
 
     if (dto.q) {
       where.OR = [
@@ -518,7 +446,7 @@ export class UsersService {
     }
 
     const addressee = await this.prisma.user.findUnique({
-      where: { id: addresseeId, deletedAt: null },
+      where: { id: addresseeId },
       select: { id: true },
     });
     if (!addressee) {
@@ -636,7 +564,7 @@ export class UsersService {
       throw new BadRequestException('自分をブロックできません');
 
     const target = await this.prisma.user.findUnique({
-      where: { id: blockedId, deletedAt: null },
+      where: { id: blockedId },
       select: { id: true },
     });
     if (!target) throw new NotFoundException('ユーザーが見つかりません');
@@ -667,13 +595,12 @@ export class UsersService {
     const skip = (page - 1) * limit;
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
-        where: { deletedAt: null },
         select: ADMIN_USER_SELECT,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.user.count({ where: { deletedAt: null } }),
+      this.prisma.user.count(),
     ]);
     return {
       data: users,
@@ -690,7 +617,7 @@ export class UsersService {
     try {
       return await this.withSerializableUserWrite(async (tx) => {
         const actor = await tx.user.findUnique({
-          where: { id: actorId, deletedAt: null },
+          where: { id: actorId },
           select: { role: true, bannedUntil: true },
         });
         if (
@@ -739,7 +666,7 @@ export class UsersService {
       );
     const target = await this.withSerializableUserWrite(async (tx) => {
       const actor = await tx.user.findUnique({
-        where: { id: actorId, deletedAt: null },
+        where: { id: actorId },
         select: { role: true, bannedUntil: true },
       });
       if (
@@ -750,11 +677,9 @@ export class UsersService {
         throw new ForbiddenException('管理操作の権限がありません');
       }
       const user = await tx.user.findUnique({
-        where: { id: targetId, deletedAt: null },
+        where: { id: targetId },
         select: {
           role: true,
-          email: true,
-          displayName: true,
           fileUploads: { select: { storageUrl: true } },
         },
       });
@@ -765,7 +690,7 @@ export class UsersService {
       await tx.user.delete({ where: { id: targetId } });
       return user;
     });
-    return this.finishAccountDeletion(targetId, target);
+    return this.finishAccountDeletion(target);
   }
 
   async adminEditUser(
@@ -846,7 +771,7 @@ export class UsersService {
     // no usable administrator. A conflict retries with fresh authorization.
     return this.withSerializableUserWrite(async (tx) => {
       const actor = await tx.user.findUnique({
-        where: { id: actorId, deletedAt: null },
+        where: { id: actorId },
         select: { role: true, bannedUntil: true },
       });
       const now = new Date();
@@ -858,7 +783,7 @@ export class UsersService {
         throw new ForbiddenException('管理操作の権限がありません');
       }
       const target = await tx.user.findUnique({
-        where: { id: targetId, deletedAt: null },
+        where: { id: targetId },
         select: { role: true },
       });
       if (!target) throw new NotFoundException('ユーザーが見つかりません');
@@ -890,7 +815,6 @@ export class UsersService {
       where: {
         id: { not: targetId },
         role: 'ADMIN',
-        deletedAt: null,
         OR: [{ bannedUntil: null }, { bannedUntil: { lte: new Date() } }],
       },
     });
@@ -936,7 +860,6 @@ export class UsersService {
       oauthId,
       bannedUntil,
       banReason,
-      deletedAt,
       ...publicUser
     } = user;
     return publicUser;

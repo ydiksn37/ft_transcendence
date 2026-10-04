@@ -6,17 +6,13 @@ import {
 import { Prisma } from '@prisma/client';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 
 describe('administrative permission hierarchy', () => {
   const user = { findUnique: jest.fn(), update: jest.fn(), count: jest.fn() };
   const transaction = jest.fn();
-  const service = new UsersService(
-    { $transaction: transaction } as unknown as PrismaService,
-    {} as RedisService,
-    {} as MailService,
-  );
+  const service = new UsersService({
+    $transaction: transaction,
+  } as unknown as PrismaService);
   const conflict = () =>
     new Prisma.PrismaClientKnownRequestError('write conflict', {
       code: 'P2034',
@@ -127,7 +123,6 @@ describe('administrative permission hierarchy', () => {
       expect.objectContaining({
         id: { not: 'target' },
         role: 'ADMIN',
-        deletedAt: null,
       }),
     );
   });

@@ -5,17 +5,13 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
-import { MailService } from '../mail/mail.service';
 
 describe('admin account deletion', () => {
   const findUnique = jest.fn(),
     remove = jest.fn(),
     count = jest.fn();
   const chatDelete = jest.fn(),
-    uploadDelete = jest.fn(),
-    del = jest.fn(),
-    sendAccountDeleted = jest.fn();
+    uploadDelete = jest.fn();
   const tx = {
     user: { findUnique, delete: remove, count },
     chatMessage: { deleteMany: chatDelete },
@@ -24,11 +20,9 @@ describe('admin account deletion', () => {
   const transaction = jest.fn(async (fn: (client: typeof tx) => unknown) =>
     fn(tx),
   );
-  const service = new UsersService(
-    { $transaction: transaction } as unknown as PrismaService,
-    { del } as unknown as RedisService,
-    { sendAccountDeleted } as unknown as MailService,
-  );
+  const service = new UsersService({
+    $transaction: transaction,
+  } as unknown as PrismaService);
   beforeEach(() => {
     jest.clearAllMocks();
     findUnique.mockImplementation(async ({ where }) =>
@@ -36,8 +30,6 @@ describe('admin account deletion', () => {
         ? { role: 'ADMIN', bannedUntil: null }
         : {
             role: 'USER',
-            email: 'target@example.com',
-            displayName: 'Target',
             fileUploads: [],
           },
     );
@@ -50,11 +42,6 @@ describe('admin account deletion', () => {
     expect(uploadDelete).toHaveBeenCalledWith({
       where: { uploaderId: 'target' },
     });
-    expect(del).toHaveBeenCalledWith('account-deletion:target');
-    expect(sendAccountDeleted).toHaveBeenCalledWith(
-      'target@example.com',
-      'Target',
-    );
     expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'Serializable',
     });
