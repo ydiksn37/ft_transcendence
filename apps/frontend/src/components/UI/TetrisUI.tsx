@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Stage } from '@pixi/react';
 import GameBoard from '../GameBoard';
+import { ManagedPixiStage } from '../ManagedPixiStage';
 import { calculateGhostY, type Cell } from '../../utils/gameHelpers';
 import { TETROMINOS } from '../../utils/tetrominos';
 import type { Player } from '../../hooks/usePlayer';
@@ -18,6 +18,10 @@ const backgroundModules = import.meta.glob<string>(
   '../../assets/images/tetrisbg_*.png',
   { import: 'default' },
 );
+
+// Pixel-art boards do not benefit from device-pixel-ratio supersampling. A
+// stable object also keeps unrelated opponent updates from redrawing all boards.
+const GAME_STAGE_OPTIONS = { backgroundAlpha: 0, resolution: 1 } as const;
 
 type TetrisUIProps = {
   showGhost?: boolean;
@@ -86,17 +90,29 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
 
   // Refs for DOM-level animation control (shake / flash)
   const boardContainerRef = useRef<HTMLDivElement>(null);
+  const shakeFramesRef = useRef<number[]>([]);
   const [flashKey, setFlashKey] = useState(0);
 
   // ── Hard-drop shake: triggered by lockEvent (local) or serverPiecesPlaced (server match) ──
   const triggerShake = () => {
     const el = boardContainerRef.current;
     if (!el) return;
-    // Remove the class, force a reflow, then re-add to restart the CSS animation every time.
+    shakeFramesRef.current.forEach(cancelAnimationFrame);
+    shakeFramesRef.current = [];
     el.classList.remove('board-shake');
-    void el.offsetWidth; // triggers reflow
-    el.classList.add('board-shake');
+    const removeFrame = requestAnimationFrame(() => {
+      const addFrame = requestAnimationFrame(() => {
+        boardContainerRef.current?.classList.add('board-shake');
+        shakeFramesRef.current = [];
+      });
+      shakeFramesRef.current = [addFrame];
+    });
+    shakeFramesRef.current = [removeFrame];
   };
+
+  useEffect(() => () => {
+    shakeFramesRef.current.forEach(cancelAnimationFrame);
+  }, []);
 
   useEffect(() => {
     if (!lockEvent) return;
@@ -114,19 +130,6 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
     triggerShake();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverPiecesPlaced]);
-
-  // 非アクティブタブから戻ってきた際に WebGL コンテキストが失われている場合があるため
-  // Stage を強制再マウントするためのキー。visibilitychange でインクリメントする。
-  const [stageKey, setStageKey] = useState(0);
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        setStageKey(prev => prev + 1);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -499,11 +502,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
               style={{ position: 'relative', width: stage.length > 0 ? stage[0].length * 30 : 300, height: 660 }}
             >
               <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                <Stage 
-                  key={stageKey}
+                <ManagedPixiStage
                   width={stage.length > 0 ? stage[0].length * 30 : 300} 
                   height={1200} 
-                  options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}
+                  options={GAME_STAGE_OPTIONS}
                   onMount={(app) => {
                     const canvas = app.view as HTMLCanvasElement;
                     const onLost = (e: Event) => e.preventDefault();
@@ -534,7 +536,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                         : undefined
                     }
                   />
-                </Stage>
+                </ManagedPixiStage>
               </div>
 
             {/* Line-clear flash effect */}
@@ -722,11 +724,10 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                       </h3>
                       <div style={{ position: 'relative', width: 300, height: 660 }}>
                         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                          <Stage 
-                            key={stageKey}
+                          <ManagedPixiStage
                             width={300} 
                             height={1200} 
-                            options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}
+                            options={GAME_STAGE_OPTIONS}
                             onMount={(app) => {
                               const canvas = app.view as HTMLCanvasElement;
                               const onLost = (e: Event) => e.preventDefault();
@@ -750,7 +751,7 @@ export const TetrisUI: React.FC<TetrisUIProps> = ({
                               player={{ pos: {x: 0, y:0}, tetromino: [[0]], collided: false, rotationIndex: 0, spawnCount: 0 } as any} 
                               ghostY={0} 
                             />
-                          </Stage>
+                          </ManagedPixiStage>
                         </div>
                         
                         {isWaiting && (

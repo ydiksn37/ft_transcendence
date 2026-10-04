@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Stage } from '@pixi/react';
 import GameBoard from './GameBoard';
+import { ManagedPixiStage } from './ManagedPixiStage';
 import { createStage, checkCollision, calculateGhostY, type Cell } from '../utils/gameHelpers';
 import { randomTetromino } from '../utils/tetrominos';
+
+const BACKGROUND_STAGE_OPTIONS = { backgroundAlpha: 0, resolution: 1 } as const;
 
 export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed }) => {
   const [stage, setStage] = useState(createStage(10));
@@ -132,9 +134,9 @@ export const BackgroundTetris: React.FC<{ reversed?: boolean }> = ({ reversed })
       <div style={{ opacity: 0.6, transform: reversed ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }}>
         <div style={{ position: 'relative', width: 300, height: 660 }}>
           <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-            <Stage width={300} height={1200} options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}>
+            <ManagedPixiStage width={300} height={1200} options={BACKGROUND_STAGE_OPTIONS}>
               <GameBoard stage={stage} player={player as any} ghostY={calculateGhostY(player as any, stage)} />
-            </Stage>
+            </ManagedPixiStage>
           </div>
         </div>
       </div>

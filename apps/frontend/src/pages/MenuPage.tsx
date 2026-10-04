@@ -8,8 +8,8 @@ import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { useTouchControls } from '../hooks/useTouchControls';
 import { useGameState } from '../hooks/useGameState';
 import { useNavigate } from 'react-router-dom';
-import { Stage } from '@pixi/react';
 import GameBoard from '../components/GameBoard';
+import { ManagedPixiStage } from '../components/ManagedPixiStage';
 import { useAuth } from '../hooks/useAuth';
 import './MenuPage.css';
 
@@ -33,6 +33,8 @@ const createMenuStage = (): Cell[][] => {
   }
   return stage;
 };
+
+const MENU_STAGE_OPTIONS = { backgroundAlpha: 0, resolution: 1 } as const;
 
 const MenuPage = () => {
   const navigate = useNavigate();
@@ -372,13 +374,13 @@ const MenuPage = () => {
 
       <div className="menu-page-board-wrapper">
         <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
-          <Stage width={1230} height={1200} options={{ backgroundAlpha: 0, resolution: window.devicePixelRatio || 1 }}>
+          <ManagedPixiStage width={1230} height={1200} options={MENU_STAGE_OPTIONS}>
             <GameBoard
               stage={stage}
               player={transitionMode ? { ...player, tetromino: [] } : player}
               ghostY={calculateGhostY(player, stage)}
             />
-          </Stage>
+          </ManagedPixiStage>
         </div>
 
         <div style={{ position: 'absolute', bottom: 0, left: 0, width: '1230px', height: '250px', display: 'flex', pointerEvents: 'none', zIndex: 15 }}>

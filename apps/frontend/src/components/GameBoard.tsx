@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Container, Graphics } from '@pixi/react';
 import * as PIXI from 'pixi.js';
 import Cell from './Cell';
+import { drawCellShape } from '../lib/drawCellShape';
 import { type Cell as CellType, checkCollision } from '../utils/gameHelpers';
 import type { Player } from '../hooks/usePlayer';
 
@@ -61,26 +62,28 @@ const GameBoard: React.FC<GameBoardProps> = ({ stage, player, ghostY, targetLine
     g.drawRect(1.5, 601.5, width - 3, 597);
   }, [width]);
 
+  const drawStage = useCallback((g: PIXI.Graphics) => {
+    g.clear();
+    stage.forEach((row, y) => {
+      row.forEach((cell, x) => {
+        drawCellShape(
+          g,
+          cell[0],
+          cell[1],
+          CELL_SIZE,
+          minoSkin,
+          x * CELL_SIZE,
+          y * CELL_SIZE,
+        );
+      });
+    });
+  }, [stage, minoSkin]);
+
   return (
     <Container y={0}>
       <Graphics draw={drawBackground} />
       {/* 1. Static stage (merged cells and clear background) */}
-      {stage.map((row, y) =>
-        row.map((cell, x) => {
-          if (y < 20 && cell[1] === 'clear') return null; // Hide grid for top 20 rows
-          return (
-            <Cell
-              key={`stage-${y}-${x}`}
-              skin={minoSkin}
-              type={cell[0]}
-              status={cell[1]}
-              x={x * CELL_SIZE}
-              y={y * CELL_SIZE}
-              size={CELL_SIZE}
-            />
-          );
-        })
-      )}
+      <Graphics draw={drawStage} />
       
       {/* 2. Ghost piece */}
       {showGhost && player.tetromino.map((row, y) =>

@@ -17,6 +17,16 @@ type SessionReadyPayload = {
   reconnectGraceMs?: number;
 };
 
+type OpponentBoardUpdate = {
+  roomId?: string;
+  playerId?: string;
+  stage: Cell[][];
+  score: number;
+  next?: string[];
+  hold?: string | null;
+  isGameOver?: boolean;
+};
+
 const getGuestSessionAuth = () => {
   if (typeof window === 'undefined') return {};
   const guestSessionId = window.sessionStorage.getItem(GUEST_SESSION_ID_KEY);
@@ -119,7 +129,108 @@ export const useMultiplayer = ({
   const activeRoom = useRef<string | null>(null);
   const aiRoom = useRef<string | null>(null);
   const isSpectatingRef = useRef(false);
+  const networkFrameRef = useRef<number | null>(null);
+  const pendingServerStateRef = useRef<(GameState & {
+    roomId: string;
+    started: boolean;
+  }) | null>(null);
+  const pendingOpponentUpdatesRef = useRef(
+    new Map<string, OpponentBoardUpdate>(),
+  );
+  const pendingLegacyOpponentRef = useRef<OpponentBoardUpdate | null>(null);
+
+  const cancelQueuedNetworkRender = useCallback(() => {
+    if (networkFrameRef.current !== null) {
+      cancelAnimationFrame(networkFrameRef.current);
+      networkFrameRef.current = null;
+    }
+    pendingServerStateRef.current = null;
+    pendingOpponentUpdatesRef.current.clear();
+    pendingLegacyOpponentRef.current = null;
+  }, []);
+
+  const scheduleNetworkRender = useCallback(() => {
+    if (networkFrameRef.current !== null) return;
+    networkFrameRef.current = requestAnimationFrame(() => {
+      networkFrameRef.current = null;
+
+      const serverState = pendingServerStateRef.current;
+      pendingServerStateRef.current = null;
+      if (
+        serverState &&
+        serverState.roomId === activeRoom.current &&
+        !isSpectatingRef.current
+      ) {
+        setServerState(serverState);
+        setDropTime(serverState.started && !serverState.isGameOver ? 1000 : null);
+      }
+
+      const opponentUpdates = pendingOpponentUpdatesRef.current;
+      pendingOpponentUpdatesRef.current = new Map();
+      if (opponentUpdates.size > 0) {
+        setOpponents((previous) => {
+          const next = { ...previous };
+          opponentUpdates.forEach((update, playerId) => {
+            const current = previous[playerId];
+            next[playerId] = {
+              ...current,
+              stage: update.stage,
+              score: update.score,
+              nextPieceKeys: update.next ?? current?.nextPieceKeys ?? [],
+              holdMino:
+                update.hold !== undefined
+                  ? update.hold
+                  : current?.holdMino ?? null,
+              isGameOver: update.isGameOver,
+            };
+          });
+          return next;
+        });
+      }
+
+      const legacyOpponent = pendingLegacyOpponentRef.current;
+      pendingLegacyOpponentRef.current = null;
+      if (legacyOpponent) {
+        setOpponentStage(legacyOpponent.stage);
+        setOpponentScore(legacyOpponent.score);
+        if (legacyOpponent.next) {
+          setOpponentNextPieceKeys(legacyOpponent.next);
+        }
+        if (legacyOpponent.hold !== undefined) {
+          setOpponentHoldMino(legacyOpponent.hold);
+        }
+      }
+    });
+  }, [
+    setServerState,
+    setDropTime,
+    setOpponents,
+    setOpponentStage,
+    setOpponentScore,
+    setOpponentNextPieceKeys,
+    setOpponentHoldMino,
+  ]);
+
+  const queueServerState = useCallback((state: GameState & {
+    roomId: string;
+    started: boolean;
+  }) => {
+    pendingServerStateRef.current = state;
+    scheduleNetworkRender();
+  }, [scheduleNetworkRender]);
+
+  const queueOpponentBoardUpdate = useCallback((data: OpponentBoardUpdate) => {
+    if (data.roomId !== undefined && data.roomId !== activeRoom.current) return;
+    if (data.playerId) {
+      pendingOpponentUpdatesRef.current.set(data.playerId, data);
+    } else {
+      pendingLegacyOpponentRef.current = data;
+    }
+    scheduleNetworkRender();
+  }, [scheduleNetworkRender]);
+
   const beginServerMatch = useCallback((data: { roomId: string; users?: Record<string, { username: string | null }>; players?: string[]; displayNames?: Record<string, string>; started?: boolean }) => {
+    cancelQueuedNetworkRender();
     activeRoom.current = data.roomId;
     isSpectatingRef.current = false;
     setServerState(null);
@@ -164,13 +275,12 @@ export const useMultiplayer = ({
     setAppState(nextAppState);
     // READY can already have a board/Next; input waits for server start.
     setDropTime(null);
-  }, [setServerState, setStartTime, socketRef, setMyDisplayName, setOpponents, setOpponentStage,
+  }, [cancelQueuedNetworkRender, setServerState, setStartTime, socketRef, setMyDisplayName, setOpponents, setOpponentStage,
     gameOverRef, appStateRef, setGameOver, setMatchResult, setIsWaiting, setGameMode, setAppState, setDropTime]);
   const listenToServer = useCallback((connection: Socket) => {
     connection.on('game:state', (state: GameState & { roomId: string; started: boolean }) => {
       if (state.roomId !== activeRoom.current || isSpectatingRef.current) return;
-      setServerState(state);
-      setDropTime(state.started && !state.isGameOver ? 1000 : null);
+      queueServerState(state);
     });
     connection.on('game:start', (data: { roomId: string }) => {
       if (data.roomId === activeRoom.current) {
@@ -199,7 +309,7 @@ export const useMultiplayer = ({
         return next;
       });
     });
-  }, [setServerState, setDropTime, setStartTime, appStateRef, setAppState, setOpponents]);
+  }, [queueServerState, setStartTime, appStateRef, setAppState, setOpponents]);
 
   const listenForSession = useCallback((
     connection: Socket,
@@ -213,6 +323,7 @@ export const useMultiplayer = ({
   }, [setConnectionError]);
 
   const joinOnline = useCallback(() => {
+    cancelQueuedNetworkRender();
     if (socket) {
       socket.disconnect();
       setSocket(null);
@@ -257,31 +368,7 @@ export const useMultiplayer = ({
       setIsWaiting(true);
     });
 
-    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
-      if ((data as { roomId?: string }).roomId !== activeRoom.current) return;
-      // 従来の1対1用（後方互換）
-      setOpponentStage(data.stage);
-      setOpponentScore(data.score);
-      if (data.next) setOpponentNextPieceKeys(data.next);
-      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
-
-      // 複数人用
-      if (data.playerId) {
-        setOpponents(prev => ({
-          ...prev,
-          [data.playerId as string]: {
-            stage: data.stage,
-            score: data.score,
-            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
-            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver,
-            username: prev[data.playerId as string]?.username,
-            playerIndex: prev[data.playerId as string]?.playerIndex,
-            displayName: prev[data.playerId as string]?.displayName
-          }
-        }));
-      }
-    });
+    newSocket.on('opponent_board_update', queueOpponentBoardUpdate);
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
       pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
@@ -329,10 +416,12 @@ export const useMultiplayer = ({
   }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
     setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
     resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
-    setMatchResult, socketOptions, socketRef, setDropTime, gameOverRef, setOpponentNextPieceKeys,
-    listenForSession, beginServerMatch, setOpponentHoldMino, listenToServer, setOpponents]);
+    setMatchResult, socketOptions, socketRef, setDropTime, gameOverRef,
+    listenForSession, beginServerMatch, listenToServer, setOpponents, queueOpponentBoardUpdate,
+    cancelQueuedNetworkRender]);
 
   const setupCustomRoomConnection = useCallback(() => {
+    cancelQueuedNetworkRender();
     setAppState('CUSTOM_ROOMS');
     setGameMode('ONLINE_1V1');
     setIsWaiting(true);
@@ -368,31 +457,7 @@ export const useMultiplayer = ({
     listenToServer(newSocket);
     newSocket.on('match:found', beginServerMatch);
 
-    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
-      if ((data as { roomId?: string }).roomId !== activeRoom.current) return;
-      // 従来の1対1用（後方互換）
-      setOpponentStage(data.stage);
-      setOpponentScore(data.score);
-      if (data.next) setOpponentNextPieceKeys(data.next);
-      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
-
-      // 複数人用
-      if (data.playerId) {
-        setOpponents(prev => ({
-          ...prev,
-          [data.playerId as string]: {
-            stage: data.stage,
-            score: data.score,
-            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
-            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver,
-            username: prev[data.playerId as string]?.username,
-            playerIndex: prev[data.playerId as string]?.playerIndex,
-            displayName: prev[data.playerId as string]?.displayName
-          }
-        }));
-      }
-    });
+    newSocket.on('opponent_board_update', queueOpponentBoardUpdate);
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
       pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
@@ -497,10 +562,12 @@ export const useMultiplayer = ({
   }, [setAppState, setGameMode, setIsWaiting, setConnectionError, setOpponentStage, setOpponentScore,
     setPendingGarbage, pendingGarbageRef, setStage, stageRef, resetPlayer,
     resetHold, setScore, setLevel, setLines, setGameOver, setMatchResult,
-    socketOptions, setSocket, socketRef, setDropTime, appStateRef, gameOverRef, setOpponentNextPieceKeys,
-    listenForSession, beginServerMatch, setOpponentHoldMino, setMyDisplayName, setServerState, listenToServer, setOpponents]);
+    socketOptions, setSocket, socketRef, setDropTime, appStateRef, gameOverRef,
+    listenForSession, beginServerMatch, setMyDisplayName, setServerState, listenToServer, setOpponents,
+    queueOpponentBoardUpdate, cancelQueuedNetworkRender]);
 
   const startVsAi = useCallback((difficulty: AiDifficulty, actionDelayMs = 50) => {
+    cancelQueuedNetworkRender();
     activeRoom.current = null;
     setServerState(null);
     if (socket) {
@@ -556,30 +623,7 @@ export const useMultiplayer = ({
       });
     });
 
-    newSocket.on('opponent_board_update', (data: { playerId?: string; stage: Cell[][]; score: number; next?: string[]; hold?: string | null; isGameOver?: boolean; }) => {
-      // 従来の1対1用（後方互換）
-      setOpponentStage(data.stage);
-      setOpponentScore(data.score);
-      if (data.next) setOpponentNextPieceKeys(data.next);
-      if (data.hold !== undefined) setOpponentHoldMino(data.hold);
-
-      // 複数人用
-      if (data.playerId) {
-        setOpponents(prev => ({
-          ...prev,
-          [data.playerId as string]: {
-            stage: data.stage,
-            score: data.score,
-            nextPieceKeys: data.next ?? prev[data.playerId as string]?.nextPieceKeys ?? [],
-            holdMino: data.hold !== undefined ? data.hold : prev[data.playerId as string]?.holdMino ?? null,
-            isGameOver: data.isGameOver,
-            username: prev[data.playerId as string]?.username,
-            playerIndex: prev[data.playerId as string]?.playerIndex,
-            displayName: prev[data.playerId as string]?.displayName
-          }
-        }));
-      }
-    });
+    newSocket.on('opponent_board_update', queueOpponentBoardUpdate);
 
     newSocket.on('receive_garbage', (data: { lines: number }) => {
       pendingGarbageRef.current = [...pendingGarbageRef.current, data.lines];
@@ -603,14 +647,16 @@ export const useMultiplayer = ({
   }, [socket, setSocket, setGameMode, setAppState, setIsWaiting, setConnectionError, setOpponentStage,
     setOpponentScore, setPendingGarbage, pendingGarbageRef, setStage, stageRef,
     resetPlayer, resetHold, setScore, setLevel, setLines, setGameOver,
-    setMatchResult, socketOptions, socketRef, startGame, setDropTime, setOpponentNextPieceKeys,
-    listenForSession, gameOverRef, setOpponentHoldMino, setServerState, setOpponents]);
+    setMatchResult, socketOptions, socketRef, startGame, setDropTime,
+    listenForSession, gameOverRef, setServerState, setOpponents, queueOpponentBoardUpdate,
+    cancelQueuedNetworkRender]);
 
   useEffect(() => {
     return () => {
+      cancelQueuedNetworkRender();
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [socketRef]);
+  }, [cancelQueuedNetworkRender, socketRef]);
 
   useEffect(() => {
     if (socket && activeRoom.current === null && appState === 'ONLINE_1V1' && !isWaiting) {

@@ -54,7 +54,7 @@ export const useGameState = () => {
     if ((appState !== 'PLAYING' && appState !== 'ONLINE_1V1') || !startTime || gameOver) return;
     const interval = setInterval(() => {
       setElapsedTime(Date.now() - startTime);
-    }, 20);
+    }, 100);
     return () => clearInterval(interval);
   }, [appState, gameMode, startTime, gameOver]);
 
