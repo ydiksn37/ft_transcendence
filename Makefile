@@ -10,7 +10,7 @@ up: _shared-build _ai-web-build vault-init ## 全てのコンテナを起動し�
 down: ## Dockerコンテナを停止・削除する
 	docker compose down
 
-build: _ai-web-build vault-init ## Dockerイメージをビルドしてコンテナを起動する
+build: install _ai-web-build vault-init ## 依存関係とDockerイメージをビルドしてコンテナを起動する
 	docker compose up -d --build
 
 logs: ## 全コンテナのログをリアルタイムで表示する (Ctrl+Cで終了)

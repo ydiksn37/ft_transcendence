@@ -10,6 +10,7 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 ### 前提条件
 - **Docker** および **Docker Compose**
 - **Node.js 20以上** および **npm 10以上**
+- **GNU Make**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
 - マシン上でポート8080と8443が利用可能であること
 
@@ -26,17 +27,15 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    ```
    42 OAuthのRedirect URIには `https://localhost:8443/api/auth/42/callback` を登録します。
    別のhost/portで提出する場合は、登録値と`.env`を同じURLへ変更してください。
-3. 依存関係をインストールします:
+3. Docker Composeを使用してアプリケーションをビルドし、起動します。依存関係のインストール、C++ AIのコンパイル、Vaultの初期化、データベースマイグレーションも自動的に実行されます:
    ```bash
-   make install
-   ```
-4. Docker Composeを使用してアプリケーションを起動します:
-   ```bash
-   make up
-   # 全イメージを再buildする場合はこちら:
    make build
    ```
-5. アプリケーションにアクセスします:
+   ビルド済みの環境を再起動する場合は、次のコマンドを使用します:
+   ```bash
+   make up
+   ```
+4. アプリケーションにアクセスします:
    - ブラウザを開き、`https://localhost:8443`（または設定したドメイン/IPと`NGINX_PORT`）にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
 
@@ -86,52 +85,33 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 - **ソーシャル機能:** フレンドリスト、リアルタイムチャット、プロフィールカスタマイズ (担当: yukusano)。
 - **高度なセキュリティ:** ModSecurity WAF と HashiCorp Vault の統合 (担当: yukusano)。
 
-## 基本モジュール
+## 選択モジュール (Modules)
 
-| モジュール | 点 | 選定理由・実装 | 主担当 | 実演 |
-| --- | ---: | --- | --- | --- |
-| Frontend / Backendフレームワーク | 2 | React/ViteのSPAとNestJSのREST・WebSocket backendで全体を構成。 | kaisuzuk / yukusano | stackを起動し、SPA routeとNest moduleを提示。 |
-| Database ORM | 1 | PrismaでPostgreSQLのrelation、migration、constraint、型付きqueryを管理。 | yukusano | schema、migration、保存済みUser/GameResultを提示。 |
-| WebSockets | 2 | Socket.IOでゲーム状態、chat、room、再接続、観戦をリアルタイム配信。 | sonakamu / ssawa | 独立したChrome contextで対戦と観戦を実演。 |
-| 標準ユーザー管理 | 2 | 登録、profile、avatar、friend、presence、設定を実装。 | yukusano / kaisuzuk | 登録、profile編集、avatar設定、friend追加を実演。 |
-| ゲーム統計と履歴 | 1 | 勝敗、APM、PPS、rank、progression、対戦履歴を保存・表示。 | yukusano | 対戦完了後にDashboard/Profileを表示。 |
-| OAuth 2.0 | 1 | 42 OAuthをHTTPS callbackで処理し、安全にOAuth identityを作成・再利用。 | yukusano | 42 loginからprofile表示まで実演。 |
-| 2FA | 1 | TOTP登録、QR、login challenge、認証、解除を実装。 | yukusano | 2FA有効化後に再loginしてcodeを入力。 |
-| Webベースゲーム | 2 | 7-bag、rotation、lock delay、score、line clearを持つゲームengine。 | sonakamu / ssawa | Solo gameで主要mechanicを実演。 |
-| Remote players | 2 | Server-authoritativeな2人対戦とgarbage attackを同期。 | sonakamu / ssawa | 2つのChrome contextで1v1を実演。 |
-| **合計** | **14** |  |  |  |
+Majorは2点、Minorは1点として計算しています。
 
-## 全モジュール
-
-### Web
-1. **フロント/バックエンドにフレームワークを使用 (Major - 2pts)**: React (Vite) と NestJS。
-2. **データベースにORMを使用 (Minor - 1pt)**: Prisma。
-3. **WebSockets (Major - 2pts)**: ゲーム状態、チャット、ライブ観戦用のSocket.IO。
-4. **ユーザー間対話 (Major - 2pts)**: リアルタイムチャット、フレンドシステム、プロフィール閲覧。
-5. **高度な検索 (Minor - 1pt)**: ユーザーと対戦履歴のフィルタリング・検索。
-6. **公開API (Major - 2pts)**: APIキーで保護された5つ以上のエンドポイントとSwaggerドキュメント。
-7. **カスタムデザインシステム (Minor - 1pt)**: 再利用可能なUIコンポーネント。
-
-### ユーザー管理 (User Management)
-8. **標準ユーザー管理 (Major - 2pts)**: アバター、表示名、フレンド状態。
-9. **ゲーム統計 (Minor - 1pt)**: APM, PPS, 勝率の追跡。
-10. **OAuth 2.0 (Minor - 1pt)**: 42 イントラネット認証。
-11. **二要素認証 (2FA) (Minor - 1pt)**: 認証アプリによるTOTPベースの2FA。
-
-### ゲームとUX (Game and User Experience)
-12. **Webベースのゲーム (Major - 2pts)**: T-Spin、7-bagシステム、ロック遅延を備えたテトリス風ゲーム。
-13. **リモートプレイヤー (Major - 2pts)**: WebSocket経由のネットワーク1v1マルチプレイヤー。
-14. **マルチプレイヤー (3人以上) (Major - 2pts)**: カスタムルームと観戦ブロードキャストのサポート。
-15. **ゲームのカスタマイズ (Minor - 1pt)**: キーバインド変更、ミノのスタイリング変更、背景選択。
-16. **トーナメントシステム (Minor - 1pt)**: 自動マッチメイキングとトーナメント表の進行。
-17. **観戦モード (Minor - 1pt)**: 進行中の試合のライブ視聴。
-
-### 人工知能 (Artificial Intelligence)
-18. **AI対戦相手 (Major - 2pts)**: C++ボット。
-
-### データと分析 (Data and Analytics)
-19. **データエクスポート/インポート (Minor - 1pt)**: ユーザー設定と統計のJSON入出力。
-20. **高度な分析ダッシュボード (Major - 2pts)**: ユーザーパフォーマンスのインタラクティブなチャートとグラフ。
+| カテゴリ | モジュール | 区分 | 点 | 選定理由・実装 | 主担当 | 実演 |
+| --- | --- | --- | ---: | --- | --- | --- |
+| Web | Frontend / Backendフレームワーク | Major | 2 | REST・リアルタイム通信を一貫した構成で開発するため、React/ViteとNestJSを採用。 | kaisuzuk | 画面遷移とNestJSのmodule構成を提示。 |
+| Web | Database ORM | Minor | 1 | PostgreSQLのrelation、migration、constraintを型安全に管理するため、Prismaを使用。 | yukusano | Prisma schemaを提示。 |
+| Web | WebSockets | Major | 2 | 対戦中の盤面と状態を低遅延で同期するため、Socket.IOでgame、chat、room、再接続、観戦を配信。 | sonakamu | 独立したChrome contextで対戦と観戦を実演。 |
+| Web | ユーザー間対話 | Major | 2 | 対戦相手との交流を支えるため、リアルタイムチャット、プロフィール閲覧、フレンド追加・解除を実装。 | yukusano | 2ユーザーでチャット、プロフィール、フレンド操作を実演。 |
+| Web | 高度な検索 | Minor | 1 | 対戦相手を見つけやすくするため、ユーザー検索にオンライン状態filter、sort、paginationを実装。 | ssawa | 条件、並び順、ページを変更して検索結果を提示。 |
+| Web | 公開API | Major | 2 | 外部クライアントから統計や設定を安全に利用できるよう、API key、rate limit、Swagger文書、GET/POST/PUT/DELETE endpointを実装。 | yukusano | Swagger UIから、各種endpointを実行。 |
+| Web | カスタムデザインシステム | Minor | 1 | 画面間でUIとアクセシビリティを統一するため、色、typography、iconと10個以上の再利用componentを実装。 | kaisuzuk | design-system componentと使用画面を提示。 |
+| User Management | 標準ユーザー管理 | Major | 2 | 継続的に対戦・交流できるよう、登録、login、profile、avatar、friend、online状態、設定を実装。 | ssawa | 登録、profile編集、avatar設定、friend追加を実演。 |
+| User Management | ゲーム統計と履歴 | Minor | 1 | 成績と上達を確認できるよう、勝敗、APM、PPS、rank、level、achievement、対戦履歴を保存・表示。 | ssawa | 対戦完了後にProfileの統計、履歴、progressionを提示。 |
+| User Management | OAuth 2.0 | Minor | 1 | 42アカウントでも安全にloginできるよう、HTTPS callbackでOAuth identityを作成・再利用。 | yukusano | 42 OAuth loginからprofile表示まで実演。 |
+| User Management | 二要素認証 (2FA) | Minor | 1 | アカウント保護を強化するため、TOTPのQR登録、login challenge、認証、解除を実装。 | yukusano | 2FA有効化後に再loginしてTOTP codeを入力。 |
+| Gaming and UX | Webベースゲーム | Major | 2 | ブラウザ上で競技性のある対戦を提供するため、7-bag、rotation、lock delay、score、line clear、勝敗条件を実装。 | sonakamu | Solo gameと1v1で主要ruleと勝敗を実演。 |
+| Gaming and UX | Remote players | Major | 2 | 別端末の2人が対戦できるよう、server-authoritativeな状態管理、garbage attack、切断・再接続を実装。 | sonakamu | 2つのChrome contextで1v1と再接続を実演。 |
+| Gaming and UX | マルチプレイヤー (3人以上) | Major | 2 | 3人以上が参加するゲーム体験のため、複数参加者のcustom room、状態同期、観戦broadcastを実装。 | sonakamu | 3人以上でroomへ参加し、同期された進行を提示。 |
+| Gaming and UX | ゲームのカスタマイズ | Minor | 1 | プレイ環境を好みに合わせられるよう、key binding、mino skin、背景、操作速度などの設定とdefault値を実装。 | sonakamu | 設定変更後のゲーム画面と保存結果を提示。 |
+| Gaming and UX | トーナメントシステム | Minor | 1 | 複数参加者の対戦順と勝者を管理するため、登録、matchmaking、bracket、match結果の進行を実装。 | sonakamu | 4人で登録し、決勝までbracketを進行。 |
+| Gaming and UX | 観戦モード | Minor | 1 | 進行中の試合を他ユーザーが視聴できるよう、両プレイヤーの盤面と試合状態をリアルタイム配信。 | sonakamu | 第3ユーザーで進行中の試合を観戦。 |
+| Artificial Intelligence | AI対戦相手 | Major | 2 | 1人でも対戦練習できるよう、難易度と人間的な思考時間を持つC++ AIを実装し、TypeScript game engineと統合。 | ssawa | 難易度を変更し、AIが判断して対戦する様子を提示。 |
+| Data and Analytics | データエクスポート/インポート | Minor | 1 | ユーザーが設定と履歴を持ち出し・復元できるよう、JSON/CSV export、validation付きpreview、bulk importを実装。 | ssawa | exportしたデータをpreview後にimport。 |
+| Data and Analytics | 高度な分析ダッシュボード | Major | 2 | プレイ傾向を比較・分析できるよう、期間filter付きの対話的chartとPDF/CSV exportを実装。 | ssawa | 期間を変更してchartを表示し、PDF/CSVを出力。 |
+| **合計** |  |  | **30** |  |  |  |
 
 ## 個人の貢献 (Individual Contributions)
 - **sonakamu**: 
