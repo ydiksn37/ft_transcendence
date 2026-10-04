@@ -9,7 +9,11 @@ RUN apk add --no-cache openssl && \
       -newkey rsa:2048 \
       -keyout /etc/nginx/ssl/server.key \
       -out    /etc/nginx/ssl/server.crt \
-      -subj "/C=JP/ST=Tokyo/L=Tokyo/O=ft_transcendence/CN=localhost"
+      -subj "/C=JP/ST=Tokyo/L=Shinjuku/O=ft_transcendence/CN=localhost" \
+      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+      -addext "basicConstraints=critical,CA:FALSE" \
+      -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
+      -addext "extendedKeyUsage=serverAuth"
 
 # Nginx 設定テンプレートをコピー（コンテナ起動時に /etc/nginx/conf.d/default.conf として出力される）
 COPY default.conf.template /etc/nginx/templates/conf.d/default.conf.template
