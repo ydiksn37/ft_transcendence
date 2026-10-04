@@ -52,8 +52,11 @@ revoke_root_token() {
 trap revoke_root_token EXIT
 trap 'exit 1' INT TERM
 
+# docker exec のエラー文（コンテナ再起動中など）は標準出力に出るため、Vaultの状態JSONだけを返す
 vault_status() {
-  compose exec -T -e VAULT_ADDR=http://127.0.0.1:8200 vault vault status -format=json 2>/dev/null || true
+  compose exec -T -e VAULT_ADDR=http://127.0.0.1:8200 vault vault status -format=json 2>/dev/null |
+    node -e 'const s=require("fs").readFileSync(0,"utf8");try{if(typeof JSON.parse(s).initialized==="boolean")process.stdout.write(s)}catch{}' ||
+    true
 }
 
 unseal_with() {
@@ -97,7 +100,8 @@ postgres_user="$(compose config --format json |
   ')"
 compose up -d postgres
 attempt=0
-until compose exec -T postgres pg_isready -U "$postgres_user" -d postgres > /dev/null 2>&1; do
+# 初回起動時の初期化用サーバーはUNIXソケットだけで待ち受けてすぐ停止するため、TCPで本番サーバーを待つ
+until compose exec -T postgres pg_isready -h 127.0.0.1 -U "$postgres_user" -d postgres > /dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 30 ]; then
     echo "PostgreSQL did not become ready" >&2
@@ -123,7 +127,8 @@ until [ -n "$status_json" ]; do
   [ -n "$status_json" ] && break
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 30 ]; then
-    echo "Vault did not become reachable" >&2
+    echo "Vault did not become reachable. Recent vault logs:" >&2
+    compose logs --tail=30 vault >&2 || true
     exit 1
   fi
   sleep 1
