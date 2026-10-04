@@ -215,7 +215,7 @@ volumes:
   uploads_data:
   vault_data:
 
-# tools/vault-init.sh（VAULT_ENV=development）が生成する。secrets/ はGit管理外
+# tools/vault-init.shが生成する。secrets/ はGit管理外
 secrets:
   postgres_password:
     file: ./secrets/dev/postgres_password.txt

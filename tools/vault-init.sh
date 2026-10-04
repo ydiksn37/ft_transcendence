@@ -2,13 +2,10 @@
 # Vault(server mode)を初期化・unsealし、アプリの秘密情報とbackend用トークンを用意する。
 # 再実行しても既存の鍵・秘密情報は再生成しない。
 #
-#   VAULT_ENV=production  (既定) docker-compose.production.yml / secrets/
-#   VAULT_ENV=development        docker-compose.yml             / secrets/dev/
-#
 # 生成物（Git管理外）:
-#   <dir>/vault_unseal_key.txt  vault-unsealer が自動unsealに使う
-#   <dir>/vault_token.txt       backend用の transcendence policy トークン
-#   <dir>/postgres_password.txt, <dir>/redis_password.txt
+#   secrets/dev/vault_unseal_key.txt  vault-unsealer が自動unsealに使う
+#   secrets/dev/vault_token.txt       backend用の transcendence policy トークン
+#   secrets/dev/postgres_password.txt, secrets/dev/redis_password.txt
 # root tokenはどこにも保存しない。設定時だけunseal keyから一時発行し、終了時にrevokeする。
 #
 # 任意の環境変数:
@@ -20,29 +17,12 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-env_name="${VAULT_ENV:-production}"
-case "$env_name" in
-  production)
-    compose_file=docker-compose.production.yml
-    secrets_dir=secrets
-    unseal_key_file="${VAULT_UNSEAL_KEY_FILE_HOST:-$secrets_dir/vault_unseal_key.txt}"
-    token_file="${VAULT_TOKEN_FILE_HOST:-$secrets_dir/vault_token.txt}"
-    postgres_password_file="${POSTGRES_PASSWORD_FILE:-$secrets_dir/postgres_password.txt}"
-    redis_password_file="${REDIS_PASSWORD_FILE:-$secrets_dir/redis_password.txt}"
-    ;;
-  development)
-    compose_file=docker-compose.yml
-    secrets_dir=secrets/dev
-    unseal_key_file="$secrets_dir/vault_unseal_key.txt"
-    token_file="$secrets_dir/vault_token.txt"
-    postgres_password_file="$secrets_dir/postgres_password.txt"
-    redis_password_file="$secrets_dir/redis_password.txt"
-    ;;
-  *)
-    echo "VAULT_ENV must be production or development" >&2
-    exit 1
-    ;;
-esac
+compose_file=docker-compose.yml
+secrets_dir=secrets/dev
+unseal_key_file="$secrets_dir/vault_unseal_key.txt"
+token_file="$secrets_dir/vault_token.txt"
+postgres_password_file="$secrets_dir/postgres_password.txt"
+redis_password_file="$secrets_dir/redis_password.txt"
 
 compose() {
   docker compose -f "$compose_file" "$@"
@@ -269,4 +249,4 @@ for accessor in $(vault_cmd list -format=json auth/token/accessors |
 done
 
 revoke_root_token
-echo "Vault ($env_name) is ready. Root token has been revoked."
+echo "Vault is ready. Root token has been revoked."

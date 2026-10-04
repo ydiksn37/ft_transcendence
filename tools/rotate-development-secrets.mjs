@@ -74,7 +74,6 @@ execFileSync('./tools/vault-init.sh', [], {
   cwd: root,
   env: {
     ...process.env,
-    VAULT_ENV: 'development',
     VAULT_PURGE_SECRET_HISTORY: 'true',
     VAULT_ROTATE_BACKEND_TOKEN: 'true',
     VAULT_ROTATE_APPLICATION_SECRETS: 'true',

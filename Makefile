@@ -55,7 +55,7 @@ _ai-web-build: _ai-web-toolchain
 
 # --- インフラ & セキュリティ ---
 vault-init: ## 開発用の秘密ファイルを生成し、Vaultを初期化・同期する
-	VAULT_ENV=development ./tools/vault-init.sh
+	./tools/vault-init.sh
 
 # --- コンテナ内シェル ---
 exec-backend: ## backendコンテナの中に入る (シェル)
