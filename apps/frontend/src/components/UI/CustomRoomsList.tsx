@@ -202,9 +202,14 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
       {!inRoom ? (
         <>
           <div style={{ marginBottom: '40px', display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center' }}>
-            <label>
-              VISIBILITY{' '}
-              <select aria-label="Room visibility" value={isPublic ? 'public' : 'private'} onChange={e => setIsPublic(e.target.value === 'public')}>
+            <label className="custom-room-visibility-label">
+              <span>VISIBILITY</span>
+              <select
+                className="retro-select custom-room-visibility-select"
+                aria-label="Room visibility"
+                value={isPublic ? 'public' : 'private'}
+                onChange={e => setIsPublic(e.target.value === 'public')}
+              >
                 <option value="public">PUBLIC</option>
                 <option value="private">PRIVATE (ROOM ID ONLY)</option>
               </select>
@@ -241,8 +246,19 @@ export const CustomRoomsList: React.FC<CustomRoomsListProps> = ({ socket, setApp
             </button>
           </div>
 
-          <form onSubmit={e => { e.preventDefault(); if (joinRoomId.trim()) handleJoinRoom(joinRoomId.trim()); }} style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-            <input aria-label="Room ID to join" placeholder="ROOM ID" value={joinRoomId} minLength={4} maxLength={24} pattern="[A-Za-z0-9_-]{4,24}" onChange={e => setJoinRoomId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24).toUpperCase())} />
+          <form className="custom-room-id-form" onSubmit={e => { e.preventDefault(); if (joinRoomId.trim()) handleJoinRoom(joinRoomId.trim()); }}>
+            <input
+              className="retro-input custom-room-id-input"
+              aria-label="Room ID to join"
+              placeholder="ROOM ID"
+              value={joinRoomId}
+              minLength={4}
+              maxLength={24}
+              pattern="[A-Za-z0-9_-]{4,24}"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={e => setJoinRoomId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24).toUpperCase())}
+            />
             <button className="nav-btn" type="submit" disabled={!joinRoomId.trim()}>JOIN BY ID</button>
           </form>
           <div className="panel" style={{ width: '100%', maxWidth: '600px', flexDirection: 'column', gap: '15px', padding: '20px', minHeight: '300px', justifyContent: 'flex-start' }}>

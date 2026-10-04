@@ -486,3 +486,85 @@
   color: #fff;
   width: 100%;
 }
+
+/* --- Custom Room Controls --- */
+.retro-input {
+  min-height: 48px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  border: 4px solid #555;
+  border-radius: 0;
+  outline: none;
+  background-color: #000;
+  color: #fff;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  transition: background-color 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+
+.retro-input::placeholder {
+  color: #888;
+  opacity: 1;
+}
+
+.retro-input:hover {
+  border-color: #888;
+  background-color: #111;
+}
+
+.retro-input:focus {
+  border-color: #00ffff;
+  box-shadow: 4px 4px 0 rgba(0, 255, 255, 0.3);
+}
+
+.custom-room-visibility-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #aaa;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.custom-room-visibility-select {
+  width: auto;
+  min-width: 250px;
+  min-height: 48px;
+  margin: 0;
+}
+
+.custom-room-id-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.custom-room-id-input {
+  width: 240px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.custom-room-id-form .nav-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 600px) {
+  .custom-room-visibility-label,
+  .custom-room-id-form {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .custom-room-visibility-select,
+  .custom-room-id-input {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
