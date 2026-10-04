@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { createInterface, Interface } from 'node:readline';
 import {
@@ -36,6 +37,7 @@ export class AgentProtocolError extends Error {
 }
 
 export class CppAgentProcess implements HeadlessAgent {
+  private readonly logger = new Logger(CppAgentProcess.name);
   readonly name: string;
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly stdout: Interface;
@@ -65,6 +67,9 @@ export class CppAgentProcess implements HeadlessAgent {
     this.stdout.on('line', (line) => this.handleLine(line));
     this.child.stderr.on('data', (chunk: Buffer) => {
       this.stderrTail = (this.stderrTail + chunk.toString('utf8')).slice(-4096);
+    });
+    this.child.stdin.on('error', (error) => {
+      if (!this.closed) this.failAll(error);
     });
     this.child.once('error', (error) => this.failAll(error));
     this.child.once('exit', (code, signal) => {
@@ -142,6 +147,9 @@ export class CppAgentProcess implements HeadlessAgent {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (!this.readyReceived) {
+      this.readyReject(new AgentProtocolError(`agent ${this.name} is closing`));
+    }
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new AgentProtocolError(`agent ${this.name} is closing`));
@@ -151,18 +159,44 @@ export class CppAgentProcess implements HeadlessAgent {
       this.stdout.close();
       return;
     }
-    this.child.stdin.write(`${JSON.stringify({ type: 'shutdown' })}\n`);
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        this.child.kill('SIGTERM');
-        resolve();
-      }, 1000);
-      this.child.once('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+    if (this.child.stdin.writable) {
+      this.child.stdin.end(`${JSON.stringify({ type: 'shutdown' })}\n`);
+    }
+    if (!(await this.waitForExit(500))) {
+      this.logger.warn(
+        `AI preview agent ${this.name} (pid=${String(this.child.pid)}) did not shut down; sending SIGTERM`,
+      );
+      this.child.kill('SIGTERM');
+    }
+    if (!(await this.waitForExit(500))) {
+      this.logger.warn(
+        `AI preview agent ${this.name} (pid=${String(this.child.pid)}) ignored SIGTERM; sending SIGKILL`,
+      );
+      this.child.kill('SIGKILL');
+      if (!(await this.waitForExit(500))) {
+        this.logger.error(
+          `AI preview agent ${this.name} (pid=${String(this.child.pid)}) did not exit after SIGKILL`,
+        );
+      }
+    }
     this.stdout.close();
+  }
+
+  private waitForExit(timeoutMs: number): Promise<boolean> {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+      return Promise.resolve(true);
+    }
+    return new Promise<boolean>((resolve) => {
+      const onExit = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.child.off('exit', onExit);
+        resolve(false);
+      }, timeoutMs);
+      this.child.once('exit', onExit);
+    });
   }
 
   private handleLine(line: string): void {

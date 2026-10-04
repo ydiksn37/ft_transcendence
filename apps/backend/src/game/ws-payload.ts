@@ -129,9 +129,7 @@ export function parseAiMatch(value: unknown): {
 
 export function parseAiPreview(value: unknown): AiPreviewStartRequest {
   const data = record(value, [
-    'mode',
     'model',
-    'opponentModel',
     'thinkTimeMs',
     'actionDelayMs',
     'seed',
@@ -139,23 +137,8 @@ export function parseAiPreview(value: unknown): AiPreviewStartRequest {
   const models = ['easy', 'hard', 'expert'];
   if (typeof data.model !== 'string' || !models.includes(data.model))
     throw new WsPayloadError('model is invalid');
-  if (
-    data.mode !== undefined &&
-    (typeof data.mode !== 'string' || !['solo', 'versus'].includes(data.mode))
-  ) {
-    throw new WsPayloadError('mode is invalid');
-  }
-  if (
-    data.opponentModel !== undefined &&
-    (typeof data.opponentModel !== 'string' ||
-      !models.includes(data.opponentModel))
-  ) {
-    throw new WsPayloadError('opponentModel is invalid');
-  }
   return {
-    mode: data.mode as AiPreviewStartRequest['mode'],
     model: data.model as AiPreviewStartRequest['model'],
-    opponentModel: data.opponentModel as AiPreviewStartRequest['opponentModel'],
     thinkTimeMs:
       data.thinkTimeMs === undefined
         ? undefined

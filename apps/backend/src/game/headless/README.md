@@ -48,16 +48,7 @@ existing C++ process. For VS AI, use `make ai-web-restart`, because those agents
 are started with the backend. `INF` sets the delay between returned actions to
 zero; search still respects the configured think-time budget.
 
-The AI preview settings provide two modes:
-
-- `SOLO` runs one selectable C++ model against an empty opponent state.
-- `VERSUS` runs two independently selectable C++ models. TypeScript owns both
-  boards and sends attacks between them; each agent receives its opponent's
-  board and queued garbage in every decision request.
-
-The two versus players use independent seven-bags initialized from the same
-match seed, so process timing cannot consume or reorder the other player's
-Next queue. `/ai-preview?mode=versus` opens the page directly in versus mode.
+AI preview runs one selectable C++ model against an empty opponent state.
 After changing only C++, run `make ai-web-build` and press `RESTART`; neither a
 Docker image rebuild nor a backend restart is required.
 

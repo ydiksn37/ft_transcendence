@@ -6,9 +6,9 @@ import {
 } from '@transcendence/shared';
 import { GameInstance } from './game-instance';
 import { AiAgentService } from './engine/ai-agent.service';
-import { calcGhostY, createEmptyBoard } from './engine/board';
+import { createEmptyBoard } from './engine/board';
 import { calcGarbage } from './engine/garbage';
-import { AgentAction, VISIBLE_ROW_OFFSET } from './headless/headless-battle';
+import { AgentAction } from './headless/headless-battle';
 
 type Emission = {
   target: string;
@@ -339,28 +339,6 @@ describe('GameInstance AI matches', () => {
     expect(emissions.some((e) => e.target === 'viewer')).toBe(false);
   });
 
-  it('starts versus preview players from identical independent seeded bags', () => {
-    const game = new GameInstance('preview_seed_room', server, 12345);
-    game.addCppPreviewPlayer('preview_left', 'left', 'expert');
-    game.addCppPreviewPlayer('preview_right', 'right', 'hard');
-
-    const left = game.getPlayers().get('preview_left');
-    const right = game.getPlayers().get('preview_right');
-    expect(left?.activeMino).toBeDefined();
-    expect(right?.activeMino).toBe(left?.activeMino);
-
-    right!.garbageQueue = 3;
-    right!.attacksSent = 7;
-    const request = (game as any).makeCppDecisionRequest('preview_left', left);
-    expect(request.next).toHaveLength(5);
-    expect(request.opponent).toMatchObject({
-      garbageQueue: 3,
-      attacksSent: 7,
-      piecesPlaced: 0,
-    });
-    expect(request.opponent.board).toHaveLength(40);
-  });
-
   it('uses the frontend REN table for AI garbage', () => {
     expect(calcGarbage(1, null, false, false, 0).garbage).toBe(0);
     expect(calcGarbage(1, null, false, false, 1).garbage).toBe(1);
@@ -581,113 +559,74 @@ describe('GameInstance AI matches', () => {
     expect(replayDelay('soft_drop', 'hard_drop')).toBe(125);
   });
 
-  it('waits for both versus agents before placing either next piece', async () => {
-    const game = new GameInstance('lockstep_room', server, 12345);
-    game.addCppPreviewPlayer('preview_left', 'left', 'expert');
-    game.addCppPreviewPlayer('preview_right', 'right', 'hard');
-    const left = game.getPlayers().get('preview_left')!;
-    const right = game.getPlayers().get('preview_right')!;
-
-    const makeDecision = (player: typeof left, actions: AgentAction[]) => {
-      const simulated = { ...player };
-      for (const action of actions.slice(0, -1)) {
-        (game as any).applyAgentActionToState(simulated, action);
-      }
-      return {
-        gameOver: false,
-        actions,
-        placement: {
-          piece: simulated.activeMino,
-          x: simulated.activeX,
-          y:
-            calcGhostY(
-              simulated.board,
-              simulated.activeMino,
-              simulated.activeX,
-              simulated.activeY,
-              simulated.activeRotation,
-            ) - VISIBLE_ROW_OFFSET,
-          rotation: simulated.activeRotation,
-        },
-        completedDepth: 1,
-        nodesVisited: 1,
-      };
-    };
-
-    let resolveLeft!: (decision: ReturnType<typeof makeDecision>) => void;
-    let resolveRight!: (decision: ReturnType<typeof makeDecision>) => void;
-    const leftFirstDecision = new Promise<ReturnType<typeof makeDecision>>(
-      (resolve) => {
-        resolveLeft = resolve;
-      },
-    );
-    const rightFirstDecision = new Promise<ReturnType<typeof makeDecision>>(
-      (resolve) => {
-        resolveRight = resolve;
-      },
-    );
-    const gameOverDecision = Promise.resolve({
-      gameOver: true,
-      actions: [] as AgentAction[],
-    });
-    const leftAgent = {
-      decide: jest
-        .fn()
-        .mockImplementationOnce(() => leftFirstDecision)
-        .mockImplementation(() => gameOverDecision),
-      close: jest.fn().mockResolvedValue(undefined),
-    };
-    const rightAgent = {
-      decide: jest
-        .fn()
-        .mockImplementationOnce(() => rightFirstDecision)
-        .mockImplementation(() => gameOverDecision),
-      close: jest.fn().mockResolvedValue(undefined),
-    };
-
+  it('coalesces INF preview states and statuses to the latest 30 fps frame', async () => {
+    const game = new GameInstance('preview_throttle', server, 42);
+    game.addCppPreviewPlayer('preview_left', 'easy');
+    const player = game.getPlayers().get('preview_left')!;
     (game as any).isRunning = true;
     (game as any).cppPreviewOptions = {
-      mode: 'versus',
-      model: 'expert',
-      opponentModel: 'hard',
+      model: 'easy',
+      thinkTimeMs: 50,
+      responseTimeoutMs: 700,
       actionDelayMs: 0,
     };
-    (game as any).cppAgents.set('preview_left', leftAgent);
-    (game as any).cppAgents.set('preview_right', rightAgent);
 
-    const loop = (game as any).runCppVersusPreviewLoop([
-      ['preview_left', left],
-      ['preview_right', right],
-    ]);
+    for (let index = 0; index < 100; index++) {
+      player.score = index;
+      (game as any).broadcastState('preview_left', player);
+      (game as any).emitCppPreviewStatus(
+        index % 2 === 0 ? 'thinking' : 'executing',
+        { nodesVisited: index },
+        'preview_left',
+      );
+    }
+
+    const previewEmissions = (event: string) =>
+      emissions.filter((emission) => emission.event === event);
+    expect(previewEmissions(ServerEvent.AI_PREVIEW_STATE)).toHaveLength(1);
+    expect(previewEmissions(ServerEvent.AI_PREVIEW_STATUS)).toHaveLength(1);
+
+    await jest.advanceTimersByTimeAsync(33);
+
+    const states = previewEmissions(ServerEvent.AI_PREVIEW_STATE);
+    const statuses = previewEmissions(ServerEvent.AI_PREVIEW_STATUS);
+    expect(states).toHaveLength(2);
+    expect(states[1].payload).toMatchObject({
+      roomId: 'preview_throttle',
+      state: { score: 99 },
+    });
+    expect(statuses).toHaveLength(2);
+    expect(statuses[1].payload).toMatchObject({
+      roomId: 'preview_throttle',
+      nodesVisited: 99,
+    });
+
+    await game.stop();
+  });
+
+  it('waits for preview agents to close when stopping', async () => {
+    const game = new GameInstance('preview_stop', server, 42);
+    game.addCppPreviewPlayer('preview_left', 'easy');
+    let finishClose!: () => void;
+    const close = jest.fn(
+      () => new Promise<void>((resolve) => (finishClose = resolve)),
+    );
+    (game as any).isRunning = true;
+    (game as any).cppPreviewOptions = {
+      model: 'easy',
+      actionDelayMs: 0,
+    };
+    (game as any).cppAgents.set('preview_left', { close });
+
+    let stopped = false;
+    const stopping = game.stop().then(() => {
+      stopped = true;
+    });
     await Promise.resolve();
-    resolveLeft(makeDecision(left, ['move_left', 'soft_drop', 'hard_drop']));
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // The fast side has completed its search, but may not consume an extra
-    // piece while the other side is still thinking.
-    expect(left.piecesPlaced).toBe(0);
-    expect(right.piecesPlaced).toBe(0);
-
-    resolveRight(makeDecision(right, ['hard_drop']));
-    await loop;
-
-    expect(left.piecesPlaced).toBe(1);
-    expect(right.piecesPlaced).toBe(1);
-
-    const leftFrames = emissions
-      .filter(
-        (emission) =>
-          emission.event === ServerEvent.AI_PREVIEW_STATE &&
-          emission.payload.side === 'left',
-      )
-      .map((emission) => emission.payload.state);
-    expect(leftFrames.some((state) => state.activeMino.x === 2)).toBe(true);
-    expect(leftFrames.some((state) => state.activeMino.y === 19)).toBe(true);
-    expect(
-      leftFrames.some((state) =>
-        state.board.some((row: any[]) => row.some((cell) => cell !== null)),
-      ),
-    ).toBe(true);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(stopped).toBe(false);
+    finishClose();
+    await stopping;
+    expect(stopped).toBe(true);
   });
 });

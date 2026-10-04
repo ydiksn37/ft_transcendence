@@ -5,8 +5,7 @@ import {
   TetrominoType,
   AiDifficulty,
   AiAgentModel,
-  AiPreviewMode,
-  AiPreviewSide,
+  AiPreviewPlayerState,
   AiPreviewStatus,
   ServerEvent,
   ClientEvent,
@@ -46,12 +45,12 @@ const GRAVITY_INTERVAL_MS = 1000; // Level 1: 1秒/段
 const AI_MATCH_COUNTDOWN_MS = 1000;
 const DEFAULT_AI_ACTION_INTERVAL_MS = 50;
 const MAX_AI_ACTIONS = 1000;
+const CPP_PREVIEW_EMIT_INTERVAL_MS = 33;
+type CppPreviewStatusKey = 'player' | 'global';
 
 export interface CppAiPreviewOptions {
   executable: string;
-  mode: AiPreviewMode;
   model: AiAgentModel;
-  opponentModel?: AiAgentModel;
   thinkTimeMs: number;
   responseTimeoutMs: number;
   actionDelayMs: number;
@@ -113,10 +112,21 @@ export class GameInstance {
   private aiDifficulty: AiDifficulty | null = null;
   private aiActionIntervalMs = DEFAULT_AI_ACTION_INTERVAL_MS;
   private cppAgents: Map<string, CppAgentProcess> = new Map();
-  private cppPreviewSides: Map<string, AiPreviewSide> = new Map();
   private cppPreviewModels: Map<string, AiAgentModel> = new Map();
   private cppPreviewOptions: CppAiPreviewOptions | null = null;
   private cppDecisionSequence = 0;
+  private cppPreviewStateTimer: NodeJS.Timeout | null = null;
+  private cppPreviewPendingState: AiPreviewPlayerState | null = null;
+  private cppPreviewLastStateEmit = 0;
+  private cppPreviewStatusTimers = new Map<
+    CppPreviewStatusKey,
+    NodeJS.Timeout
+  >();
+  private cppPreviewPendingStatuses = new Map<
+    CppPreviewStatusKey,
+    AiPreviewStatus
+  >();
+  private cppPreviewLastStatusEmit = new Map<CppPreviewStatusKey, number>();
   private aiAgentService?: AiAgentService;
 
   private onGameOver?: (
@@ -192,14 +202,9 @@ export class GameInstance {
     });
   }
 
-  /** C++ preview players get independent, equally seeded seven-bags. */
-  addCppPreviewPlayer(
-    socketId: string,
-    side: AiPreviewSide,
-    model: AiAgentModel,
-  ): void {
+  /** The C++ preview player gets its own deterministically seeded seven-bag. */
+  addCppPreviewPlayer(socketId: string, model: AiAgentModel): void {
     this.playerBags.set(socketId, new BagGenerator(this.seed));
-    this.cppPreviewSides.set(socketId, side);
     this.cppPreviewModels.set(socketId, model);
     this.addPlayer(socketId, null);
   }
@@ -353,7 +358,7 @@ export class GameInstance {
 
   /** C++ は探索だけを行い、返された操作はこのTSエンジンで再生する。 */
   async startCppPreview(options: CppAiPreviewOptions): Promise<void> {
-    if (this.isRunning) this.stop();
+    if (this.isRunning) await this.stop();
     this.isRunning = true;
     this.aiDifficulty = null;
     this.cppPreviewOptions = { ...options };
@@ -361,12 +366,11 @@ export class GameInstance {
     this.emitCppPreviewStatus('starting');
 
     const previewPlayers = [...this.players.entries()].filter(([socketId]) =>
-      this.cppPreviewSides.has(socketId),
+      this.cppPreviewModels.has(socketId),
     );
-    const expectedPlayers = options.mode === 'versus' ? 2 : 1;
-    if (previewPlayers.length !== expectedPlayers) {
+    if (previewPlayers.length !== 1) {
       throw new Error(
-        `AI preview expected ${expectedPlayers} player(s), got ${previewPlayers.length}`,
+        `AI preview expected 1 player, got ${previewPlayers.length}`,
       );
     }
     for (const [socketId] of previewPlayers) {
@@ -392,30 +396,24 @@ export class GameInstance {
       this.server.to(this.roomId).emit(ServerEvent.GAME_START, {
         roomId: this.roomId,
         aiPreview: true,
-        mode: options.mode,
         model: options.model,
-        opponentModel: options.opponentModel,
       });
       this.players.forEach((player, socketId) => {
         player.startTime = Date.now();
         this.broadcastState(socketId, player);
       });
-      if (options.mode === 'versus') {
-        await this.runCppVersusPreviewLoop(previewPlayers);
-      } else {
-        const [socketId, player] = previewPlayers[0];
-        const agent = this.cppAgents.get(socketId);
-        if (!agent) {
-          throw new Error(`AI preview process missing for ${socketId}`);
-        }
-        await this.runCppPreviewLoop(socketId, player, agent);
+      const [socketId, player] = previewPlayers[0];
+      const agent = this.cppAgents.get(socketId);
+      if (!agent) {
+        throw new Error(`AI preview process missing for ${socketId}`);
       }
+      await this.runCppPreviewLoop(socketId, player, agent);
     } catch (error) {
       if (!this.isRunning) return;
       const message = error instanceof Error ? error.message : String(error);
       this.emitCppPreviewStatus('error', { message });
       this.server.to(this.roomId).emit(ServerEvent.ERROR, { message });
-      this.stop();
+      await this.stop();
     }
   }
 
@@ -753,7 +751,7 @@ export class GameInstance {
     // must use that same origin, rather than spawning O one column left.
     // C++/AI routes retain their existing x=3 Hold/spawn protocol; they are
     // separate from authoritative human multiplayer and are not rebased here.
-    if (this.isAiMatch || this.cppPreviewSides.has(player.socketId)) return 3;
+    if (this.isAiMatch || this.cppPreviewModels.has(player.socketId)) return 3;
     const width =
       player.activeMino === 'O' ? 2 : player.activeMino === 'I' ? 4 : 3;
     return Math.floor(BOARD_COLS / 2) - Math.ceil(width / 2);
@@ -954,14 +952,14 @@ export class GameInstance {
       lastLock: player.lastLock,
     };
 
-    const previewSide = this.cppPreviewSides.get(socketId);
     const previewModel = this.cppPreviewModels.get(socketId);
-    if (previewSide && previewModel) {
-      this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATE, {
-        side: previewSide,
+    if (previewModel) {
+      this.emitCppPreviewState({
+        roomId: this.roomId,
         model: previewModel,
         state: gameState,
       });
+      return;
     }
 
     // 自分の状態を送信
@@ -1088,23 +1086,11 @@ export class GameInstance {
     const survivors = [...this.players.values()].filter((p) => !p.isGameOver);
     const winner = survivors.length === 1 ? survivors[0] : null;
 
-    const gameOverPayload: {
-      roomId: string;
-      loserId: string;
-      winnerId: string | null;
-      loserSide?: AiPreviewSide;
-      winnerSide?: AiPreviewSide;
-    } = {
+    const gameOverPayload = {
       roomId: this.roomId,
       loserId: socketId,
       winnerId: winner?.socketId ?? null,
     };
-    const loserSide = this.cppPreviewSides.get(socketId);
-    const winnerSide = winner
-      ? this.cppPreviewSides.get(winner.socketId)
-      : undefined;
-    if (loserSide) gameOverPayload.loserSide = loserSide;
-    if (winnerSide) gameOverPayload.winnerSide = winnerSide;
     this.server.to(this.roomId).emit(ServerEvent.GAME_OVER, gameOverPayload);
 
     if (winner || survivors.length === 0) {
@@ -1132,7 +1118,7 @@ export class GameInstance {
           this.logger.error('onGameOver callback failed', error),
         );
       }
-      this.stop();
+      await this.stop();
     }
   }
 
@@ -1269,139 +1255,6 @@ export class GameInstance {
     }
   }
 
-  /**
-   * Versus preview advances one piece per side in lockstep.
-   *
-   * Search time and the number of movement commands must not decide how many
-   * pieces an AI gets to place.  Both agents therefore see the same turn
-   * boundary, their movement frames are still streamed independently, and
-   * both hard drops are committed before this turn's garbage is delivered.
-   */
-  private async runCppVersusPreviewLoop(
-    previewPlayers: [string, PlayerState][],
-  ): Promise<void> {
-    while (
-      this.isRunning &&
-      previewPlayers.every(
-        ([socketId, player]) =>
-          !player.isGameOver && this.cppAgents.has(socketId),
-      )
-    ) {
-      const turns = await Promise.all(
-        previewPlayers.map(async ([socketId, player]) => {
-          const agent = this.cppAgents.get(socketId);
-          if (!agent) {
-            throw new Error(`AI preview process missing for ${socketId}`);
-          }
-
-          const request = this.makeCppDecisionRequest(socketId, player);
-          this.emitCppPreviewStatus('thinking', {}, socketId);
-          const startedAt = performance.now();
-          const decision = await agent.decide(request);
-          return {
-            socketId,
-            player,
-            agent,
-            decision,
-            decisionMs: performance.now() - startedAt,
-          };
-        }),
-      );
-
-      if (!this.isRunning) return;
-      for (const turn of turns) {
-        if (this.cppAgents.get(turn.socketId) !== turn.agent) return;
-      }
-
-      const gameOverTurns = turns.filter((turn) => turn.decision.gameOver);
-      if (gameOverTurns.length > 0) {
-        await this.handleGameOver(gameOverTurns[0].socketId);
-        return;
-      }
-
-      for (const turn of turns) {
-        this.validateCppDecision(turn.player, turn.decision);
-        this.emitCppPreviewStatus(
-          'executing',
-          {
-            completedDepth: turn.decision.completedDepth,
-            nodesVisited: turn.decision.nodesVisited,
-            decisionMs: Math.round(turn.decisionMs * 100) / 100,
-          },
-          turn.socketId,
-        );
-      }
-
-      // Show rotations, horizontal movement and soft drops for both players.
-      // Even at INF, yielding a microtask between commands keeps the two
-      // streams interleaved instead of running one complete side first.
-      await Promise.all(
-        turns.map((turn) =>
-          this.replayCppPreviewMovement(
-            turn.socketId,
-            turn.player,
-            turn.agent,
-            turn.decision.actions.slice(0, -1),
-          ),
-        ),
-      );
-
-      if (!this.isRunning) return;
-      for (const turn of turns) {
-        if (
-          turn.player.isGameOver ||
-          this.cppAgents.get(turn.socketId) !== turn.agent
-        ) {
-          return;
-        }
-      }
-
-      // A shorter operation sequence must not make its attack land before the
-      // opponent locks the same turn.  Defer all outgoing garbage until both
-      // TS-engine hard drops have completed.
-      const outgoingGarbage: { socketId: string; lines: number }[] = [];
-      for (const turn of turns) {
-        this.hardDrop(turn.socketId, turn.player, (lines) => {
-          outgoingGarbage.push({ socketId: turn.socketId, lines });
-        });
-        if (!this.isRunning) return;
-      }
-      for (const outgoing of outgoingGarbage) {
-        this.sendGarbageToOpponent(outgoing.socketId, outgoing.lines);
-      }
-
-      // Garbage is queued after the lock broadcasts above, so publish the
-      // resulting queue before the next search/movement starts.
-      for (const turn of turns) {
-        if (!turn.player.isGameOver) {
-          this.broadcastState(turn.socketId, turn.player);
-        }
-      }
-
-      await this.waitForCppPreviewActionDelay();
-    }
-  }
-
-  private async replayCppPreviewMovement(
-    socketId: string,
-    player: PlayerState,
-    agent: CppAgentProcess,
-    actions: AgentAction[],
-  ): Promise<void> {
-    for (let index = 0; index < actions.length; index++) {
-      const action = actions[index];
-      if (
-        !this.isRunning ||
-        player.isGameOver ||
-        this.cppAgents.get(socketId) !== agent
-      ) {
-        return;
-      }
-      this.applyInput(socketId, this.agentActionToClientEvent(action));
-      await this.waitForCppPreviewActionDelay(action, actions[index + 1]);
-    }
-  }
-
   private aiReplayDelayMs(
     action: AgentAction,
     nextAction: AgentAction | undefined,
@@ -1412,25 +1265,6 @@ export class GameInstance {
     // position is still visible before a rotation, movement, or lock.
     if (action === 'soft_drop' && nextAction === 'soft_drop') return 0;
     return normalDelayMs;
-  }
-
-  private async waitForCppPreviewActionDelay(
-    action?: AgentAction,
-    nextAction?: AgentAction,
-  ): Promise<void> {
-    const delay =
-      action === undefined
-        ? (this.cppPreviewOptions?.actionDelayMs ?? 0)
-        : this.aiReplayDelayMs(
-            action,
-            nextAction,
-            this.cppPreviewOptions?.actionDelayMs ?? 0,
-          );
-    if (delay > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-      return;
-    }
-    await Promise.resolve();
   }
 
   private makeCppDecisionRequest(
@@ -1602,30 +1436,124 @@ export class GameInstance {
     return events[action];
   }
 
+  private emitCppPreviewState(payload: AiPreviewPlayerState): void {
+    if (payload.state.isGameOver) {
+      if (this.cppPreviewStateTimer) clearTimeout(this.cppPreviewStateTimer);
+      this.cppPreviewStateTimer = null;
+      this.cppPreviewPendingState = null;
+      this.publishCppPreviewState(payload);
+      return;
+    }
+
+    const elapsed = Date.now() - this.cppPreviewLastStateEmit;
+    if (!this.cppPreviewStateTimer && elapsed >= CPP_PREVIEW_EMIT_INTERVAL_MS) {
+      this.publishCppPreviewState(payload);
+      return;
+    }
+
+    this.cppPreviewPendingState = payload;
+    if (this.cppPreviewStateTimer) return;
+    const waitMs = Math.max(0, CPP_PREVIEW_EMIT_INTERVAL_MS - elapsed);
+    this.cppPreviewStateTimer = setTimeout(() => {
+      this.cppPreviewStateTimer = null;
+      const pending = this.cppPreviewPendingState;
+      this.cppPreviewPendingState = null;
+      if (pending && this.isRunning) this.publishCppPreviewState(pending);
+    }, waitMs);
+  }
+
+  private publishCppPreviewState(payload: AiPreviewPlayerState): void {
+    this.cppPreviewLastStateEmit = Date.now();
+    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATE, payload);
+  }
+
+  private scheduleCppPreviewStatus(
+    status: AiPreviewStatus,
+    immediate: boolean,
+    key: CppPreviewStatusKey,
+  ): void {
+    const timer = this.cppPreviewStatusTimers.get(key);
+    if (immediate) {
+      if (timer) clearTimeout(timer);
+      this.cppPreviewStatusTimers.delete(key);
+      this.cppPreviewPendingStatuses.delete(key);
+      this.publishCppPreviewStatus(key, status);
+      return;
+    }
+
+    const elapsed = Date.now() - (this.cppPreviewLastStatusEmit.get(key) ?? 0);
+    if (!timer && elapsed >= CPP_PREVIEW_EMIT_INTERVAL_MS) {
+      this.publishCppPreviewStatus(key, status);
+      return;
+    }
+
+    this.cppPreviewPendingStatuses.set(key, status);
+    if (timer) return;
+    const waitMs = Math.max(0, CPP_PREVIEW_EMIT_INTERVAL_MS - elapsed);
+    this.cppPreviewStatusTimers.set(
+      key,
+      setTimeout(() => {
+        this.cppPreviewStatusTimers.delete(key);
+        const pending = this.cppPreviewPendingStatuses.get(key);
+        this.cppPreviewPendingStatuses.delete(key);
+        if (pending && this.isRunning) {
+          this.publishCppPreviewStatus(key, pending);
+        }
+      }, waitMs),
+    );
+  }
+
+  private publishCppPreviewStatus(
+    key: CppPreviewStatusKey,
+    status: AiPreviewStatus,
+  ): void {
+    this.cppPreviewLastStatusEmit.set(key, Date.now());
+    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATUS, status);
+  }
+
+  private clearCppPreviewEmissions(): void {
+    if (this.cppPreviewStateTimer) clearTimeout(this.cppPreviewStateTimer);
+    this.cppPreviewStatusTimers.forEach((timer) => clearTimeout(timer));
+    this.cppPreviewStateTimer = null;
+    this.cppPreviewPendingState = null;
+    this.cppPreviewLastStateEmit = 0;
+    this.cppPreviewStatusTimers.clear();
+    this.cppPreviewPendingStatuses.clear();
+    this.cppPreviewLastStatusEmit.clear();
+  }
+
   private emitCppPreviewStatus(
     phase: AiPreviewStatus['phase'],
     details: Partial<AiPreviewStatus> = {},
     socketId?: string,
   ): void {
     if (!this.cppPreviewOptions) return;
-    const side = socketId ? this.cppPreviewSides.get(socketId) : undefined;
     const model = socketId
       ? this.cppPreviewModels.get(socketId)
       : this.cppPreviewOptions.model;
     const status: AiPreviewStatus = {
+      roomId: this.roomId,
       phase,
       model: model ?? this.cppPreviewOptions.model,
-      mode: this.cppPreviewOptions.mode,
-      side,
       actionDelayMs: this.cppPreviewOptions.actionDelayMs,
       ...details,
     };
-    this.server.to(this.roomId).emit(ServerEvent.AI_PREVIEW_STATUS, status);
+    const immediate =
+      socketId === undefined ||
+      phase === 'starting' ||
+      phase === 'stopped' ||
+      phase === 'error';
+    this.scheduleCppPreviewStatus(
+      status,
+      immediate,
+      socketId === undefined ? 'global' : 'player',
+    );
   }
 
   /** ゲーム停止 */
-  stop(): void {
+  async stop(): Promise<void> {
     const agents = [...this.cppAgents.values()];
+    this.clearCppPreviewEmissions();
     if (this.cppPreviewOptions && this.isRunning) {
       this.emitCppPreviewStatus('stopped');
     }
@@ -1641,9 +1569,7 @@ export class GameInstance {
     this.gravityTimer = null;
     this.lockTimer.forEach((t) => clearTimeout(t));
     this.lockTimer.clear();
-    for (const agent of agents) {
-      void agent.close().catch(() => undefined);
-    }
+    await Promise.allSettled(agents.map((agent) => agent.close()));
   }
 
   getPlayers(): Map<string, PlayerState> {
@@ -1656,6 +1582,10 @@ export class GameInstance {
 
   get isStarted(): boolean {
     return this.isRunning;
+  }
+
+  get isCppPreview(): boolean {
+    return this.cppPreviewModels.size > 0;
   }
 
   get gameSeed(): number {

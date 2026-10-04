@@ -142,23 +142,18 @@ export const ServerEvent = {
 export type ServerEventType = typeof ServerEvent[keyof typeof ServerEvent];
 
 export type AiAgentModel = 'easy' | 'hard' | 'expert';
-export type AiPreviewMode = 'solo' | 'versus';
-export type AiPreviewSide = 'left' | 'right';
 
 export interface AiPreviewStartRequest {
-  mode?: AiPreviewMode;
   model: AiAgentModel;
-  opponentModel?: AiAgentModel;
   thinkTimeMs?: number;
   actionDelayMs?: number;
   seed?: number;
 }
 
 export interface AiPreviewStatus {
+  roomId: string;
   phase: 'starting' | 'thinking' | 'executing' | 'stopped' | 'error';
   model: AiAgentModel;
-  mode?: AiPreviewMode;
-  side?: AiPreviewSide;
   actionDelayMs: number;
   completedDepth?: number;
   nodesVisited?: number;
@@ -167,7 +162,7 @@ export interface AiPreviewStatus {
 }
 
 export interface AiPreviewPlayerState {
-  side: AiPreviewSide;
+  roomId: string;
   model: AiAgentModel;
   state: GameState;
 }
