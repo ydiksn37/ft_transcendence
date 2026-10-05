@@ -8,12 +8,12 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 ## インストールと実行手順 (Instructions)
 
 ### 前提条件
-- **Docker** および **Docker Compose**
-- **GNU Make**
+- **Docker Engine 24以降**および**Docker Compose v2.20以降**
+- **GNU Make 3.81以降**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
 - マシン上でdefault portの8080、8443、54320、63790が利用可能であること（または`.env`で変更）
 
-production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer内で実行されます。これらを直接呼び出す任意の開発コマンドでのみhost側にも必要です。
+production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer内で実行されるため、host側の前提条件ではありません。これらを直接呼び出す任意の開発コマンドでのみhost側にも必要です。
 
 ### セットアップと実行
 1. リポジトリをクローンします:
@@ -26,7 +26,9 @@ production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer�
    ```bash
    cp .env.example .env
    ```
-   ローカルアカウントは42 OAuthを設定しなくても利用できます。OAuthを実演する場合は、`FT_CLIENT_ID`と`FT_CLIENT_SECRET`を設定し、Redirect URIに`https://localhost:8443/api/auth/42/callback`を登録します。別のhost/portを使用する場合は、登録値、`FT_CALLBACK_URL`、`VITE_WS_URL`、`ALLOWED_ORIGINS`を同じ接続先に合わせてください。
+   `POSTGRES_USER`、`POSTGRES_DB`、`FT_CALLBACK_URL`、`ALLOWED_ORIGINS`は空にしないでください。提供されているdefault値はローカル評価でそのまま使用できます。default portがhost上で競合する場合は、port変数と`DEV_BIND_ADDRESS`を変更できます。
+
+   ローカルアカウントは42 OAuthを設定しなくても利用できます。OAuthを実演する場合は、`FT_CLIENT_ID`と`FT_CLIENT_SECRET`を設定し、Redirect URIに`https://localhost:8443/api/auth/42/callback`を登録します。別のhost/portを使用する場合は、登録値、`FT_CALLBACK_URL`、`VITE_WS_URL`、`ALLOWED_ORIGINS`を同じ接続先に合わせてください。作成した`.env`はGit管理外であり、commitしてはいけません。
 3. Docker Composeを使用してアプリケーションをビルドし、起動します。依存関係のインストール、C++ AIのコンパイル、Vaultの初期化、データベースマイグレーションも自動的に実行されます:
    ```bash
    make build
@@ -42,15 +44,19 @@ production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer�
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
 
 ## 技術スタック (Technical Stack)
-- **フロントエンドフレームワーク:** React (Vite) + TypeScript
-- **スタイリング:** Tailwind CSSと既存のカスタムCSSデザインシステム
-- **バックエンドフレームワーク:** NestJS + TypeScript
-- **データベース:** PostgreSQL + Prisma ORM
-- **ゲーム描画エンジン:** PixiJS (WebGL)
-- **セキュリティ:** Nginx + ModSecurity (WAF), HashiCorp Vault
 
-**技術選定の理由:** 
-モダンなReact + Viteと、WebGL描画用のPixiJSを採用しました。Tailwind CSSを使用し、既存のapplication themeを維持しながらUI状態を明示しています。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。
+| 領域 | 技術 | 選定理由 |
+| --- | --- | --- |
+| Frontend | React、TypeScript、Vite、Zustand | Reactでcomponent単位にUIを構成し、Viteでbuildとhot reloadを高速化し、Zustandで共有client stateを小さく明示的に管理します。 |
+| Styling・Accessibility | Tailwind CSS、custom CSS design system、ARIA semantics | Tailwindのutility classと、再利用component、共通design token、keyboard navigation、focus stateを組み合わせ、一貫性とaccessibilityを確保します。 |
+| Game rendering | PixiJS / WebGL | GPUを利用したcanvas描画により、game engineをDOMへ密結合させず盤面更新とeffectを滑らかに表示します。 |
+| Backend・Realtime通信 | NestJS、TypeScript、Socket.IO | NestJSでREST、認証、validation、WebSocket gatewayを構造化し、Socket.IOで対戦、chat、presence、再接続、観戦を処理します。 |
+| Data・State | PostgreSQL、Prisma ORM、Redis | PostgreSQLでrelationを持つdataを永続化し、Prismaで型付きschemaとmigrationを管理し、Redisで短期間の共有stateとsession関連処理を支えます。 |
+| Analytics・Export | Recharts、jsPDF、CSV/JSON import・export | 対話的chart、期間filter、PDF/CSV report、validation付きarchiveにより、gameplay dataを分析・持ち出し可能にします。 |
+| AI | C++17、CMake、headless process bridge | 複数難易度のnative search agentを実装し、NestJS bridgeが操作を検証してauthoritativeなTypeScript game engineへ適用します。 |
+| API文書 | Swagger / OpenAPI | API keyで保護された公開APIを対話的に確認でき、評価時にも直接実演できます。 |
+| Security・Delivery | Nginx、HTTPS、ModSecurity + OWASP CRS、HashiCorp Vault、bcrypt、JWT、TOTP 2FA | Nginxを単一のTLS入口とし、WAFで攻撃を検査し、Vaultでruntime secretを分離し、標準的な認証手段でaccountを保護します。 |
+| Deployment | Docker、Docker Compose、multi-stage build | Frontend、Backend、Database、Cache、Vault、WAF、AI toolchainを単一のMake targetから再現可能にbuild・起動します。 |
 
 ## 設計ドキュメント (Architecture Documentation)
 
@@ -102,6 +108,8 @@ production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer�
 | 統計・Progression | 対戦履歴、APM/PPS/勝率chart、期間filter、rank、XP、level、連勝、achievement。 | ssawa |
 | データ可搬性 | JSON/CSV account export、PDF/CSV分析export、validation付きpreview、設定・履歴import。 | ssawa |
 | Customization・Responsive UI | Key binding、操作速度、skin、背景、audio設定、再利用可能なdesign-system component、desktop/mobile layout。 | kaisuzuk |
+| 法的ページ・Accessibility | Applicationから到達可能なPrivacy PolicyとTerms of Service、semantic landmark、keyboard navigation、明確なfocus state、reduced-motion対応、responsive layout。 | yukusano, ssawa, kaisuzuk |
+| Input validation | Client側form検証、厳格なNestJS DTO validation、未知fieldの拒否、範囲制限付きWebSocket payload、file upload/import検証。 | yukusano |
 | 公開API | API keyで保護した設定、leaderboard、profile、統計、履歴、tournament endpoint、rate limit、Swagger文書。 | yukusano |
 | 管理機能 | Roleに基づくUserの閲覧、作成、編集、ban、role変更、削除。 | yukusano |
 | インフラセキュリティ | Nginx HTTPS、ModSecurity/OWASP CRS、Vaultによるsecret管理、input validation、service境界の保護。 | yukusano |
@@ -135,18 +143,22 @@ Majorは2点、Minorは1点として計算しています。
 | **合計** |  |  | **30** |  |  |  |
 
 ## 個人の貢献 (Individual Contributions)
-- **sonakamu**: 
-  - *貢献:* PixiJS盤面描画、ローカル操作、マルチプレイヤー状態表示を実装。
-  - *課題と解決:* Server snapshotでREADY、操作中ミノ、Next/Hold、観戦遷移がずれる問題に対し、snapshot適用処理と状態遷移を集約して表示を一致させた。
-- **ssawa**: 
-  - *貢献:* C++ヘッドレスAIを開発し、Node.jsバックエンドに統合。コアとなる衝突判定ロジックを管理。
-  - *課題と解決:* AI processが試合終了後も残ることや遅い操作列に対し、試合単位のprocess所有、timeout、cleanup、検証済み操作列の再生を実装した。
-- **kaisuzuk**: 
-  - *貢献:* React SPA、カスタムUIコンポーネント、およびチャートライブラリを使用した分析ダッシュボードの設計と開発。
-  - *課題と解決:* 共有状態とUI重複による保守性低下に対し、チャット、フレンド、トーナメント、分析を再利用component、Zustand store、custom hookへ分離した。
-- **yukusano**: 
-  - *貢献:* Dockerインフラストラクチャ、NestJSバックエンドの設計、WAF/Vaultセキュリティの実装。
-  - *課題と解決:* OWASP CRSがSocket.IOの長時間通信とVite assetに干渉する問題に対し、REST検査を維持した限定的な除外を設定し、Vaultの初期化とunsealをscript化した。
+- **sonakamu**
+  - **役割・モジュール:** Technical LeadとしてWebSockets、Web game、remote player、3人対戦、customization、tournament、spectator moduleを担当。
+  - **具体的な実装:** PixiJS盤面描画、local操作とgame state表示、同期された1v1/custom room、tournament進行、再接続、観戦遷移を実装。
+  - **課題と解決:** Server snapshotでREADY、操作中ミノ、Next/Hold、観戦遷移がずれる問題に対し、snapshot適用処理と状態遷移を集約して表示を一致させた。
+- **ssawa**
+  - **役割・モジュール:** AI対戦、標準ユーザー管理、高度な検索、game統計・履歴、data portability、analytics moduleを担当。
+  - **具体的な実装:** C++ headless AIと衝突判定、profile、avatar、player検索、統計・progression表示、account archive、analytics/export flowを実装。
+  - **課題と解決:** AI processが試合終了後も残ることや遅い操作列に対し、試合単位のprocess所有、timeout、cleanup、検証済み操作列の再生を実装した。
+- **kaisuzuk**
+  - **役割・モジュール:** Product OwnerおよびUI/UX developerとしてfrontend frameworkとcustom design-system moduleを担当。
+  - **具体的な実装:** React SPA、desktop/mobile responsive layout、再利用UI component、game設定画面、tournament表示、chartを使用したanalytics UIを設計・実装。
+  - **課題と解決:** 共有stateとUI重複による保守性低下に対し、chat、friend、tournament、analyticsを再利用component、Zustand store、custom hookへ分離した。
+- **yukusano**
+  - **役割・モジュール:** Project Managerおよびbackend/DevOps/security developerとしてORM、user interaction、Public API、OAuth 2.0、2FA moduleを担当。
+  - **具体的な実装:** NestJS API、Prisma永続化、local/42/TOTP認証、chat・friend service、API key・rate limit、管理機能、Docker deployment、Nginx、ModSecurity、Vault連携を実装。
+  - **課題と解決:** OWASP CRSがSocket.IOの長時間通信とVite assetに干渉する問題に対し、REST検査を維持した限定的な除外を設定し、Vaultの初期化とunsealをscript化した。
 
 ## リソースとAIの使用 (Resources and AI Usage)
 - **NestJS ドキュメント**: https://docs.nestjs.com/

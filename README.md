@@ -10,19 +10,19 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
 
 ### Prerequisites
 
-- **Docker** and **Docker Compose**
-- **GNU Make**
+- **Docker Engine 24 or later** with **Docker Compose v2.20 or later**
+- **GNU Make 3.81 or later**
 - A web browser (the latest stable version of Google Chrome is recommended)
 - Available default host ports: 8080, 8443, 54320, and 63790 (or change them in `.env`)
 
-Node.js, npm, CMake, and OpenSSL run inside containers for the production deployment. They are only host prerequisites for optional developer commands that invoke them directly.
+Node.js, npm, CMake, and OpenSSL run inside containers for the production deployment and are not host prerequisites. They are only needed on the host for optional developer commands that invoke them directly.
 
 ### Setup and Execution
 
 1. Clone the repository:
 
    ```bash
-   git clone <repository_url> ft_transcendence
+   git clone https://github.com/ydiksn37/ft_transcendence.git
    cd ft_transcendence
    ```
 
@@ -32,7 +32,9 @@ Node.js, npm, CMake, and OpenSSL run inside containers for the production deploy
    cp .env.example .env
    ```
 
-   Local accounts work without 42 OAuth. To demonstrate OAuth, set `FT_CLIENT_ID` and `FT_CLIENT_SECRET`, then register `https://localhost:8443/api/auth/42/callback` as the redirect URI. If the application uses a different host or port, update the registered URI, `FT_CALLBACK_URL`, `VITE_WS_URL`, and `ALLOWED_ORIGINS` consistently.
+   `POSTGRES_USER`, `POSTGRES_DB`, `FT_CALLBACK_URL`, and `ALLOWED_ORIGINS` must remain non-empty. The provided defaults work for a local evaluation. Port variables and `DEV_BIND_ADDRESS` may be changed if the defaults conflict with the host.
+
+   Local accounts work without 42 OAuth. To demonstrate OAuth, set `FT_CLIENT_ID` and `FT_CLIENT_SECRET`, then register `https://localhost:8443/api/auth/42/callback` as the redirect URI. If the application uses a different host or port, update the registered URI, `FT_CALLBACK_URL`, `VITE_WS_URL`, and `ALLOWED_ORIGINS` consistently. Never commit the resulting `.env`; it is ignored by Git.
 
 3. Build and start the application with Docker Compose. This command also installs dependencies, compiles the C++ AI, initializes Vault, and runs the database migrations:
 
@@ -56,16 +58,18 @@ Node.js, npm, CMake, and OpenSSL run inside containers for the production deploy
 
 ## Technical Stack
 
-- **Frontend framework:** React (Vite) with TypeScript
-- **Styling:** Tailwind CSS alongside the existing custom CSS design system
-- **Backend framework:** NestJS with TypeScript
-- **Database:** PostgreSQL with Prisma ORM
-- **Game rendering engine:** PixiJS (WebGL)
-- **Security:** Nginx with ModSecurity (WAF) and HashiCorp Vault
-
-### Rationale
-
-React and Vite provide a modern frontend development environment, while PixiJS supplies efficient WebGL rendering for the game. Tailwind CSS provides utility-based styling without replacing the established application theme. NestJS manages the REST API and WebSocket gateways. PostgreSQL and Prisma provide relational persistence with type-safe database access.
+| Area | Technologies | Rationale |
+| --- | --- | --- |
+| Frontend | React, TypeScript, Vite, Zustand | React provides component-based UI composition, Vite keeps builds and hot reload fast, and Zustand keeps shared client state small and explicit. |
+| Styling and accessibility | Tailwind CSS, custom CSS design system, ARIA semantics | Tailwind supplies utility-based styling while reusable components, shared design tokens, keyboard navigation, and focus states keep the interface consistent and accessible. |
+| Game rendering | PixiJS / WebGL | GPU-accelerated canvas rendering keeps board updates and effects responsive without tying the game engine to the DOM. |
+| Backend and real-time communication | NestJS, TypeScript, Socket.IO | NestJS structures REST, authentication, validation, and WebSocket gateways; Socket.IO handles matches, chat, presence, reconnection, and spectating. |
+| Data and state | PostgreSQL, Prisma ORM, Redis | PostgreSQL stores relational application data, Prisma supplies a typed schema and migrations, and Redis supports short-lived shared state and session-related workloads. |
+| Analytics and exports | Recharts, jsPDF, CSV/JSON import and export | Interactive charts, date filters, PDF/CSV reports, and validated archives make gameplay data understandable and portable. |
+| AI | C++17, CMake, a headless process bridge | Native search agents provide multiple difficulty levels while the NestJS bridge validates and applies their actions to the authoritative TypeScript game engine. |
+| API documentation | Swagger / OpenAPI | Interactive endpoint documentation makes the API-key-protected public API directly demonstrable during evaluation. |
+| Security and delivery | Nginx, HTTPS, ModSecurity with OWASP CRS, HashiCorp Vault, bcrypt, JWT, TOTP 2FA | Nginx provides a single TLS entry point, the WAF filters hostile traffic, Vault separates runtime secrets, and established authentication primitives protect accounts. |
+| Deployment | Docker, Docker Compose, multi-stage builds | The complete frontend, backend, database, cache, Vault, WAF, and AI toolchain can be built and started reproducibly with one Make target. |
 
 ## Architecture Documentation
 
@@ -120,6 +124,8 @@ The application uses PostgreSQL through Prisma. UUID strings are primary and for
 | Statistics and progression | Match history, APM/PPS/win-rate charts, date filters, ranks, XP, levels, streaks, and achievements. | ssawa |
 | Data portability | JSON/CSV account export, PDF/CSV analytics export, validated import previews, and settings/history import. | ssawa |
 | Customization and responsive UI | Key bindings, timing controls, skins, backgrounds, audio settings, reusable design-system components, and desktop/mobile layouts. | kaisuzuk |
+| Legal pages and accessibility | Reachable Privacy Policy and Terms of Service pages, semantic landmarks, keyboard navigation, visible focus states, reduced-motion support, and responsive layouts. | yukusano, ssawa, kaisuzuk |
+| Input validation | Client-side form checks plus strict NestJS DTO validation, rejected unknown fields, bounded WebSocket payloads, and validated file uploads/imports. | yukusano |
 | Public API | API-key-protected settings, leaderboard, profile, statistics, history, and tournament endpoints with rate limits and Swagger documentation. | yukusano |
 | Administration | Role-based user viewing, creation, editing, banning, role management, and deletion for administrators/moderators. | yukusano |
 | Infrastructure security | HTTPS through Nginx, ModSecurity/OWASP CRS, Vault-managed application secrets, validation, and protected service boundaries. | yukusano |
@@ -155,16 +161,20 @@ Major modules are worth 2 points, and Minor modules are worth 1 point.
 ## Individual Contributions
 
 - **sonakamu**
-  - **Contribution:** Implemented PixiJS board rendering, local controls, and multiplayer state display.
+  - **Role and modules:** Technical Lead for the WebSockets, web-based game, remote-player, three-player multiplayer, customization, tournament, and spectator modules.
+  - **Specific work:** Implemented PixiJS board rendering, local controls and game-state presentation, synchronized one-on-one/custom-room flows, tournament progression, reconnection, and spectator transitions.
   - **Challenge and solution:** Server snapshots could desynchronize READY state, active pieces, Next/Hold displays, and spectator transitions. Centralized snapshot application and explicit state transitions kept the views consistent.
 - **ssawa**
-  - **Contribution:** Developed the headless C++ AI, integrated it with the Node.js backend, and managed the core collision-detection logic.
+  - **Role and modules:** Developer for the AI opponent, standard user management, advanced search, game statistics/history, data portability, and analytics modules.
+  - **Specific work:** Developed the headless C++ AI and collision logic; implemented profiles, avatars, player search, statistics and progression views, account archives, and analytics/export workflows.
   - **Challenge and solution:** AI processes could outlive a match or return late actions. Per-match process ownership, time limits, cleanup, and validated action replay kept the TypeScript engine synchronized.
 - **kaisuzuk**
-  - **Contribution:** Designed and developed the React SPA, custom UI components, and analytics dashboard using a charting library.
+  - **Role and modules:** Product Owner and UI/UX developer for the frontend framework and custom design-system modules.
+  - **Specific work:** Designed the React SPA, responsive desktop/mobile layouts, reusable UI components, game configuration screens, tournament presentation, and chart-based analytics interface.
   - **Challenge and solution:** Shared state and repeated UI made the SPA difficult to maintain. Reusable components, Zustand stores, and custom hooks separated chat, friends, tournaments, and analytics concerns.
 - **yukusano**
-  - **Contribution:** Implemented the Docker infrastructure, NestJS backend architecture, WAF, and Vault security integration.
+  - **Role and modules:** Project Manager and backend/DevOps/security developer for ORM, user interaction, Public API, OAuth 2.0, and 2FA modules.
+  - **Specific work:** Implemented the NestJS API, Prisma persistence, local/42/TOTP authentication, chat and friend services, API keys and rate limits, administration, Docker deployment, Nginx, ModSecurity, and Vault integration.
   - **Challenge and solution:** OWASP CRS rules interfered with long-lived Socket.IO traffic and Vite assets. Narrow exclusions preserved REST inspection, while scripted initialization and unsealing made Vault startup repeatable.
 
 ## Resources and AI Usage
