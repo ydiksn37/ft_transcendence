@@ -11,11 +11,11 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
 ### Prerequisites
 
 - **Docker** and **Docker Compose**
-- **Node.js 20 or later** and **npm 10 or later**
 - **GNU Make**
-- **OpenSSL**
 - A web browser (the latest stable version of Google Chrome is recommended)
-- Available default host ports: 3000, 5173, 8080, 8443, 54320, and 63790 (or change them in `.env`)
+- Available default host ports: 8080, 8443, 54320, and 63790 (or change them in `.env`)
+
+Node.js, npm, CMake, and OpenSSL run inside containers for the production deployment. They are only host prerequisites for optional developer commands that invoke them directly.
 
 ### Setup and Execution
 
@@ -40,13 +40,15 @@ Project T is a modern, real-time competitive falling-block puzzle game built for
    make build
    ```
 
-   `make build` runs `npm install`, generates the Prisma client, builds the shared package and C++ AI, generates the ignored development secret files under `secrets/dev/`, initializes Vault, builds the images, starts the containers, and applies database migrations. No manual creation of files under `secrets/` is required.
+   `make build` validates the manually created `.env`, builds all application artifacts inside Docker, generates the ignored development secret files under `secrets/dev/`, initializes Vault, starts the containers, applies database migrations, and waits for the services to become healthy. It never creates or overwrites `.env`.
 
    To start an environment that has already been built, run:
 
    ```bash
    make up
    ```
+
+   For the hot-reload development configuration, use `make dev`. `make up` only starts an already built production environment and does not repeat dependency, C++, or Vault builds.
 
 4. Open `https://localhost:8443` in a browser, or use the configured domain/IP and `NGINX_PORT`.
 

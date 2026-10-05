@@ -1,3 +1,5 @@
+name: ft_transcendence
+
 services:
   # ─────────────────────────────────────────
   #  PostgreSQL
@@ -95,16 +97,15 @@ services:
   #  NestJS バックエンド
   # ─────────────────────────────────────────
   backend:
+    image: ft_transcendence-backend:production
     build:
       context: .
-      dockerfile: apps/backend/Dockerfile
-      target: development
+      dockerfile: Dockerfile
+      target: backend-production
     container_name: transcendence_backend
     restart: unless-stopped
-    # schema変更は `make migrate-dev name=...` でmigrationを作成する（db pushは使わない）
-    command: sh -c "npm run db:generate && npx ts-node --transpile-only src/migrate.ts && npm run dev"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 3000
       VAULT_ADDR: "http://vault:8200"
       VAULT_TOKEN_FILE: /run/secrets/vault_token
@@ -114,17 +115,11 @@ services:
       FT_CALLBACK_URL: ${FT_CALLBACK_URL}
       UPLOAD_DIR: /app/uploads
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      AI_AGENT_PATH: /opt/ai-agent-dev/ai_agent
+      AI_AGENT_PATH: /usr/local/bin/ai_agent
     secrets:
       - vault_token
     volumes:
-      - ./apps/backend/src:/app/apps/backend/src:ro  # ホットリロード用
-      - ./apps/backend/prisma:/app/apps/backend/prisma:ro # schema変更時のClient再生成用
-      - ./packages/shared/dist:/app/packages/shared/dist:ro # Socket共有型のホットリロード用
-      - ./build/ai-agent-web:/opt/ai-agent-dev:ro   # C++ AIの開発用バイナリ
       - uploads_data:/app/uploads
-    ports:
-      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,6 +129,12 @@ services:
         condition: service_healthy
     networks:
       - transcendence_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/docs').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
 
   # ─────────────────────────────────────────
   #  C++ AI 開発用コンパイラ
@@ -144,7 +145,7 @@ services:
     image: ft_transcendence-ai-compiler:latest
     build:
       context: .
-      dockerfile: apps/backend/Dockerfile
+      dockerfile: Dockerfile
       target: ai-toolchain
     working_dir: /src
     volumes:
@@ -159,22 +160,45 @@ services:
       echo 'C++ web AI build complete: /build'"
     network_mode: none
 
+  # Vault/DB bootstrap tooling. Only explicit Make targets enable this profile.
+  vault-bootstrap:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: tools/vault-bootstrap.Dockerfile
+    environment:
+      VAULT_ADDR: http://vault:8200
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      FT_CLIENT_ID: ${FT_CLIENT_ID:-}
+      FT_CLIENT_SECRET: ${FT_CLIENT_SECRET:-}
+    volumes:
+      - ./secrets/dev:/secrets
+      - ./vault/transcendence-policy.hcl:/vault/policy.hcl:ro
+    networks:
+      - transcendence_net
+
   # ─────────────────────────────────────────
   #  React フロントエンド (production build)
   # ─────────────────────────────────────────
   frontend:
+    image: ft_transcendence-frontend:production
     build:
       context: .
-      dockerfile: apps/frontend/Dockerfile
-      target: production
+      dockerfile: Dockerfile
+      target: frontend-production
     container_name: transcendence_frontend
     restart: unless-stopped
-    ports:
-      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - transcendence_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   # ─────────────────────────────────────────
   #  Nginx (リバースプロキシ + 自己署名 SSL)
@@ -197,8 +221,10 @@ services:
       - "${NGINX_HTTP_PORT:-8080}:8080"
       - "${NGINX_PORT:-8443}:8443"
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     networks:
       - transcendence_net
 

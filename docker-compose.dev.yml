@@ -1,0 +1,33 @@
+services:
+  backend:
+    image: ft_transcendence-backend:development
+    build:
+      target: backend-development
+    command: sh -c "npm run db:generate && npx ts-node --transpile-only src/migrate.ts && npm run dev"
+    environment:
+      NODE_ENV: development
+      AI_AGENT_PATH: /usr/local/bin/ai_agent
+    volumes:
+      - ./apps/backend/src:/app/apps/backend/src:ro
+      - ./apps/backend/prisma:/app/apps/backend/prisma:ro
+    ports:
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-3000}:3000"
+
+  frontend:
+    image: ft_transcendence-frontend:development
+    build:
+      target: frontend-development
+    environment:
+      VITE_WS_URL: ${VITE_WS_URL}
+      VITE_DEV_PROXY_TARGET: http://backend:3000
+    volumes:
+      - ./apps/frontend/src:/app/apps/frontend/src:ro
+      - ./packages/shared/src:/app/packages/shared/src:ro
+    ports:
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:5173/"]
+
+  nginx:
+    environment:
+      FRONTEND_UPSTREAM_PORT: 5173

@@ -9,11 +9,11 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
 
 ### 前提条件
 - **Docker** および **Docker Compose**
-- **Node.js 20以上** および **npm 10以上**
 - **GNU Make**
-- **OpenSSL**
 - Webブラウザ (Google Chromeの最新安定版を推奨)
-- マシン上でdefault portの3000、5173、8080、8443、54320、63790が利用可能であること（または`.env`で変更）
+- マシン上でdefault portの8080、8443、54320、63790が利用可能であること（または`.env`で変更）
+
+production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer内で実行されます。これらを直接呼び出す任意の開発コマンドでのみhost側にも必要です。
 
 ### セットアップと実行
 1. リポジトリをクローンします:
@@ -31,11 +31,12 @@ Project Tは、`ft_transcendence` 課題のために構築された、モダン�
    ```bash
    make build
    ```
-   `make build`は、`npm install`、Prisma Client生成、共有packageとC++ AIのbuild、Git管理外の`secrets/dev/`以下の開発用secret生成、Vault初期化、Docker imageのbuild、container起動、database migrationまで実行します。`secrets/`以下を手動で作成する必要はありません。
+   `make build`は、手動で作成した`.env`を検証し、依存package、Prisma Client、共有package、C++ AIをDocker内でbuildします。その後、Git管理外の`secrets/dev/`以下のsecret生成、Vault初期化、container起動、database migration、health確認まで実行します。`.env`を自動生成または上書きすることはありません。
    ビルド済みの環境を再起動する場合は、次のコマンドを使用します:
    ```bash
    make up
    ```
+   hot reloadを使用する開発構成は`make dev`で起動します。`make up`はbuild済みproduction環境を起動するだけで、依存package、C++、Vaultのbuildや再同期は行いません。
 4. アプリケーションにアクセスします:
    - ブラウザを開き、`https://localhost:8443`（または設定したドメイン/IPと`NGINX_PORT`）にアクセスします。
    - *注: HTTPSに自己署名証明書を使用しているため、ブラウザのセキュリティ警告をバイパスする必要があります。*
