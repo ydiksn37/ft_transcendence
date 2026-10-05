@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM node:22-alpine AS dependencies
 WORKDIR /app
 ENV TURBO_TELEMETRY_DISABLED=1

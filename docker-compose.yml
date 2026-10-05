@@ -160,7 +160,6 @@ services:
       echo 'C++ web AI build complete: /build'"
     network_mode: none
 
-  # Vault/DB bootstrap tooling. Only explicit Make targets enable this profile.
   vault-bootstrap:
     profiles: ["tools"]
     build:

@@ -57,6 +57,7 @@ Node.js, npm, CMake, and OpenSSL run inside containers for the production deploy
 ## Technical Stack
 
 - **Frontend framework:** React (Vite) with TypeScript
+- **Styling:** Tailwind CSS alongside the existing custom CSS design system
 - **Backend framework:** NestJS with TypeScript
 - **Database:** PostgreSQL with Prisma ORM
 - **Game rendering engine:** PixiJS (WebGL)
@@ -64,7 +65,7 @@ Node.js, npm, CMake, and OpenSSL run inside containers for the production deploy
 
 ### Rationale
 
-React and Vite provide a modern frontend development environment, while PixiJS supplies efficient WebGL rendering for the game. NestJS manages the REST API and WebSocket gateways. PostgreSQL and Prisma provide relational persistence with type-safe database access.
+React and Vite provide a modern frontend development environment, while PixiJS supplies efficient WebGL rendering for the game. Tailwind CSS provides utility-based styling without replacing the established application theme. NestJS manages the REST API and WebSocket gateways. PostgreSQL and Prisma provide relational persistence with type-safe database access.
 
 ## Architecture Documentation
 

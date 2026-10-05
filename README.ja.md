@@ -43,13 +43,14 @@ production deploymentで使用するNode.js、npm、CMake、OpenSSLはcontainer�
 
 ## 技術スタック (Technical Stack)
 - **フロントエンドフレームワーク:** React (Vite) + TypeScript
+- **スタイリング:** Tailwind CSSと既存のカスタムCSSデザインシステム
 - **バックエンドフレームワーク:** NestJS + TypeScript
 - **データベース:** PostgreSQL + Prisma ORM
 - **ゲーム描画エンジン:** PixiJS (WebGL)
 - **セキュリティ:** Nginx + ModSecurity (WAF), HashiCorp Vault
 
 **技術選定の理由:** 
-モダンなReact + Viteと、WebGL描画用のPixiJSを採用しました。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。
+モダンなReact + Viteと、WebGL描画用のPixiJSを採用しました。Tailwind CSSを使用し、既存のapplication themeを維持しながらUI状態を明示しています。NestJSはREST APIとWebSocket gatewayを管理し、PostgreSQL + Prismaが型安全なリレーショナル永続化を担います。
 
 ## 設計ドキュメント (Architecture Documentation)
 

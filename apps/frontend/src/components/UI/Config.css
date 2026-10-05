@@ -22,7 +22,6 @@
 }
 
 .config-tabs button,
-.config-skin-button,
 .config-key-button {
   border: 4px solid #555;
   border-radius: 0;
@@ -41,21 +40,18 @@
 }
 
 .config-tabs button:hover,
-.config-skin-button:hover,
 .config-key-button:hover {
   border-color: #888;
   background: #222;
 }
 
 .config-tabs button:active,
-.config-skin-button:active,
 .config-key-button:active {
   box-shadow: 2px 2px 0 #000;
   transform: translate(2px, 2px);
 }
 
-.config-tabs button[aria-selected='true'],
-.config-skin-button[aria-pressed='true'] {
+.config-tabs button[aria-selected='true'] {
   border-color: #d8a43a;
   color: #f4dfaa;
   background: var(--color-surface-2);
@@ -63,7 +59,6 @@
 }
 
 .config-tabs button:focus-visible,
-.config-skin-button:focus-visible,
 .config-key-button:focus-visible {
   outline: 3px solid #e7cf91;
   outline-offset: 3px;
@@ -332,14 +327,6 @@
   border-color: #bd5545;
   color: #e28a74;
   box-shadow: 4px 4px 0 #54271f;
-}
-
-.config-skin-section {
-  margin-top: 20px;
-}
-
-.config-skin-button {
-  padding: 10px 14px;
 }
 
 .tetris-ui-container.config-display-preview {
