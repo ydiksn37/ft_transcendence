@@ -62,8 +62,6 @@ services:
     command: vault server -config=/vault/config/config.hcl
     environment:
       VAULT_ADDR: "http://127.0.0.1:8200"
-    cap_add:
-      - IPC_LOCK
     volumes:
       - ./vault/config.hcl:/vault/config/config.hcl:ro
       - vault_data:/vault/file
