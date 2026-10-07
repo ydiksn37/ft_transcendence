@@ -168,7 +168,7 @@ export class GameGateway
 
           // DBのオンラインステータスを更新し、全体に通知
           await this.prisma.user
-            .update({
+            .updateMany({
               where: { id: payload.sub },
               data: { isOnline: true },
             })
@@ -212,7 +212,7 @@ export class GameGateway
     if (userId) {
       // DBのオンラインステータスをオフラインに更新し、全体に通知
       await this.prisma.user
-        .update({
+        .updateMany({
           where: { id: userId },
           data: { isOnline: false, lastSeenAt: new Date() },
         })

@@ -64,7 +64,7 @@ describe('WebSocket JWT authentication and chat authorization (e2e)', () => {
           useValue: {
             user: {
               findUnique: async () => ({ username: 'authenticated-player' }),
-              update: async () => ({}),
+              updateMany: async () => ({ count: 1 }),
             },
           },
         },

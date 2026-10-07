@@ -54,7 +54,9 @@ export class GameService {
       !!data.player1Id &&
       !!data.player2Id &&
       data.player1Id !== data.player2Id;
-    // Retry serialization conflicts, never leave a result with partial statistics.
+    // Retry serialization conflicts and PostgreSQL deadlocks. Prisma reports
+    // deadlocks as an UnknownRequestError on some query paths instead of P2034.
+    // The transaction rollback keeps results and statistics atomic between tries.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.prisma.$transaction(
@@ -127,11 +129,7 @@ export class GameService {
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
       } catch (error) {
-        if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2034'
-        )
-          throw error;
+        if (!this.isRetryableTransactionConflict(error)) throw error;
         if (attempt === 2)
           throw new ConflictException(
             '試合結果の保存が競合しました。再試行してください',
@@ -142,6 +140,17 @@ export class GameService {
     throw new ConflictException(
       '試合結果の保存が競合しました。再試行してください',
     );
+  }
+
+  private isRetryableTransactionConflict(error: unknown): boolean {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2034'
+    )
+      return true;
+
+    const message = error instanceof Error ? error.message : '';
+    return /\b40P01\b|deadlock detected/i.test(message);
   }
 
   /** ユーザー統計を更新 */

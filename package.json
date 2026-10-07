@@ -20,6 +20,8 @@
     "test:browser:tournament": "node tools/tournament-browser-smoke.mjs",
     "test:websocket": "node tools/websocket-smoke.mjs",
     "test:auth": "node tools/auth-smoke.mjs",
+    "security:audit": "npm audit --audit-level=high",
+    "security:audit:production": "npm audit --omit=dev --audit-level=low",
     "security:secrets": "node tools/scan-secrets.mjs",
     "security:secrets:history": "node tools/scan-secrets.mjs --history",
     "security:rotate:dev": "node tools/rotate-development-secrets.mjs",
@@ -41,6 +43,9 @@
     "react-dom": "^18.3.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
-    "deepmerge-ts": "^8.0.0"
+    "deepmerge-ts": "^8.0.0",
+    "@nestjs/swagger": {
+      "js-yaml": "5.4.2"
+    }
   }
 }

@@ -149,6 +149,16 @@ describe('GameService result/statistics transaction', () => {
     expect(transaction).toHaveBeenCalledTimes(3);
   });
 
+  it('retries a PostgreSQL deadlock reported as an unknown request error', async () => {
+    transaction.mockRejectedValueOnce(
+      new Error(
+        'PostgresError { code: "40P01", message: "deadlock detected" }',
+      ),
+    );
+    await expect(service.saveResult(data)).resolves.toEqual({ id: 'result' });
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
   it('does not create statistics for guests or an AI opponent', async () => {
     await service.saveResult({
       ...data,

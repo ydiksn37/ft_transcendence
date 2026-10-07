@@ -461,7 +461,7 @@ describe('GameGateway', () => {
     (gateway as any).jwtService.verify = jest.fn(() => ({ sub: 'user-1' }));
     (gateway as any).prisma.user = {
       findUnique: jest.fn().mockResolvedValue({ username: 'alice' }),
-      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     };
     const makeClient = (id: string, auth: Record<string, unknown>) => {
       const client: any = {
