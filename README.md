@@ -22,7 +22,7 @@ Node.js, npm, CMake, and OpenSSL run inside containers for the production deploy
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/ydiksn37/ft_transcendence.git
+   git clone <repository_url> ft_transcendence
    cd ft_transcendence
    ```
 
